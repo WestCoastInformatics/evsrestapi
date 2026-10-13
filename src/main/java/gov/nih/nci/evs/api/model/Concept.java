@@ -73,6 +73,19 @@ public class Concept extends ConceptMinimal {
   @Field(type = FieldType.Text)
   private String stemName;
 
+  /** The ancestor codes (all paths to root, excluding self). Used for hierarchy search filters. */
+  @WriteOnlyProperty
+  @Field(type = FieldType.Keyword)
+  private List<String> ancestors;
+
+  /**
+   * The ancestor codes with shortest distance, as "code|depth" tokens (e.g. "C3262|3"). Used for
+   * depth-limited hierarchy search filters.
+   */
+  @WriteOnlyProperty
+  @Field(type = FieldType.Keyword)
+  private List<String> ancestorDepths;
+
   /** The subset Link. */
   @Field(type = FieldType.Keyword)
   private String subsetLink;
@@ -124,6 +137,8 @@ public class Concept extends ConceptMinimal {
   @Field(
       type = FieldType.Object,
       ignoreFields = {
+        "ancestorDepths",
+        "ancestors",
         "associations",
         "children",
         "descendants",
@@ -151,6 +166,8 @@ public class Concept extends ConceptMinimal {
   @Field(
       type = FieldType.Object,
       ignoreFields = {
+        "ancestorDepths",
+        "ancestors",
         "associations",
         "children",
         "descendants",
@@ -178,6 +195,8 @@ public class Concept extends ConceptMinimal {
   @Field(
       type = FieldType.Object,
       ignoreFields = {
+        "ancestorDepths",
+        "ancestors",
         "associations",
         "children",
         "descendants",
@@ -366,6 +385,8 @@ public class Concept extends ConceptMinimal {
     defining = other.getDefining();
     normName = other.getNormName();
     stemName = other.getStemName();
+    ancestors = new ArrayList<>(other.getAncestors());
+    ancestorDepths = new ArrayList<>(other.getAncestorDepths());
     if (!subsetFlag || subsetFlag && subsetLink == null) {
       subsetLink = other.getSubsetLink();
     }
@@ -472,6 +493,50 @@ public class Concept extends ConceptMinimal {
    */
   public void setStemName(String stemName) {
     this.stemName = stemName;
+  }
+
+  /**
+   * Returns the ancestors.
+   *
+   * @return the ancestors
+   */
+  @Schema(hidden = true)
+  public List<String> getAncestors() {
+    if (ancestors == null) {
+      ancestors = new ArrayList<>();
+    }
+    return ancestors;
+  }
+
+  /**
+   * Sets the ancestors.
+   *
+   * @param ancestors the ancestors
+   */
+  public void setAncestors(final List<String> ancestors) {
+    this.ancestors = ancestors;
+  }
+
+  /**
+   * Returns the ancestor depths.
+   *
+   * @return the ancestor depths
+   */
+  @Schema(hidden = true)
+  public List<String> getAncestorDepths() {
+    if (ancestorDepths == null) {
+      ancestorDepths = new ArrayList<>();
+    }
+    return ancestorDepths;
+  }
+
+  /**
+   * Sets the ancestor depths.
+   *
+   * @param ancestorDepths the ancestor depths
+   */
+  public void setAncestorDepths(final List<String> ancestorDepths) {
+    this.ancestorDepths = ancestorDepths;
   }
 
   /**
@@ -1037,6 +1102,8 @@ public class Concept extends ConceptMinimal {
   public void clearHidden() {
     normName = null;
     stemName = null;
+    ancestors = null;
+    ancestorDepths = null;
     getSynonyms().forEach(s -> s.clearHidden());
   }
 }
