@@ -336,6 +336,65 @@ public class SearchController extends BaseController {
     return search(new SearchCriteria(searchCriteria, terminology), bindingResult, license);
   }
 
+  public @ResponseBody ConceptResultList typeahead(
+      BindingResult bindingResult,
+      @RequestHeader(name = "X-EVSRESTAPI-License-Key", required = false) final String license) {
+    // TODO: temporary stub so the class compiles; replace with the real endpoint
+    throw new UnsupportedOperationException("typeahead endpoint not implemented yet");
+  }
+
+  /**
+   * Finds concepts whose names or codes start with the text typed so far. Searches ncit, the
+   * default terminology.
+   *
+   * @param incompleteTerm the partially typed term to complete
+   * @param license the license key from the request header
+   * @param pageSize the maximum number of suggestions to return
+   * @return the matching concepts
+   * @throws Exception the exception
+   */
+  public ConceptResultList typeaheadService(
+      final String incompleteTerm, final String license, final Integer pageSize) throws Exception {
+
+    // Nothing typed yet, so there is nothing to complete
+    boolean shouldReturnEmptyList = incompleteTerm == null || incompleteTerm.isBlank();
+    if (shouldReturnEmptyList) {
+      final ConceptResultList results = new ConceptResultList();
+      results.setTotal(0L);
+      results.setTimeTaken(0L);
+      return results;
+    }
+
+    final SearchCriteria searchCriteria = getTypeaheadSearchCriteria(incompleteTerm, pageSize);
+
+    final long timerStartDate = System.currentTimeMillis();
+
+    checkSearchCriteria(searchCriteria);
+
+    final List<Terminology> terminologies = parseTerminologies(searchCriteria.getTerminology());
+
+    // validate
+    checkLicenses(terminologies, license);
+    checkTermAgainstSearchCriteriaValidation(terminologies, searchCriteria);
+
+    final ConceptResultList results = openSearchService.findConcepts(terminologies, searchCriteria);
+    highlightConceptMatches(results);
+
+    results.setTimeTaken(System.currentTimeMillis() - timerStartDate);
+    return results;
+  }
+
+  private SearchCriteria getTypeaheadSearchCriteria(
+      final String incompleteTerm, final Integer pageSize) {
+    final SearchCriteria searchCriteria = new SearchCriteria();
+    searchCriteria.setTerm(incompleteTerm);
+    searchCriteria.setType("startsWith");
+    if (pageSize != null) {
+      searchCriteria.setPageSize(pageSize);
+    }
+    return searchCriteria;
+  }
+
   /**
    * Search.
    *
