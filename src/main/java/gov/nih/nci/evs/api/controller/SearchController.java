@@ -563,6 +563,106 @@ public class SearchController extends BaseController {
       throws Exception {
 
     // Check whether or not parameter binding was successful
+    errorOnInvalidBinding(bindingResult);
+    final long timerStartDate = System.currentTimeMillis();
+    checkSearchCriteria(searchCriteria);
+    logger.debug("  Search = " + searchCriteria);
+
+    tryFallbackOnNCIT(searchCriteria);
+
+    try {
+      final List<Terminology> terminologies =
+          parseAndValidateTerminologiesFromSearchCriteria(searchCriteria, license);
+
+      final ConceptResultList results =
+          openSearchService.findConcepts(terminologies, searchCriteria);
+
+      highlightConceptMatches(results);
+
+      results.setTimeTaken(System.currentTimeMillis() - timerStartDate);
+      return results;
+    } catch (ResponseStatusException rse) {
+      throw rse;
+    } catch (Exception e) {
+      handleException(e, null);
+      return null;
+    }
+  }
+
+  /**
+   * Fails the request if the search criteria are missing required fields or have invalid
+   * pagination.
+   *
+   * @param searchCriteria the search criteria
+   * @throws Exception the exception
+   */
+  private void checkSearchCriteria(SearchCriteria searchCriteria) throws Exception {
+    if (!searchCriteria.checkRequiredFields()) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Missing required field = " + searchCriteria.computeMissingRequiredFields());
+    }
+
+    searchCriteria.checkPagination();
+  }
+
+  /**
+   * Applies search highlights to each result concept, then clears the raw highlights so they are
+   * not returned in the response.
+   *
+   * @param results the search results (modified in place)
+   * @throws Exception the exception
+   */
+  private void highlightConceptMatches(final ConceptResultList results) throws Exception {
+    for (final Concept result : results.getConcepts()) {
+      ConceptUtils.applyHighlights(result, result.getHighlights());
+      // Clear highlights now that they have been applied
+      result.setHighlights(null);
+    }
+  }
+
+  /**
+   * Resolves each terminology named in the search criteria, checks the caller's license for it, and
+   * validates the search criteria against it.
+   *
+   * @param searchCriteria the search criteria
+   * @param license the license key from the request header
+   * @return the resolved terminologies, in the order requested
+   * @throws Exception if a terminology is not found, the license check fails, or the criteria are
+   *     invalid for a terminology
+   */
+  private List<Terminology> parseAndValidateTerminologiesFromSearchCriteria(
+      SearchCriteria searchCriteria, final String license) throws Exception {
+    final List<Terminology> terminologies = new ArrayList<>();
+    for (String terminology : searchCriteria.getTerminology()) {
+      final Terminology term = termUtils.getIndexedTerminology(terminology, osQueryService, true);
+      termUtils.checkLicense(term, license);
+      searchCriteria.validate(term, metadataService);
+      terminologies.add(term);
+    }
+    return terminologies;
+  }
+
+  /**
+   * Defaults the search criteria terminology to ncit when none was specified.
+   *
+   * @param searchCriteria the search criteria (terminology may be modified)
+   */
+  private void tryFallbackOnNCIT(SearchCriteria searchCriteria) {
+    if (searchCriteria.getTerminology().isEmpty()) {
+      // Implicitly use ncit
+      searchCriteria.getTerminology().add("ncit");
+    }
+  }
+
+  /**
+   * Fails the request if any request parameters could not be bound to the search criteria, such as
+   * a non-numeric page size. Each binding error is logged.
+   *
+   * @param bindingResult the binding result
+   * @throws ResponseStatusException with BAD_REQUEST listing each binding error
+   */
+  private void errorOnInvalidBinding(BindingResult bindingResult) throws ResponseStatusException {
     if (bindingResult.hasErrors()) {
       final List<FieldError> errors = bindingResult.getFieldErrors();
       final List<String> errorMessages = new ArrayList<>();
@@ -578,52 +678,6 @@ public class SearchController extends BaseController {
         errorMessages.add(errorMessage);
       }
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join("\n ", errorMessages));
-    }
-
-    final long startDate = System.currentTimeMillis();
-
-    // Check search criteria for required fields
-
-    if (!searchCriteria.checkRequiredFields()) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "Missing required field = " + searchCriteria.computeMissingRequiredFields());
-    }
-
-    searchCriteria.checkPagination();
-    logger.debug("  Search = " + searchCriteria);
-
-    if (searchCriteria.getTerminology().isEmpty()) {
-      // Implicitly use ncit
-      searchCriteria.getTerminology().add("ncit");
-    }
-
-    try {
-      final List<Terminology> terminologies = new ArrayList<>();
-      for (String terminology : searchCriteria.getTerminology()) {
-        final Terminology term = termUtils.getIndexedTerminology(terminology, osQueryService, true);
-        termUtils.checkLicense(term, license);
-        searchCriteria.validate(term, metadataService);
-        terminologies.add(term);
-      }
-
-      final ConceptResultList results =
-          openSearchService.findConcepts(terminologies, searchCriteria);
-
-      // Look up info for all the concepts
-      for (final Concept result : results.getConcepts()) {
-        ConceptUtils.applyHighlights(result, result.getHighlights());
-        // Clear highlights now that they have been applied
-        result.setHighlights(null);
-      }
-
-      results.setTimeTaken(System.currentTimeMillis() - startDate);
-      return results;
-    } catch (ResponseStatusException rse) {
-      throw rse;
-    } catch (Exception e) {
-      handleException(e, null);
-      return null;
     }
   }
 
