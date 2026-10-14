@@ -522,6 +522,10 @@ public class MetaSourceOpensearchLoadServiceImpl extends BaseLoaderService {
           .getOpenSearchOperations()
           .indexOps(IndexCoordinates.of(terminology.getIndexName()))
           .putMapping(Concept.class);
+      // New index with current mapping, so ancestor fields are available for hierarchy search
+      if (Boolean.TRUE.equals(terminology.getMetadata().getHierarchy())) {
+        terminology.getMetadata().setHierarchyFields(true);
+      }
     }
 
     // Cache the concept preferred names so when we resolve relationships we
