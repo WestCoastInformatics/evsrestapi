@@ -633,14 +633,37 @@ public class SearchController extends BaseController {
    */
   private List<Terminology> parseAndValidateTerminologiesFromSearchCriteria(
       SearchCriteria searchCriteria, final String license) throws Exception {
-    final List<Terminology> terminologies = new ArrayList<>();
-    for (String terminology : searchCriteria.getTerminology()) {
+    final List<Terminology> terminology = parseTerminologies(searchCriteria.getTerminology());
+
+    checkLicenses(terminology, license);
+    checkTermAgainstSearchCriteriaValidation(terminology, searchCriteria);
+
+    return terminology;
+  }
+
+  private List<Terminology> parseTerminologies(List<String> terminologies) throws Exception {
+    final List<Terminology> parsedTerminologies = new ArrayList<>();
+
+    for (String terminology : terminologies) {
       final Terminology term = termUtils.getIndexedTerminology(terminology, osQueryService, true);
-      termUtils.checkLicense(term, license);
-      searchCriteria.validate(term, metadataService);
-      terminologies.add(term);
+      parsedTerminologies.add(term);
     }
-    return terminologies;
+
+    return parsedTerminologies;
+  }
+
+  private void checkLicenses(List<Terminology> terminologies, final String license)
+      throws Exception {
+    for (final Terminology term : terminologies) {
+      termUtils.checkLicense(term, license);
+    }
+  }
+
+  private void checkTermAgainstSearchCriteriaValidation(
+      List<Terminology> terminologies, SearchCriteria searchCriteria) throws Exception {
+    for (final Terminology term : terminologies) {
+      searchCriteria.validate(term, metadataService);
+    }
   }
 
   /**
