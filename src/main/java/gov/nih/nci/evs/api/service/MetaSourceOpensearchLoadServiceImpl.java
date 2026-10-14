@@ -595,6 +595,7 @@ public class MetaSourceOpensearchLoadServiceImpl extends BaseLoaderService {
               }
 
               concept.setPaths(hierarchy.getPaths(terminology, concept.getCode()));
+              HierarchyUtils.applyAncestors(concept);
               // Clear space/memory
               hierarchy.getPathsMap(terminology).remove(concept.getCode());
               if (maps.containsKey(concept.getCode())) {
@@ -691,6 +692,7 @@ public class MetaSourceOpensearchLoadServiceImpl extends BaseLoaderService {
             concept.setLeaf(concept.getChildren().size() > 0);
             concept.setDescendants(hierarchy.getDescendants(code));
             concept.setPaths(hierarchy.getPaths(terminology, concept.getCode()));
+            HierarchyUtils.applyAncestors(concept);
             if (maps.containsKey(concept.getCode())) {
               concept.getMaps().addAll(maps.get(concept.getCode()));
             }
