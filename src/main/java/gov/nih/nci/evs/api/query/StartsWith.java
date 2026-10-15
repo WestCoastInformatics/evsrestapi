@@ -6,7 +6,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
 /** Matches values that begin with the term (case sensitive). */
-public class StartsWith extends AtomicQuery {
+public class StartsWith extends AtomicQuery implements SupportsIgnoringCase {
 
   /**
    * Instantiates a {@link StartsWith}.
@@ -23,5 +23,11 @@ public class StartsWith extends AtomicQuery {
   @Override
   public QueryBuilder fetchOpenSearchQuery() {
     return QueryBuilders.prefixQuery(field, term);
+  }
+
+  /* see superclass */
+  @Override
+  public QueryBuilder fetchCaseInsensitiveOpenSearchQuery() {
+    return QueryBuilders.prefixQuery(field, term).caseInsensitive(true);
   }
 }
