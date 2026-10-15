@@ -85,6 +85,9 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   /** Number of ids per ids query clause in the hierarchy search fallback. */
   private static final int IDS_CHUNK_SIZE = 10000;
 
+  /** Number of concepts per children lookup in the hierarchy search fallback. */
+  private static final int CHILDREN_BATCH_SIZE = 1000;
+
   /** Terminology versions for which hierarchy fallback use was already logged. */
   private final Set<String> hierarchyFallbackNoted = ConcurrentHashMap.newKeySet();
 
@@ -1396,10 +1399,10 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   }
 
   /**
-   * Fallback for indexes without ancestor fields: expands anchor codes to their precomputed
-   * descendant lists. With maxLevel, the stored descendant level is used; it comes from a
-   * depth-first walk, so under polyhierarchy it can exceed the shortest distance and some concepts
-   * may be omitted until the terminology is reindexed.
+   * Fallback for indexes without ancestor fields: expands anchor codes to their descendants.
+   * Without maxLevel, the precomputed descendant lists are used. With maxLevel, children are walked
+   * breadth-first from all anchors, which gives the exact shortest depth under polyhierarchy (the
+   * stored descendant level comes from a depth-first walk and can be larger).
    *
    * @param terminology the terminology
    * @param name the parameter name
@@ -1412,26 +1415,57 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       final String name,
       final List<String> codes,
       final Integer maxLevel) {
-    final int maxCodes = getHierarchyFallbackMaxCodes();
     final Set<String> result = new HashSet<>();
-    for (final String code : codes) {
-      for (final Concept descendant : osQueryService.getDescendants(code, terminology)) {
-        if (maxLevel == null
-            || (descendant.getLevel() != null && descendant.getLevel() <= maxLevel)) {
+    if (maxLevel == null) {
+      for (final String code : codes) {
+        for (final Concept descendant : osQueryService.getDescendants(code, terminology)) {
           result.add(descendant.getCode());
         }
+        checkHierarchyFallbackSize(name, result);
       }
-      if (result.size() > maxCodes) {
-        throw new ResponseStatusException(
-            HttpStatus.BAD_REQUEST,
-            "Parameter '"
-                + name
-                + "' branch is too large for this index version (more than "
-                + maxCodes
-                + " concepts). The terminology must be reindexed to support it.");
+      return result;
+    }
+
+    Set<String> frontier = new HashSet<>(codes);
+    for (int level = 1; level <= maxLevel && !frontier.isEmpty(); level++) {
+      final Set<String> next = new HashSet<>();
+      final List<String> parents = new ArrayList<>(frontier);
+      for (int i = 0; i < parents.size(); i += CHILDREN_BATCH_SIZE) {
+        for (final Concept parent :
+            osQueryService.getConcepts(
+                parents.subList(i, Math.min(i + CHILDREN_BATCH_SIZE, parents.size())),
+                terminology,
+                new IncludeParam("children"))) {
+          for (final Concept child : parent.getChildren()) {
+            if (result.add(child.getCode())) {
+              next.add(child.getCode());
+            }
+          }
+        }
       }
+      checkHierarchyFallbackSize(name, result);
+      frontier = next;
     }
     return result;
+  }
+
+  /**
+   * Checks that a fallback expansion is within the configured limit.
+   *
+   * @param name the parameter name
+   * @param codes the expanded codes
+   */
+  private void checkHierarchyFallbackSize(final String name, final Set<String> codes) {
+    final int maxCodes = getHierarchyFallbackMaxCodes();
+    if (codes.size() > maxCodes) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Parameter '"
+              + name
+              + "' branch is too large for this index version (more than "
+              + maxCodes
+              + " concepts). The terminology must be reindexed to support it.");
+    }
   }
 
   /**
