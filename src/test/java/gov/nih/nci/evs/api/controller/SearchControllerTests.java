@@ -5402,6 +5402,45 @@ public class SearchControllerTests {
   }
 
   /**
+   * Test codeList with codes that contain query syntax characters (e.g. ':' in GO, HGNC, ChEBI).
+   * These previously matched nothing because the ':' was parsed as a field name.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testSearchCodeListSpecialCharacters() throws Exception {
+    assertCodeListSearch("go", "GO:0008150", "GO:0031672");
+    assertCodeListSearch("hgnc", "HGNC:4931");
+    assertCodeListSearch("chebi", "CHEBI:13193");
+    // Codes without special characters are unchanged
+    assertCodeListSearch("ncit", "C3224", "C4872");
+  }
+
+  /**
+   * Asserts that a codeList search returns exactly the listed codes.
+   *
+   * @param terminology the terminology
+   * @param codes the codes
+   * @throws Exception the exception
+   */
+  private void assertCodeListSearch(final String terminology, final String... codes)
+      throws Exception {
+    final String url = "/api/v1/concept/" + terminology + "/search";
+    log.info("Testing url - " + url + "?codeList=" + String.join(",", codes));
+    final MvcResult result =
+        this.mvc
+            .perform(get(url).param("codeList", String.join(",", codes)))
+            .andExpect(status().isOk())
+            .andReturn();
+    final ConceptResultList list =
+        ThreadLocalMapper.get()
+            .readValue(result.getResponse().getContentAsString(), ConceptResultList.class);
+    assertThat(list.getTotal()).isEqualTo(codes.length);
+    assertThat(list.getConcepts().stream().map(c -> c.getCode()).collect(Collectors.toSet()))
+        .containsExactlyInAnyOrder(codes);
+  }
+
+  /**
    * Removes the time taken.
    *
    * @param response the response
