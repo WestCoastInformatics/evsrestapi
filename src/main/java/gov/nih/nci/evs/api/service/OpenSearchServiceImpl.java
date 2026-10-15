@@ -586,7 +586,12 @@ public class OpenSearchServiceImpl implements OpenSearchService {
     // 9. Code queries
     String codeList = codeTerm;
     if (hasCodeList) {
-      codeList = String.join(" OR ", searchCriteria.getCodeList());
+      // Escape query syntax characters in each code (as for the term), otherwise the ':' in codes
+      // like GO:0008150 or HGNC:5 is parsed as a field name and nothing matches
+      codeList =
+          searchCriteria.getCodeList().stream()
+              .map(OpenSearchServiceImpl::escape)
+              .collect(Collectors.joining(" OR "));
     }
     final BoolQueryBuilder codeQuery = getCodeQuery(codeList, 50f);
 
