@@ -6,7 +6,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
 /** Matches values that include the term anywhere (case sensitive). */
-public class Contains extends AtomicQuery {
+public class Contains extends AtomicQuery implements SupportsIgnoringCase {
 
   /** Wildcard that matches any sequence of characters. */
   private static final String ANY_CHARACTERS = "*";
@@ -25,8 +25,22 @@ public class Contains extends AtomicQuery {
   /* see superclass */
   @Override
   public QueryBuilder getQueryBuilder() {
-    final String pattern = ANY_CHARACTERS + escapeWildcards(term) + ANY_CHARACTERS;
-    return QueryBuilders.wildcardQuery(field, pattern);
+    return QueryBuilders.wildcardQuery(field, getPattern());
+  }
+
+  /* see superclass */
+  @Override
+  public QueryBuilder getCaseInsensitiveQueryBuilder() {
+    return QueryBuilders.wildcardQuery(field, getPattern()).caseInsensitive(true);
+  }
+
+  /**
+   * Returns the wildcard pattern that matches the term anywhere in a value.
+   *
+   * @return the pattern
+   */
+  private String getPattern() {
+    return ANY_CHARACTERS + escapeWildcards(term) + ANY_CHARACTERS;
   }
 
   /**

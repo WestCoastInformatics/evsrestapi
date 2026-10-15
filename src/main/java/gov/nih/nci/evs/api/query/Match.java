@@ -6,7 +6,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
 /** Matches values exactly equal to the term (case sensitive). */
-public class Match extends AtomicQuery {
+public class Match extends AtomicQuery implements SupportsIgnoringCase {
 
   /**
    * Instantiates a {@link Match}.
@@ -23,5 +23,11 @@ public class Match extends AtomicQuery {
   @Override
   public QueryBuilder getQueryBuilder() {
     return QueryBuilders.termQuery(field, term);
+  }
+
+  /* see superclass */
+  @Override
+  public QueryBuilder getCaseInsensitiveQueryBuilder() {
+    return QueryBuilders.termQuery(field, term).caseInsensitive(true);
   }
 }

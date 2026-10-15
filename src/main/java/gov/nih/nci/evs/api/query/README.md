@@ -36,6 +36,16 @@ classDiagram
         +getTerm() String
     }
 
+    class SupportsIgnoringCase {
+        <<interface>>
+        +getCaseInsensitiveQueryBuilder() QueryBuilder
+    }
+
+    class CaseInsensitive {
+        -SupportsIgnoringCase query
+        +getQueryBuilder() QueryBuilder
+    }
+
     class Match {
         +getQueryBuilder() TermQueryBuilder
     }
@@ -57,22 +67,30 @@ classDiagram
 
     EvsQuery <|-- AtomicQuery
     EvsQuery <|-- CompositeQuery
+    EvsQuery <|-- CaseInsensitive
     AtomicQuery <|-- Match
     AtomicQuery <|-- Contains
     AtomicQuery <|-- StartsWith
     AtomicQuery <|-- Fuzzy
+    SupportsIgnoringCase <|.. Match
+    SupportsIgnoringCase <|.. Contains
+    SupportsIgnoringCase <|.. StartsWith
     CompositeQuery o-- EvsQuery : children
+    CaseInsensitive o-- SupportsIgnoringCase : wraps
 ```
 
 | Class | Role |
 |---|---|
 | `EvsQuery` | Base type for every node. Its contract is `getQueryBuilder()`. It also holds an unmodifiable copy of the terminologies being searched. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
 | `AtomicQuery` | Base type for leaves. It adds the `field` and `term` every leaf needs and rejects `null` for either. Subclasses only decide which OpenSearch query to build. |
+| `SupportsIgnoringCase` | Implemented by queries that can also run ignoring case: `Match`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
+| `CaseInsensitive` | A wrapper node. It runs the wrapped query ignoring case by calling `getCaseInsensitiveQueryBuilder()`. The wrapped query is not changed. |
 | `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a term. |
 
 ## Atomic queries
 
-All atomic queries are **case sensitive** and compare against the **whole indexed value**.
+All atomic queries are **case sensitive** and compare against the **whole indexed value**. To
+ignore case, wrap one in `CaseInsensitive` (see below).
 
 | Class | Matches when the value… | OpenSearch query |
 |---|---|---|
@@ -107,6 +125,21 @@ wrapped in a `nestedQuery`, which is a natural job for a future `Nested` composi
 final EvsQuery query = new StartsWith(terminologies, "normName", "melan");
 boolQuery.must(query.getQueryBuilder());
 ```
+
+## Ignoring case
+
+`CaseInsensitive` wraps a query that implements `SupportsIgnoringCase`:
+
+```java
+// Finds "Melanoma", "melanoma", and "Malignant Melanoma"
+final EvsQuery query =
+    new CaseInsensitive(new Contains(terminologies, "name", "MELANOMA"));
+```
+
+The constructor only accepts queries that implement `SupportsIgnoringCase`, so
+`new CaseInsensitive(new Fuzzy(...))` doesn't compile. To let a new query be wrapped, implement
+`SupportsIgnoringCase` and return the same OpenSearch query with case ignored, usually by calling
+`.caseInsensitive(true)` on the builder.
 
 ## Extending
 
@@ -211,6 +244,7 @@ final EvsQuery query =
 2. Build an OpenSearch query in `getQueryBuilder()`. Don't run searches or read services there.
 3. Escape any characters in the term that are syntax for the OpenSearch query you use (see
    `Contains.escapeWildcards`).
-4. Add tests to `src/test/java/gov/nih/nci/evs/api/query` that assert on the built query. The
-   query builders expose their settings, so no OpenSearch instance is needed.
-5. Run `./gradlew spotlessApply`.
+4. If the OpenSearch query supports ignoring case, implement `SupportsIgnoringCase`.
+5. Add a lesson to `AtomicQueryTest` (or a similar test) that runs the query against the test index
+   and asserts which values it finds. Test behavior, not the built `QueryBuilder`.
+6. Run `./gradlew spotlessApply`.
