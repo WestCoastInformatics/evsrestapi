@@ -1,19 +1,24 @@
 package gov.nih.nci.evs.api.service;
 
 import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.ConceptMinimal;
 import gov.nih.nci.evs.api.model.ConceptResultList;
 import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.Mapping;
 import gov.nih.nci.evs.api.model.MappingResultList;
+import gov.nih.nci.evs.api.model.Path;
+import gov.nih.nci.evs.api.model.Paths;
 import gov.nih.nci.evs.api.model.SearchCriteria;
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.support.es.EVSPageable;
 import gov.nih.nci.evs.api.util.ConceptUtils;
 import gov.nih.nci.evs.api.util.TerminologyUtils;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
@@ -39,8 +44,10 @@ import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Reference implementation of {@link OpenSearchService}. Includes hibernate tags for MEME database.
@@ -125,6 +132,11 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       for (final QueryBuilder criteriaQuery : criteriaQueries) {
         boolQuery.must(criteriaQuery);
       }
+    }
+
+    // append hierarchy filters (validation limits these to a single terminology)
+    if (searchCriteria.hasHierarchyConstraints()) {
+      applyHierarchyFilters(boolQuery, terminologies.get(0), searchCriteria);
     }
 
     // Get include param
@@ -1272,6 +1284,129 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       subsetQuery.must(subsetListQuery);
     }
     return subsetQuery;
+  }
+
+  /**
+   * Applies hierarchy constraints (descendantOf, notDescendantOf, ancestorOf) as filter clauses, so
+   * they do not affect scoring and can be cached.
+   *
+   * @param boolQuery the bool query
+   * @param terminology the terminology
+   * @param searchCriteria the search criteria
+   * @throws Exception the exception
+   */
+  private void applyHierarchyFilters(
+      final BoolQueryBuilder boolQuery,
+      final Terminology terminology,
+      final SearchCriteria searchCriteria)
+      throws Exception {
+    final boolean includeSelf =
+        searchCriteria.getIncludeSelf() == null || searchCriteria.getIncludeSelf();
+    final List<String> descendantOf = searchCriteria.getDescendantOf();
+    final List<String> notDescendantOf = searchCriteria.getNotDescendantOf();
+    final String ancestorOf = searchCriteria.getAncestorOf();
+
+    checkHierarchyCodesExist(terminology, "descendantOf", descendantOf);
+    checkHierarchyCodesExist(terminology, "notDescendantOf", notDescendantOf);
+    if (ancestorOf != null) {
+      checkHierarchyCodesExist(terminology, "ancestorOf", List.of(ancestorOf));
+    }
+
+    // descendantOf and notDescendantOf need the indexed ancestor fields
+    if ((!descendantOf.isEmpty() || !notDescendantOf.isEmpty())
+        && !Boolean.TRUE.equals(terminology.getMetadata().getHierarchyFields())) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Terminology '"
+              + terminology.getTerminologyVersion()
+              + "' must be reindexed to support descendantOf and notDescendantOf");
+    }
+
+    // descendantOf: descendant of any anchor (optionally within maxLevel), or an anchor itself
+    if (!descendantOf.isEmpty()) {
+      final BoolQueryBuilder branch = QueryBuilders.boolQuery().minimumShouldMatch(1);
+      if (searchCriteria.getMaxLevel() == null) {
+        branch.should(QueryBuilders.termsQuery("ancestors", descendantOf));
+      } else {
+        branch.should(
+            QueryBuilders.termsQuery(
+                "ancestorDepths", getDepthTokens(descendantOf, searchCriteria.getMaxLevel())));
+      }
+      if (includeSelf) {
+        branch.should(QueryBuilders.idsQuery().addIds(descendantOf.toArray(new String[0])));
+      }
+      boolQuery.filter(branch);
+    }
+
+    // notDescendantOf: exclude descendants of every anchor, and the anchors themselves
+    if (!notDescendantOf.isEmpty()) {
+      boolQuery.mustNot(QueryBuilders.termsQuery("ancestors", notDescendantOf));
+      if (includeSelf) {
+        boolQuery.mustNot(QueryBuilders.idsQuery().addIds(notDescendantOf.toArray(new String[0])));
+      }
+    }
+
+    // ancestorOf: the anchor's ancestors come from its stored paths (small, no new fields needed)
+    if (ancestorOf != null) {
+      final Set<String> ancestors = new HashSet<>();
+      final Paths paths = osQueryService.getPathsToRoot(ancestorOf, terminology);
+      if (paths != null && paths.getPaths() != null) {
+        for (final Path path : paths.getPaths()) {
+          for (final ConceptMinimal concept : path.getConcepts()) {
+            if (!concept.getCode().equals(ancestorOf)) {
+              ancestors.add(concept.getCode());
+            }
+          }
+        }
+      }
+      if (includeSelf) {
+        ancestors.add(ancestorOf);
+      }
+      // An empty ids query matches nothing, e.g. ancestors of a root without self
+      boolQuery.filter(QueryBuilders.idsQuery().addIds(ancestors.toArray(new String[0])));
+    }
+  }
+
+  /**
+   * Checks that hierarchy anchor codes exist in the terminology.
+   *
+   * @param terminology the terminology
+   * @param name the parameter name
+   * @param codes the codes
+   */
+  private void checkHierarchyCodesExist(
+      final Terminology terminology, final String name, final List<String> codes) {
+    if (codes.isEmpty()) {
+      return;
+    }
+    final Set<String> found =
+        osQueryService.getConcepts(codes, terminology, new IncludeParam("minimal")).stream()
+            .map(Concept::getCode)
+            .collect(Collectors.toSet());
+    for (final String code : codes) {
+      if (!found.contains(code)) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "Parameter '" + name + "' has an invalid code = " + code);
+      }
+    }
+  }
+
+  /**
+   * Returns "code|depth" tokens for each code and depth from 1 to maxLevel, matching the indexed
+   * ancestorDepths field, e.g. C3262 and 2 gives C3262|1 and C3262|2.
+   *
+   * @param codes the codes
+   * @param maxLevel the max level
+   * @return the depth tokens
+   */
+  private List<String> getDepthTokens(final List<String> codes, final int maxLevel) {
+    final List<String> tokens = new ArrayList<>();
+    for (final String code : codes) {
+      for (int i = 1; i <= maxLevel; i++) {
+        tokens.add(code + "|" + i);
+      }
+    }
+    return tokens;
   }
 
   /**
