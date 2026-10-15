@@ -339,6 +339,63 @@ public class SearchController extends BaseController {
     return search(new SearchCriteria(searchCriteria, terminology), bindingResult, license);
   }
 
+  /**
+   * Searches for concepts by keyword or ID number.
+   *
+   * @param incompleteTerm the partial term to search for
+   * @param pageSize the number of results per page
+   * @param license the license key to restrict search results to a specific license
+   * @return the list of matching concepts
+   * @throws Exception if there is an error in the search process
+   */
+  @Operation(
+      summary = "Get typeahead suggestions for a partially typed term",
+      description =
+          "Returns NCI Thesaurus concepts whose names or codes start with the text typed so far."
+              + " Intended for autocomplete use cases; a blank term returns an empty result.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Successfully retrieved the requested information"),
+    @ApiResponse(
+        responseCode = "400",
+        description = "Bad request",
+        content =
+            @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = RestException.class))),
+    @ApiResponse(
+        responseCode = "417",
+        description = "Expectation failed",
+        content =
+            @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = RestException.class)))
+  })
+  @Parameters({
+    @Parameter(
+        name = "term",
+        description = "The partially typed term or code to complete, e.g. 'melan'",
+        required = false,
+        schema = @Schema(implementation = String.class),
+        example = "melan"),
+    @Parameter(
+        name = "pageSize",
+        description = "Max number of results to return.",
+        required = false,
+        schema =
+            @Schema(implementation = Integer.class, defaultValue = DEFAULT_TYPEAHEAD_PAGE_SIZE)),
+    @Parameter(
+        name = "X-EVSRESTAPI-License-Key",
+        description =
+            "Required license information for restricted terminologies. <a"
+                + " href='https://github.com/NCIEVS/evsrestapi-client-SDK/blob/main/doc/LICENSE.md'"
+                + " target='_blank'>See here for detailed information</a>.",
+        required = false,
+        schema = @Schema(implementation = String.class))
+  })
+  @RecordMetric
+  @GetMapping(value = "/concept/typeahead", produces = "application/json")
   public @ResponseBody ConceptResultList typeahead(
       @RequestParam(name = "term", required = false) final String incompleteTerm,
       @RequestParam(name = "pageSize", defaultValue = DEFAULT_TYPEAHEAD_PAGE_SIZE)
