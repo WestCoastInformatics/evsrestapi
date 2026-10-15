@@ -63,6 +63,9 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("${nci.evs.application.contextPath}")
 @Tag(name = "Search endpoint")
 public class SearchController extends BaseController {
+  /** The default typeahead page size. */
+  // Swagger requires default values to be a const. So we have to init this as a String and parse it at run time
+  private static final String DEFAULT_TYPEAHEAD_PAGE_SIZE = "10";
 
   /** The Constant log. */
   private static final Logger logger = LoggerFactory.getLogger(SearchController.class);
@@ -337,10 +340,13 @@ public class SearchController extends BaseController {
   }
 
   public @ResponseBody ConceptResultList typeahead(
-      BindingResult bindingResult,
-      @RequestHeader(name = "X-EVSRESTAPI-License-Key", required = false) final String license) {
-    // TODO: temporary stub so the class compiles; replace with the real endpoint
-    throw new UnsupportedOperationException("typeahead endpoint not implemented yet");
+      @RequestParam(name = "term", required = false) final String incompleteTerm,
+      @RequestParam(name = "pageSize", defaultValue = DEFAULT_TYPEAHEAD_PAGE_SIZE)
+          final Integer pageSize,
+      @RequestHeader(name = "X-EVSRESTAPI-License-Key", required = false) final String license)
+      throws Exception {
+
+    return typeaheadService(incompleteTerm, license, pageSize);
   }
 
   /**
