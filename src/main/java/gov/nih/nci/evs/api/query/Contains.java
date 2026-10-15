@@ -1,22 +1,42 @@
 package gov.nih.nci.evs.api.query;
 
-import java.util.List;
-
-import org.opensearch.index.query.BoolQueryBuilder;
-
-import gov.nih.nci.evs.api.model.SearchCriteria;
 import gov.nih.nci.evs.api.model.Terminology;
+import java.util.List;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
 
-public class Contains extends EvsQuery {
-    private String field;
+/** Matches values that include the term anywhere (case sensitive). */
+public class Contains extends AtomicQuery {
 
-    public Contains(List<Terminology> terminologies, String field) {
-        super(terminologies);
-        this.field = field;
-    }
+  /** Wildcard that matches any sequence of characters. */
+  private static final String ANY_CHARACTERS = "*";
 
-    @Override
-    public BoolQueryBuilder getQueryBuilder() {
+  /**
+   * Instantiates a {@link Contains}.
+   *
+   * @param terminologies the terminologies being searched
+   * @param field the field to match against
+   * @param term the substring the value must include
+   */
+  public Contains(final List<Terminology> terminologies, final String field, final String term) {
+    super(terminologies, field, term);
+  }
 
-    }
+  /* see superclass */
+  @Override
+  public QueryBuilder getQueryBuilder() {
+    final String pattern = ANY_CHARACTERS + escapeWildcards(term) + ANY_CHARACTERS;
+    return QueryBuilders.wildcardQuery(field, pattern);
+  }
+
+  /**
+   * Escapes wildcard syntax so the term is matched literally.
+   *
+   * @param value the raw term
+   * @return the escaped term
+   */
+  static String escapeWildcards(final String value) {
+    // Escape the escape character first so later escapes are not doubled
+    return value.replace("\\", "\\\\").replace("*", "\\*").replace("?", "\\?");
+  }
 }
