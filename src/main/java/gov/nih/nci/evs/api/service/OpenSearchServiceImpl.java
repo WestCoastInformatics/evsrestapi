@@ -1540,6 +1540,21 @@ public class OpenSearchServiceImpl implements OpenSearchService {
     if (codes.isEmpty()) {
       return;
     }
+    // Count first: it never loads documents, which matters because large anchors (e.g. C3262)
+    // store their whole descendant list in _source and are slow to fetch even when filtered
+    final Set<String> unique = new HashSet<>(codes);
+    final long count =
+        operations.count(
+            new NativeSearchQueryBuilder()
+                .withQuery(QueryBuilders.idsQuery().addIds(unique.toArray(new String[0])))
+                .build(),
+            Concept.class,
+            IndexCoordinates.of(terminology.getIndexName()));
+    if (count == unique.size()) {
+      return;
+    }
+
+    // Something is missing: look the codes up to report which one
     final Set<String> found =
         osQueryService.getConcepts(codes, terminology, new IncludeParam("minimal")).stream()
             .map(Concept::getCode)
