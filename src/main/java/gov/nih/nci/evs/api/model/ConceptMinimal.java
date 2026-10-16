@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
+import org.springframework.data.elasticsearch.annotations.InnerField;
+import org.springframework.data.elasticsearch.annotations.MultiField;
 
 /**
  * Represents a concept with a code from a terminology with the smallest amount of information.
@@ -21,6 +23,12 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 @JsonInclude(Include.NON_EMPTY)
 public class ConceptMinimal extends BaseModel implements Comparable<ConceptMinimal> {
 
+  /**
+   * Suffix of the search_as_you_type subfield indexed alongside name fields, e.g.
+   * "name.search_as_you_type".
+   */
+  public static final String SEARCH_AS_YOU_TYPE_SUFFIX = "search_as_you_type";
+
   /** The code. */
   @Id
   @Field(type = FieldType.Text)
@@ -31,7 +39,11 @@ public class ConceptMinimal extends BaseModel implements Comparable<ConceptMinim
   private String uri;
 
   /** The name. */
-  @Field(type = FieldType.Text)
+  @MultiField(
+      mainField = @Field(type = FieldType.Text),
+      otherFields = {
+        @InnerField(suffix = SEARCH_AS_YOU_TYPE_SUFFIX, type = FieldType.Search_As_You_Type)
+      })
   private String name;
 
   /** The terminology. */

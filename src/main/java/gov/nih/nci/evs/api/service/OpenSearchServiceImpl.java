@@ -1,21 +1,12 @@
 package gov.nih.nci.evs.api.service;
 
-import gov.nih.nci.evs.api.model.Concept;
-import gov.nih.nci.evs.api.model.ConceptResultList;
-import gov.nih.nci.evs.api.model.IncludeParam;
-import gov.nih.nci.evs.api.model.Mapping;
-import gov.nih.nci.evs.api.model.MappingResultList;
-import gov.nih.nci.evs.api.model.SearchCriteria;
-import gov.nih.nci.evs.api.model.Terminology;
-import gov.nih.nci.evs.api.support.es.EVSPageable;
-import gov.nih.nci.evs.api.util.ConceptUtils;
-import gov.nih.nci.evs.api.util.TerminologyUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.common.unit.Fuzziness;
@@ -41,6 +32,17 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+
+import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.ConceptResultList;
+import gov.nih.nci.evs.api.model.IncludeParam;
+import gov.nih.nci.evs.api.model.Mapping;
+import gov.nih.nci.evs.api.model.MappingResultList;
+import gov.nih.nci.evs.api.model.SearchCriteria;
+import gov.nih.nci.evs.api.model.Terminology;
+import gov.nih.nci.evs.api.support.es.EVSPageable;
+import gov.nih.nci.evs.api.util.ConceptUtils;
+import gov.nih.nci.evs.api.util.TerminologyUtils;
 
 /**
  * Reference implementation of {@link OpenSearchService}. Includes hibernate tags for MEME database.
@@ -100,17 +102,19 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     final BoolQueryBuilder boolQuery = new BoolQueryBuilder();
 
-    if ("".equals(term) && searchCriteria.getCodeList().isEmpty()) {
-      // don't create anything
-    } else {
+    final boolean userHasSearchArgument =
+        !("".equals(term)) || !searchCriteria.getCodeList().isEmpty();
+    final boolean shouldAddUserSearch = userHasSearchArgument;
+    if (shouldAddUserSearch) {
       boolQuery.must(getTermQuery(searchCriteria, term));
     }
 
     // Append concept status clause. Boosts active to the top of the list, and maintains inactive at
     // the bottom
     BoolQueryBuilder activeQuery = new BoolQueryBuilder();
-    activeQuery.should(QueryBuilders.matchQuery("active", true).boost(100000f));
-    activeQuery.should(QueryBuilders.matchQuery("active", false).boost(0.0001f));
+
+    boostActiveTerms(activeQuery);
+    suppressInactiveTerms(activeQuery);
     boolQuery.must(activeQuery);
 
     // append terminology query
@@ -219,6 +223,14 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       }
     }
     return result;
+  }
+
+  private void suppressInactiveTerms(BoolQueryBuilder activeQuery) {
+    activeQuery.should(QueryBuilders.matchQuery("active", false).boost(0.0001f));
+  }
+
+  private void boostActiveTerms(BoolQueryBuilder activeQuery) {
+    activeQuery.should(QueryBuilders.matchQuery("active", true).boost(100000f));
   }
 
   /**
