@@ -89,8 +89,9 @@ classDiagram
 
 ## Atomic queries
 
-All atomic queries are **case sensitive** and compare against the **whole indexed value**. To
-ignore case, wrap one in `CaseInsensitive` (see below).
+Apart from `SearchAsYouType`, the atomic queries are **case sensitive** and compare against the
+**whole indexed value**. To ignore case, wrap one in `CaseInsensitive` (see below).
+`SearchAsYouType` works on individual words and always ignores case.
 
 | Class | Matches when the value… | OpenSearch query |
 |---|---|---|
@@ -98,6 +99,7 @@ ignore case, wrap one in `CaseInsensitive` (see below).
 | `Contains` | includes the term anywhere | `wildcard` on `*term*`, with `*`, `?`, and `\` in the term escaped |
 | `StartsWith` | begins with the term | `prefix` |
 | `Fuzzy` | is within a small edit distance of the term (`Fuzziness.AUTO` by default, or pass one) | `fuzzy` |
+| `SearchAsYouType` | contains every typed word in any order, with only the last word allowed to be partial. Ignores case. Needs a field mapped as `search_as_you_type` | `multi_match` of type `bool_prefix` over the field and its `._2gram` / `._3gram` subfields |
 
 ### Choosing a field
 
