@@ -38,10 +38,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.springframework.web.server.ResponseStatusException;
 
 /** Integration tests for SearchController. */
 @ExtendWith(SpringExtension.class)
@@ -70,6 +72,9 @@ public class SearchControllerTests {
 
   /** The terminology utils. */
   @Autowired TerminologyUtils terminologyUtils;
+
+  /** The search controller. */
+  @Autowired SearchController searchController;
 
   /** The base url. */
   private String baseUrl = "";
@@ -5317,6 +5322,77 @@ public class SearchControllerTests {
     assertCodeAndNameSearch("ncit", "melanoma C3224", "C3224", "melanoma");
     assertCodeAndNameSearch("ncit", "C3224 malignant melanoma", "C3224", "malignant", "melanoma");
     assertCodeAndNameSearch("ncit", "malignant melanoma C3224", "C3224", "malignant", "melanoma");
+  }
+
+  /**
+   * Test typeahead returns an empty result for a blank incomplete term.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadBlankTerm() throws Exception {
+    for (final String incompleteTerm : new String[] {null, "", "   "}) {
+      log.info("Testing typeahead - incompleteTerm = [" + incompleteTerm + "]");
+      final ConceptResultList list = searchController.typeaheadService(incompleteTerm, null, null);
+      assertThat(list.getConcepts()).isEmpty();
+      assertThat(list.getTotal()).isEqualTo(0L);
+    }
+  }
+
+  /**
+   * Test typeahead finds concepts for a partially typed term.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadIncompleteTerm() throws Exception {
+    log.info("Testing typeahead - incompleteTerm = melan");
+    final ConceptResultList list = searchController.typeaheadService("melan", null, null);
+    assertThat(list.getConcepts()).isNotEmpty();
+    assertThat(list.getTotal()).isGreaterThan(0L);
+    assertThat(list.getParameters().getTerm()).isEqualTo("melan");
+    assertThat(list.getParameters().getType()).isEqualTo("startsWith");
+  }
+
+  /**
+   * Test typeahead only returns ncit concepts.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadNcitOnly() throws Exception {
+    log.info("Testing typeahead - incompleteTerm = cancer, pageSize = 100");
+    final ConceptResultList list = searchController.typeaheadService("cancer", null, 100);
+    assertThat(list.getConcepts()).isNotEmpty();
+    assertThat(list.getConcepts()).allMatch(c -> "ncit".equals(c.getTerminology()));
+  }
+
+  /**
+   * Test typeahead page size handling.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadPageSize() throws Exception {
+    // Default page size
+    log.info("Testing typeahead - incompleteTerm = melan, pageSize = null");
+    ConceptResultList list = searchController.typeaheadService("melan", null, null);
+    assertThat(list.getConcepts().size()).isEqualTo(10);
+
+    // Explicit page size
+    log.info("Testing typeahead - incompleteTerm = melan, pageSize = 3");
+    list = searchController.typeaheadService("melan", null, 3);
+    assertThat(list.getConcepts().size()).isEqualTo(3);
+
+    // Out of range page sizes
+    for (final int pageSize : new int[] {0, 1001}) {
+      log.info("Testing typeahead - incompleteTerm = melan, pageSize = " + pageSize);
+      final ResponseStatusException e =
+          assertThrows(
+              ResponseStatusException.class,
+              () -> searchController.typeaheadService("melan", null, pageSize));
+      assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
   }
 
   /**
