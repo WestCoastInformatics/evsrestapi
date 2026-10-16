@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import gov.nih.nci.evs.api.aop.RecordMetric;
 import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.ConceptMinimal;
 import gov.nih.nci.evs.api.model.ConceptResultList;
+import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.MapResultList;
 import gov.nih.nci.evs.api.model.SearchCriteria;
 import gov.nih.nci.evs.api.model.SearchCriteriaWithoutTerminology;
@@ -13,8 +15,11 @@ import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.model.sparql.Bindings;
 import gov.nih.nci.evs.api.model.sparql.Sparql;
 import gov.nih.nci.evs.api.properties.GraphProperties;
+import gov.nih.nci.evs.api.query.EvsQuery;
+import gov.nih.nci.evs.api.query.SearchAsYouType;
 import gov.nih.nci.evs.api.service.MetadataService;
 import gov.nih.nci.evs.api.service.OpenSearchService;
+import gov.nih.nci.evs.api.service.OpensearchOperationsService;
 import gov.nih.nci.evs.api.service.OpensearchQueryService;
 import gov.nih.nci.evs.api.service.QueryBuilderService;
 import gov.nih.nci.evs.api.service.SparqlQueryManagerService;
@@ -37,11 +42,21 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.jena.query.QueryException;
+import org.opensearch.data.client.orhlc.NativeSearchQuery;
+import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
+import org.opensearch.search.sort.SortBuilders;
+import org.opensearch.search.sort.SortOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -64,8 +79,12 @@ import org.springframework.web.server.ResponseStatusException;
 @Tag(name = "Search endpoint")
 public class SearchController extends BaseController {
   /** The default typeahead page size. */
-  // Swagger requires default values to be a const. So we have to init this as a String and parse it at run time
+  // Swagger requires default values to be a const. So we have to init this as a String and parse it
+  // at run time
   private static final String DEFAULT_TYPEAHEAD_PAGE_SIZE = "10";
+
+  /** The field typeahead matches against: the search_as_you_type subfield of preferred names. */
+  private static final String TYPEAHEAD_FIELD = "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
 
   /** The Constant log. */
   private static final Logger logger = LoggerFactory.getLogger(SearchController.class);
@@ -87,6 +106,9 @@ public class SearchController extends BaseController {
 
   /** The es query service. */
   @Autowired OpensearchQueryService osQueryService;
+
+  /** The opensearch operations service, used to run typeahead queries. */
+  @Autowired OpensearchOperationsService operationsService;
 
   /** The term utils. */
   @Autowired TerminologyUtils termUtils;
@@ -351,8 +373,10 @@ public class SearchController extends BaseController {
   @Operation(
       summary = "Get typeahead suggestions for a partially typed term",
       description =
-          "Returns NCI Thesaurus concepts whose names or codes start with the text typed so far."
-              + " Intended for autocomplete use cases; a blank term returns an empty result.")
+          "Returns NCI Thesaurus concepts whose preferred names contain every word typed so far,"
+              + " in any order, with the last word allowed to be partial. Ignores case and"
+              + " punctuation. Intended for autocomplete use cases; a blank term returns an empty"
+              + " result.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -407,8 +431,9 @@ public class SearchController extends BaseController {
   }
 
   /**
-   * Finds concepts whose names or codes start with the text typed so far. Searches ncit, the
-   * default terminology.
+   * Finds concepts whose preferred names contain every word typed so far, in any order, with the
+   * last word allowed to be partial. Ignores case and punctuation. Searches ncit, the default
+   * terminology.
    *
    * @param incompleteTerm the partially typed term to complete
    * @param license the license key from the request header
@@ -419,8 +444,13 @@ public class SearchController extends BaseController {
   public ConceptResultList typeaheadService(
       final String incompleteTerm, final String license, final Integer pageSize) throws Exception {
 
-    // Nothing typed yet, so there is nothing to complete
-    boolean shouldReturnEmptyList = incompleteTerm == null || incompleteTerm.isBlank();
+    // Normalized only to detect input with no words in it. The query itself gets the raw term,
+    // because the search_as_you_type field's analyzer handles case and punctuation.
+    final String normalizedTerm =
+        incompleteTerm == null ? "" : ConceptUtils.normalize(incompleteTerm);
+
+    // Nothing typed yet (or only punctuation), so there is nothing to complete
+    final boolean shouldReturnEmptyList = normalizedTerm.isEmpty();
     if (shouldReturnEmptyList) {
       final ConceptResultList results = new ConceptResultList();
       results.setTotal(0L);
@@ -428,11 +458,15 @@ public class SearchController extends BaseController {
       return results;
     }
 
+    // The query itself is the SearchAsYouType below. SearchCriteria is only used to carry the
+    // request parameters (page size, terminology, included fields, and the echoed parameters in
+    // the response) and to reuse the existing validation methods.
     final SearchCriteria searchCriteria = getTypeaheadSearchCriteria(incompleteTerm, pageSize);
 
     final long timerStartDate = System.currentTimeMillis();
 
     checkSearchCriteria(searchCriteria);
+    tryFallbackOnNCIT(searchCriteria);
 
     final List<Terminology> terminologies = parseTerminologies(searchCriteria.getTerminology());
 
@@ -440,10 +474,50 @@ public class SearchController extends BaseController {
     checkLicenses(terminologies, license);
     checkTermAgainstSearchCriteriaValidation(terminologies, searchCriteria);
 
-    final ConceptResultList results = openSearchService.findConcepts(terminologies, searchCriteria);
+    final EvsQuery typeaheadQuery =
+        new SearchAsYouType(terminologies, TYPEAHEAD_FIELD, incompleteTerm);
+    final ConceptResultList results =
+        fetchTypeaheadConceptsSortedByCode(typeaheadQuery, searchCriteria);
     highlightConceptMatches(results);
 
     results.setTimeTaken(System.currentTimeMillis() - timerStartDate);
+    return results;
+  }
+
+  /**
+   * Runs the typeahead query against the concept indexes of its terminologies, returning the
+   * matches in ascending code order. Relevance score is not used for ordering.
+   *
+   * @param typeaheadQuery the query to run
+   * @param searchCriteria the search criteria supplying page size and included fields
+   * @return the first page of matching concepts, sorted by code ascending
+   */
+  private ConceptResultList fetchTypeaheadConceptsSortedByCode(
+      final EvsQuery typeaheadQuery, final SearchCriteria searchCriteria) {
+    final IncludeParam include = new IncludeParam(searchCriteria.getInclude());
+    final NativeSearchQuery search =
+        new NativeSearchQueryBuilder()
+            .withQuery(typeaheadQuery.getQueryBuilder())
+            .withPageable(PageRequest.of(0, searchCriteria.getPageSize()))
+            .withSourceFilter(
+                new FetchSourceFilter(
+                    true, include.getIncludedFields(), include.getExcludedFields()))
+            .withSorts(SortBuilders.fieldSort("code").order(SortOrder.ASC))
+            .build();
+    final String[] indexNames =
+        typeaheadQuery.getTerminologies().stream()
+            .map(Terminology::getIndexName)
+            .toArray(String[]::new);
+
+    final SearchHits<Concept> hits =
+        operationsService
+            .getOpenSearchOperations()
+            .search(search, Concept.class, IndexCoordinates.of(indexNames));
+
+    final ConceptResultList results = new ConceptResultList();
+    results.setParameters(searchCriteria);
+    results.setTotal(hits.getTotalHits());
+    results.setConcepts(hits.stream().map(SearchHit::getContent).collect(Collectors.toList()));
     return results;
   }
 
