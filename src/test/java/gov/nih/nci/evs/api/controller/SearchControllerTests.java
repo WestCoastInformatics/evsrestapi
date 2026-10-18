@@ -32,6 +32,8 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -5352,6 +5354,73 @@ public class SearchControllerTests {
     assertThat(list.getTotal()).isGreaterThan(0L);
     assertThat(list.getParameters().getTerm()).isEqualTo("melan");
     assertThat(list.getParameters().getType()).isEqualTo("startsWith");
+  }
+
+  /**
+   * Test typeahead finds concepts for a partially typed term.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadIncompleteTermChronicGranulomatousDisease() throws Exception {
+    log.info("Testing typeahead - incompleteTerm = chronic granu");
+    final ConceptResultList list = searchController.typeaheadService("chronic granu", null, null);
+    assertThat(list.getConcepts()).isNotEmpty();
+    assertThat(list.getTotal()).isGreaterThan(0L);
+    assertThat(list.getParameters().getTerm()).isEqualTo("chronic granu");
+    assertThat(list.getConcepts().get(0).getName()).isEqualTo("Chronic Granulomatous Disease");
+    assertThat(list.getParameters().getType()).isEqualTo("startsWith");
+  }
+
+  /**
+   * Test typeahead puts general concepts with short names first.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadGeneralShortNamesFirst() throws Exception {
+    log.info("Testing typeahead - incompleteTerm = melan");
+    final ConceptResultList list = searchController.typeaheadService("melan", null, null);
+    assertThat(list.getConcepts())
+        .extracting(Concept::getName)
+        .startsWith("Melanoma", "Melanocytic Neoplasm");
+  }
+
+  /**
+   * Test typeahead suggests the expected concept within the first five results for terms users have
+   * asked about.
+   *
+   * @param incompleteTerm the partially typed term
+   * @param expectedName the preferred name expected in the first five results
+   * @throws Exception the exception
+   */
+  @ParameterizedTest
+  @CsvSource({
+    "chronic granu, Chronic Granulomatous Disease",
+    "chronic granul, Chronic Granulomatous Disease",
+    "giant subep, Subependymal Giant Cell Astrocytoma",
+    "giant astro, Subependymal Giant Cell Astrocytoma",
+    "lymphoblastic, Acute Lymphoblastic Leukemia"
+  })
+  public void testTypeaheadExpectedConceptInTopFive(
+      final String incompleteTerm, final String expectedName) throws Exception {
+    final int topResultCount = 5;
+    log.info("Testing typeahead - incompleteTerm = " + incompleteTerm);
+    final ConceptResultList list =
+        searchController.typeaheadService(incompleteTerm, null, topResultCount);
+    assertThat(list.getConcepts()).extracting(Concept::getName).contains(expectedName);
+  }
+
+  /**
+   * Test typeahead puts the more general concept first when two names match equally well.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadMoreGeneralConceptFirst() throws Exception {
+    log.info("Testing typeahead - incompleteTerm = lung ca");
+    final ConceptResultList list = searchController.typeaheadService("lung ca", null, null);
+    assertThat(list.getConcepts().get(0).getName()).isEqualTo("Lung Carcinoma");
   }
 
   /**
