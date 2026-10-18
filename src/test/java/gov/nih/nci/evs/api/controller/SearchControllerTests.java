@@ -5335,7 +5335,8 @@ public class SearchControllerTests {
   public void testTypeaheadBlankTerm() throws Exception {
     for (final String incompleteTerm : new String[] {null, "", "   "}) {
       log.info("Testing typeahead - incompleteTerm = [" + incompleteTerm + "]");
-      final ConceptResultList list = searchController.typeaheadService(incompleteTerm, null, null);
+      final ConceptResultList list =
+          searchController.typeaheadService(incompleteTerm, null, null, null);
       assertThat(list.getConcepts()).isEmpty();
       assertThat(list.getTotal()).isEqualTo(0L);
     }
@@ -5349,7 +5350,7 @@ public class SearchControllerTests {
   @Test
   public void testTypeaheadIncompleteTerm() throws Exception {
     log.info("Testing typeahead - incompleteTerm = melan");
-    final ConceptResultList list = searchController.typeaheadService("melan", null, null);
+    final ConceptResultList list = searchController.typeaheadService("melan", null, null, null);
     assertThat(list.getConcepts()).isNotEmpty();
     assertThat(list.getTotal()).isGreaterThan(0L);
     assertThat(list.getParameters().getTerm()).isEqualTo("melan");
@@ -5364,7 +5365,8 @@ public class SearchControllerTests {
   @Test
   public void testTypeaheadIncompleteTermChronicGranulomatousDisease() throws Exception {
     log.info("Testing typeahead - incompleteTerm = chronic granu");
-    final ConceptResultList list = searchController.typeaheadService("chronic granu", null, null);
+    final ConceptResultList list =
+        searchController.typeaheadService("chronic granu", null, null, null);
     assertThat(list.getConcepts()).isNotEmpty();
     assertThat(list.getTotal()).isGreaterThan(0L);
     assertThat(list.getParameters().getTerm()).isEqualTo("chronic granu");
@@ -5380,7 +5382,7 @@ public class SearchControllerTests {
   @Test
   public void testTypeaheadGeneralShortNamesFirst() throws Exception {
     log.info("Testing typeahead - incompleteTerm = melan");
-    final ConceptResultList list = searchController.typeaheadService("melan", null, null);
+    final ConceptResultList list = searchController.typeaheadService("melan", null, null, null);
     assertThat(list.getConcepts())
         .extracting(Concept::getName)
         .startsWith("Melanoma", "Melanocytic Neoplasm");
@@ -5407,7 +5409,7 @@ public class SearchControllerTests {
     final int topResultCount = 5;
     log.info("Testing typeahead - incompleteTerm = " + incompleteTerm);
     final ConceptResultList list =
-        searchController.typeaheadService(incompleteTerm, null, topResultCount);
+        searchController.typeaheadService(incompleteTerm, null, null, topResultCount);
     assertThat(list.getConcepts()).extracting(Concept::getName).contains(expectedName);
   }
 
@@ -5419,7 +5421,7 @@ public class SearchControllerTests {
   @Test
   public void testTypeaheadMoreGeneralConceptFirst() throws Exception {
     log.info("Testing typeahead - incompleteTerm = lung ca");
-    final ConceptResultList list = searchController.typeaheadService("lung ca", null, null);
+    final ConceptResultList list = searchController.typeaheadService("lung ca", null, null, null);
     assertThat(list.getConcepts().get(0).getName()).isEqualTo("Lung Carcinoma");
   }
 
@@ -5431,7 +5433,7 @@ public class SearchControllerTests {
   @Test
   public void testTypeaheadNcitOnly() throws Exception {
     log.info("Testing typeahead - incompleteTerm = cancer, pageSize = 100");
-    final ConceptResultList list = searchController.typeaheadService("cancer", null, 100);
+    final ConceptResultList list = searchController.typeaheadService("cancer", null, null, 100);
     assertThat(list.getConcepts()).isNotEmpty();
     assertThat(list.getConcepts()).allMatch(c -> "ncit".equals(c.getTerminology()));
   }
@@ -5445,12 +5447,12 @@ public class SearchControllerTests {
   public void testTypeaheadPageSize() throws Exception {
     // Default page size
     log.info("Testing typeahead - incompleteTerm = melan, pageSize = null");
-    ConceptResultList list = searchController.typeaheadService("melan", null, null);
+    ConceptResultList list = searchController.typeaheadService("melan", null, null, null);
     assertThat(list.getConcepts().size()).isEqualTo(10);
 
     // Explicit page size
     log.info("Testing typeahead - incompleteTerm = melan, pageSize = 3");
-    list = searchController.typeaheadService("melan", null, 3);
+    list = searchController.typeaheadService("melan", null, null, 3);
     assertThat(list.getConcepts().size()).isEqualTo(3);
 
     // Out of range page sizes
@@ -5459,9 +5461,64 @@ public class SearchControllerTests {
       final ResponseStatusException e =
           assertThrows(
               ResponseStatusException.class,
-              () -> searchController.typeaheadService("melan", null, pageSize));
+              () -> searchController.typeaheadService("melan", null, null, pageSize));
       assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
+  }
+
+  /**
+   * Test the typeahead endpoint accepts a comma-separated list of terminologies and echoes each one
+   * in the response parameters.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadMultipleTerminologies() throws Exception {
+    final String url = "/api/v1/concept/typeahead";
+    final String requestedTerminologies = "ncit,ncim";
+    final String incompleteTerm = "melan";
+    log.info("Testing url - " + url + "?terminology=" + requestedTerminologies);
+
+    final MvcResult result =
+        mvc.perform(
+                get(url).param("terminology", requestedTerminologies).param("term", incompleteTerm))
+            .andExpect(status().isOk())
+            .andReturn();
+    final String content = result.getResponse().getContentAsString();
+    log.info("  content = " + content);
+
+    // Only the echoed terminologies are checked: ncim may not have the typeahead field indexed
+    final ConceptResultList list =
+        ThreadLocalMapper.get().readValue(content, ConceptResultList.class);
+    assertThat(list.getParameters().getTerminology()).containsExactlyInAnyOrder("ncit", "ncim");
+  }
+
+  /**
+   * Test the typeahead endpoint with an explicit single terminology returns only that terminology's
+   * concepts.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadExplicitTerminology() throws Exception {
+    final String url = "/api/v1/concept/typeahead";
+    final String requestedTerminology = "ncit";
+    final String incompleteTerm = "melan";
+    log.info("Testing url - " + url + "?terminology=" + requestedTerminology);
+
+    final MvcResult result =
+        mvc.perform(
+                get(url).param("terminology", requestedTerminology).param("term", incompleteTerm))
+            .andExpect(status().isOk())
+            .andReturn();
+    final String content = result.getResponse().getContentAsString();
+    log.info("  content = " + content);
+
+    final ConceptResultList list =
+        ThreadLocalMapper.get().readValue(content, ConceptResultList.class);
+    assertThat(list.getParameters().getTerminology()).containsExactly(requestedTerminology);
+    assertThat(list.getConcepts()).isNotEmpty();
+    assertThat(list.getConcepts()).allMatch(c -> requestedTerminology.equals(c.getTerminology()));
   }
 
   /**

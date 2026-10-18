@@ -413,6 +413,7 @@ public class SearchController extends BaseController {
    * Searches for concepts by keyword or ID number.
    *
    * @param incompleteTerm the partial term to search for
+   * @param terminologies the terminologies to search, defaulting to ncit when omitted
    * @param pageSize the number of results per page
    * @param license the license key to restrict search results to a specific license
    * @return the list of matching concepts
@@ -421,7 +422,8 @@ public class SearchController extends BaseController {
   @Operation(
       summary = "Get typeahead suggestions for a partially typed term",
       description =
-          "Returns NCI Thesaurus concepts whose preferred names contain every word typed so far,"
+          "Returns concepts from the requested terminologies (NCI Thesaurus by default) whose"
+              + " preferred names contain every word typed so far,"
               + " in any order, with the last word allowed to be partial. Ignores case and"
               + " punctuation. General concepts (those with more descendants) with short names come"
               + " first, with a small preference for names that start with the typed text."
@@ -447,6 +449,15 @@ public class SearchController extends BaseController {
   })
   @Parameters({
     @Parameter(
+        name = "terminology",
+        description =
+            "Comma-separated list of terminologies to search, e.g. 'ncit' or 'ncim' (<a"
+                + " href=\"https://github.com/NCIEVS/evsrestapi-client-SDK/blob/main/doc/TERMINOLOGIES.md\">See"
+                + " here for complete list</a>)",
+        required = false,
+        schema = @Schema(implementation = String.class),
+        example = "ncit"),
+    @Parameter(
         name = "term",
         description = "The partially typed term or code to complete, e.g. 'melan'",
         required = false,
@@ -471,28 +482,34 @@ public class SearchController extends BaseController {
   @GetMapping(value = "/concept/typeahead", produces = "application/json")
   public @ResponseBody ConceptResultList typeahead(
       @RequestParam(name = "term", required = false) final String incompleteTerm,
+      @RequestParam(name = "terminology", required = false) final List<String> terminologies,
       @RequestParam(name = "pageSize", defaultValue = DEFAULT_TYPEAHEAD_PAGE_SIZE)
           final Integer pageSize,
       @RequestHeader(name = "X-EVSRESTAPI-License-Key", required = false) final String license)
       throws Exception {
 
-    return typeaheadService(incompleteTerm, license, pageSize);
+    return typeaheadService(incompleteTerm, terminologies, license, pageSize);
   }
 
   /**
    * Finds concepts whose preferred names contain every word typed so far, in any order, with the
    * last word allowed to be partial. Ignores case and punctuation. General concepts with short
    * names come first, with a small preference for names that start with the typed text. Searches
-   * ncit, the default terminology.
+   * the requested terminologies, defaulting to ncit when none are requested.
    *
    * @param incompleteTerm the partially typed term to complete
+   * @param requestedTerminologies the names of the terminologies to search, or null for ncit
    * @param license the license key from the request header
    * @param pageSize the maximum number of suggestions to return
    * @return the matching concepts
    * @throws Exception the exception
    */
   public ConceptResultList typeaheadService(
-      final String incompleteTerm, final String license, final Integer pageSize) throws Exception {
+      final String incompleteTerm,
+      final List<String> requestedTerminologies,
+      final String license,
+      final Integer pageSize)
+      throws Exception {
 
     // Normalized only to detect input with no words in it. The query itself gets the raw term,
     // because the search_as_you_type field's analyzer handles case and punctuation.
@@ -511,18 +528,16 @@ public class SearchController extends BaseController {
     // The query itself is the SearchAsYouType below. SearchCriteria is only used to carry the
     // request parameters (page size, terminology, included fields, and the echoed parameters in
     // the response) and to reuse the existing validation methods.
-    final SearchCriteria searchCriteria = getTypeaheadSearchCriteria(incompleteTerm, pageSize);
+    final SearchCriteria searchCriteria =
+        getTypeaheadSearchCriteria(incompleteTerm, requestedTerminologies, pageSize);
 
     final long timerStartDate = System.currentTimeMillis();
 
     checkSearchCriteria(searchCriteria);
     tryFallbackOnNCIT(searchCriteria);
 
-    final List<Terminology> terminologies = parseTerminologies(searchCriteria.getTerminology());
-
-    // validate
-    checkLicenses(terminologies, license);
-    checkTermAgainstSearchCriteriaValidation(terminologies, searchCriteria);
+    final List<Terminology> terminologies =
+        parseAndValidateTerminologiesFromSearchCriteria(searchCriteria, license);
 
     final QueryBuilder typeaheadQuery =
         new SearchAsYouType(terminologies, TYPEAHEAD_FIELD, incompleteTerm).getQueryBuilder();
@@ -599,11 +614,26 @@ public class SearchController extends BaseController {
     return results;
   }
 
+  /**
+   * Builds the search criteria carrying the typeahead request parameters.
+   *
+   * @param incompleteTerm the partially typed term to complete
+   * @param requestedTerminologies the names of the terminologies to search, or null to leave the
+   *     terminology unset so the ncit fallback applies
+   * @param pageSize the maximum number of suggestions to return, or null for the default
+   * @return the search criteria
+   */
   private SearchCriteria getTypeaheadSearchCriteria(
-      final String incompleteTerm, final Integer pageSize) {
+      final String incompleteTerm,
+      final List<String> requestedTerminologies,
+      final Integer pageSize) {
     final SearchCriteria searchCriteria = new SearchCriteria();
     searchCriteria.setTerm(incompleteTerm);
     searchCriteria.setType("startsWith");
+    final boolean hasRequestedTerminologies = requestedTerminologies != null;
+    if (hasRequestedTerminologies) {
+      searchCriteria.setTerminology(requestedTerminologies);
+    }
     if (pageSize != null) {
       searchCriteria.setPageSize(pageSize);
     }
