@@ -5,9 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import gov.nih.nci.evs.api.aop.RecordMetric;
 import gov.nih.nci.evs.api.model.Concept;
-import gov.nih.nci.evs.api.model.ConceptMinimal;
 import gov.nih.nci.evs.api.model.ConceptResultList;
-import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.MapResultList;
 import gov.nih.nci.evs.api.model.SearchCriteria;
 import gov.nih.nci.evs.api.model.SearchCriteriaWithoutTerminology;
@@ -15,10 +13,8 @@ import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.model.sparql.Bindings;
 import gov.nih.nci.evs.api.model.sparql.Sparql;
 import gov.nih.nci.evs.api.properties.GraphProperties;
-import gov.nih.nci.evs.api.query.SearchAsYouType;
 import gov.nih.nci.evs.api.service.MetadataService;
 import gov.nih.nci.evs.api.service.OpenSearchService;
-import gov.nih.nci.evs.api.service.OpensearchOperationsService;
 import gov.nih.nci.evs.api.service.OpensearchQueryService;
 import gov.nih.nci.evs.api.service.QueryBuilderService;
 import gov.nih.nci.evs.api.service.SparqlQueryManagerService;
@@ -41,25 +37,11 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import org.apache.jena.query.QueryException;
-import org.opensearch.data.client.orhlc.NativeSearchQuery;
-import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;
-import org.opensearch.search.sort.ScriptSortBuilder;
-import org.opensearch.search.sort.SortBuilders;
-import org.opensearch.search.sort.SortOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
-import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -86,54 +68,6 @@ public class SearchController extends BaseController {
   // at run time
   private static final String DEFAULT_TYPEAHEAD_PAGE_SIZE = "10";
 
-  /** The field typeahead matches against: the search_as_you_type subfield of preferred names. */
-  private static final String TYPEAHEAD_FIELD = "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
-
-  /** Keyword field holding the normalized preferred name, used to rank typeahead matches. */
-  private static final String NORMALIZED_NAME_FIELD = "normName";
-
-  /**
-   * Bonus for names that start with the typed text. Small enough that a much more general concept
-   * whose name only contains the typed words, like "Acute Lymphoblastic Leukemia" for
-   * "lymphoblastic", can still rank above it.
-   */
-  private static final double STARTS_WITH_BONUS = 1.0;
-
-  /**
-   * How many descendants one extra word in a name is worth when ranking typeahead matches. With a
-   * penalty of 1, a name with one more word needs about e (2.7) times as many descendants to rank
-   * the same.
-   */
-  private static final double WORD_PENALTY = 1.0;
-
-  /**
-   * Ranks general concepts with short names first: log(1 + descendant count), minus the word
-   * penalty for each word in the normalized name, plus the starts-with bonus when the normalized
-   * name starts with the typed text. The log keeps concepts with huge hierarchies from outranking
-   * everything. A concept without a normalized name sorts last.
-   *
-   * <p>Every descendant has a leaf flag, and boolean doc values keep duplicates, so the number of
-   * leaf values is the number of descendants.
-   *
-   * <p>TODO: This is for testing the ranking only. Store a descendant count field when concepts are
-   * loaded and rank on it instead, which needs a mapping change and a reindex.
-   */
-  private static final String GENERAL_SHORT_NAME_FIRST_SOURCE =
-      "if (doc['"
-          + NORMALIZED_NAME_FIELD
-          + "'].size() == 0) { return -Double.MAX_VALUE; }"
-          + " String name = doc['"
-          + NORMALIZED_NAME_FIELD
-          + "'].value;"
-          + " int wordCount = 1;"
-          + " for (int i = 0; i < name.length(); i++) {"
-          + "   if (name.charAt(i) == (char) ' ') { wordCount++; }"
-          + " }"
-          + " double startsWithBonus ="
-          + "   name.startsWith(params.typedText) ? params.startsWithBonus : 0;"
-          + " return Math.log(1 + doc['descendants.leaf'].size())"
-          + "   - params.wordPenalty * wordCount + startsWithBonus;";
-
   /** The Constant log. */
   private static final Logger logger = LoggerFactory.getLogger(SearchController.class);
 
@@ -154,9 +88,6 @@ public class SearchController extends BaseController {
 
   /** The es query service. */
   @Autowired OpensearchQueryService osQueryService;
-
-  /** The opensearch operations service, used to run typeahead queries. */
-  @Autowired OpensearchOperationsService operationsService;
 
   /** The term utils. */
   @Autowired TerminologyUtils termUtils;
@@ -511,7 +442,7 @@ public class SearchController extends BaseController {
       final Integer pageSize)
       throws Exception {
 
-    // Normalized only to detect input with no words in it. The query itself gets the raw term,
+    // Normalized only to detect input with no words in it. The search service gets the raw term,
     // because the search_as_you_type field's analyzer handles case and punctuation.
     final String normalizedTerm =
         incompleteTerm == null ? "" : ConceptUtils.normalize(incompleteTerm);
@@ -525,9 +456,9 @@ public class SearchController extends BaseController {
       return results;
     }
 
-    // The query itself is the SearchAsYouType below. SearchCriteria is only used to carry the
-    // request parameters (page size, terminology, included fields, and the echoed parameters in
-    // the response) and to reuse the existing validation methods.
+    // SearchCriteria carries the request parameters (term, page size, terminology, included
+    // fields, and the echoed parameters in the response) and lets this reuse the existing
+    // validation methods.
     final SearchCriteria searchCriteria =
         getTypeaheadSearchCriteria(incompleteTerm, requestedTerminologies, pageSize);
 
@@ -539,79 +470,11 @@ public class SearchController extends BaseController {
     final List<Terminology> terminologies =
         parseAndValidateTerminologiesFromSearchCriteria(searchCriteria, license);
 
-    final QueryBuilder typeaheadQuery =
-        new SearchAsYouType(terminologies, TYPEAHEAD_FIELD, incompleteTerm)
-            .fetchOpenSearchQuery(operationsService.getOpenSearchOperations());
     final ConceptResultList results =
-        fetchTypeaheadConceptsSortedByRank(
-            typeaheadQuery,
-            getTypeaheadRankingScript(normalizedTerm),
-            terminologies,
-            searchCriteria);
+        openSearchService.findTypeaheadConcepts(terminologies, searchCriteria);
     highlightConceptMatches(results);
 
     results.setTimeTaken(System.currentTimeMillis() - timerStartDate);
-    return results;
-  }
-
-  /**
-   * Builds the script that ranks typeahead matches. See {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}.
-   *
-   * @param normalizedTerm the partially typed term, normalized like {@link #NORMALIZED_NAME_FIELD}
-   * @return the ranking script
-   */
-  private Script getTypeaheadRankingScript(final String normalizedTerm) {
-    return new Script(
-        ScriptType.INLINE,
-        Script.DEFAULT_SCRIPT_LANG,
-        GENERAL_SHORT_NAME_FIRST_SOURCE,
-        Map.of(
-            "typedText", normalizedTerm,
-            "wordPenalty", WORD_PENALTY,
-            "startsWithBonus", STARTS_WITH_BONUS));
-  }
-
-  /**
-   * Runs the typeahead query against the concept indexes of the terminologies, returning general
-   * concepts with short names first (see {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}), then by
-   * ascending code so results are stable between requests.
-   *
-   * @param typeaheadQuery the query to run
-   * @param rankingScript the script that ranks the matches
-   * @param terminologies the terminologies whose concept indexes are searched
-   * @param searchCriteria the search criteria supplying page size and included fields
-   * @return the first page of matching concepts, sorted by rank, then code
-   */
-  private ConceptResultList fetchTypeaheadConceptsSortedByRank(
-      final QueryBuilder typeaheadQuery,
-      final Script rankingScript,
-      final List<Terminology> terminologies,
-      final SearchCriteria searchCriteria) {
-    final IncludeParam include = new IncludeParam(searchCriteria.getInclude());
-    final NativeSearchQuery search =
-        new NativeSearchQueryBuilder()
-            .withQuery(typeaheadQuery)
-            .withPageable(PageRequest.of(0, searchCriteria.getPageSize()))
-            .withSourceFilter(
-                new FetchSourceFilter(
-                    true, include.getIncludedFields(), include.getExcludedFields()))
-            .withSorts(
-                SortBuilders.scriptSort(rankingScript, ScriptSortBuilder.ScriptSortType.NUMBER)
-                    .order(SortOrder.DESC),
-                SortBuilders.fieldSort("code").order(SortOrder.ASC))
-            .build();
-    final String[] indexNames =
-        terminologies.stream().map(Terminology::getIndexName).toArray(String[]::new);
-
-    final SearchHits<Concept> hits =
-        operationsService
-            .getOpenSearchOperations()
-            .search(search, Concept.class, IndexCoordinates.of(indexNames));
-
-    final ConceptResultList results = new ConceptResultList();
-    results.setParameters(searchCriteria);
-    results.setTotal(hits.getTotalHits());
-    results.setConcepts(hits.stream().map(SearchHit::getContent).collect(Collectors.toList()));
     return results;
   }
 

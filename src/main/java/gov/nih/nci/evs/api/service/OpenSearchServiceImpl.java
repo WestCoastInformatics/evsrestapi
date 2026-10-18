@@ -1,12 +1,14 @@
 package gov.nih.nci.evs.api.service;
 
 import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.ConceptMinimal;
 import gov.nih.nci.evs.api.model.ConceptResultList;
 import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.Mapping;
 import gov.nih.nci.evs.api.model.MappingResultList;
 import gov.nih.nci.evs.api.model.SearchCriteria;
 import gov.nih.nci.evs.api.model.Terminology;
+import gov.nih.nci.evs.api.query.SearchAsYouType;
 import gov.nih.nci.evs.api.support.es.EVSPageable;
 import gov.nih.nci.evs.api.util.ConceptUtils;
 import gov.nih.nci.evs.api.util.TerminologyUtils;
@@ -19,6 +21,7 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.common.unit.Fuzziness;
+import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -28,12 +31,16 @@ import org.opensearch.index.query.Operator;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryStringQueryBuilder;
+import org.opensearch.script.Script;
+import org.opensearch.script.ScriptType;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
+import org.opensearch.search.sort.ScriptSortBuilder;
 import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -57,6 +64,54 @@ public class OpenSearchServiceImpl implements OpenSearchService {
           "\\b(?:not elsewhere classified|not otherwise specified|nec|nos)\\b",
           Pattern.CASE_INSENSITIVE);
 
+  /** The field typeahead matches against: the search_as_you_type subfield of preferred names. */
+  private static final String TYPEAHEAD_FIELD = "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+
+  /** Keyword field holding the normalized preferred name, used to rank typeahead matches. */
+  private static final String NORMALIZED_NAME_FIELD = "normName";
+
+  /**
+   * Bonus for names that start with the typed text. Small enough that a much more general concept
+   * whose name only contains the typed words, like "Acute Lymphoblastic Leukemia" for
+   * "lymphoblastic", can still rank above it.
+   */
+  private static final double STARTS_WITH_BONUS = 1.0;
+
+  /**
+   * How many descendants one extra word in a name is worth when ranking typeahead matches. With a
+   * penalty of 1, a name with one more word needs about e (2.7) times as many descendants to rank
+   * the same.
+   */
+  private static final double WORD_PENALTY = 1.0;
+
+  /**
+   * Ranks general concepts with short names first: log(1 + descendant count), minus the word
+   * penalty for each word in the normalized name, plus the starts-with bonus when the normalized
+   * name starts with the typed text. The log keeps concepts with huge hierarchies from outranking
+   * everything. A concept without a normalized name sorts last.
+   *
+   * <p>Every descendant has a leaf flag, and boolean doc values keep duplicates, so the number of
+   * leaf values is the number of descendants.
+   *
+   * <p>TODO: This is for testing the ranking only. Store a descendant count field when concepts are
+   * loaded and rank on it instead, which needs a mapping change and a reindex.
+   */
+  private static final String GENERAL_SHORT_NAME_FIRST_SOURCE =
+      "if (doc['"
+          + NORMALIZED_NAME_FIELD
+          + "'].size() == 0) { return -Double.MAX_VALUE; }"
+          + " String name = doc['"
+          + NORMALIZED_NAME_FIELD
+          + "'].value;"
+          + " int wordCount = 1;"
+          + " for (int i = 0; i < name.length(); i++) {"
+          + "   if (name.charAt(i) == (char) ' ') { wordCount++; }"
+          + " }"
+          + " double startsWithBonus ="
+          + "   name.startsWith(params.typedText) ? params.startsWithBonus : 0;"
+          + " return Math.log(1 + doc['descendants.leaf'].size())"
+          + "   - params.wordPenalty * wordCount + startsWithBonus;";
+
   /** The Opensearch operations service *. */
   @Autowired OpensearchOperationsService esOperationsService;
 
@@ -69,6 +124,78 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   /** The term utils. */
   /* The terminology utils */
   @Autowired TerminologyUtils termUtils;
+
+  /* see superclass */
+  @Override
+  public ConceptResultList findTypeaheadConcepts(
+      final List<Terminology> terminologies, final SearchCriteria searchCriteria) {
+    final String incompleteTerm = searchCriteria.getTerm();
+    final QueryBuilder typeaheadQuery =
+        new SearchAsYouType(terminologies, TYPEAHEAD_FIELD, incompleteTerm)
+            .fetchOpenSearchQuery(operations);
+    final Script rankingScript = getTypeaheadRankingScript(ConceptUtils.normalize(incompleteTerm));
+    return fetchTypeaheadConceptsSortedByRank(
+        typeaheadQuery, rankingScript, terminologies, searchCriteria);
+  }
+
+  /**
+   * Builds the script that ranks typeahead matches. See {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}.
+   *
+   * @param normalizedTerm the partially typed term, normalized like {@link #NORMALIZED_NAME_FIELD}
+   * @return the ranking script
+   */
+  private Script getTypeaheadRankingScript(final String normalizedTerm) {
+    return new Script(
+        ScriptType.INLINE,
+        Script.DEFAULT_SCRIPT_LANG,
+        GENERAL_SHORT_NAME_FIRST_SOURCE,
+        Map.of(
+            "typedText", normalizedTerm,
+            "wordPenalty", WORD_PENALTY,
+            "startsWithBonus", STARTS_WITH_BONUS));
+  }
+
+  /**
+   * Runs the typeahead query against the concept indexes of the terminologies, returning general
+   * concepts with short names first (see {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}), then by
+   * ascending code so results are stable between requests.
+   *
+   * @param typeaheadQuery the query to run
+   * @param rankingScript the script that ranks the matches
+   * @param terminologies the terminologies whose concept indexes are searched
+   * @param searchCriteria the search criteria supplying page size and included fields
+   * @return the first page of matching concepts, sorted by rank, then code
+   */
+  private ConceptResultList fetchTypeaheadConceptsSortedByRank(
+      final QueryBuilder typeaheadQuery,
+      final Script rankingScript,
+      final List<Terminology> terminologies,
+      final SearchCriteria searchCriteria) {
+    final IncludeParam include = new IncludeParam(searchCriteria.getInclude());
+    final NativeSearchQuery search =
+        new NativeSearchQueryBuilder()
+            .withQuery(typeaheadQuery)
+            .withPageable(PageRequest.of(0, searchCriteria.getPageSize()))
+            .withSourceFilter(
+                new FetchSourceFilter(
+                    true, include.getIncludedFields(), include.getExcludedFields()))
+            .withSorts(
+                SortBuilders.scriptSort(rankingScript, ScriptSortBuilder.ScriptSortType.NUMBER)
+                    .order(SortOrder.DESC),
+                SortBuilders.fieldSort("code").order(SortOrder.ASC))
+            .build();
+    final String[] indexNames =
+        terminologies.stream().map(Terminology::getIndexName).toArray(String[]::new);
+
+    final SearchHits<Concept> hits =
+        operations.search(search, Concept.class, IndexCoordinates.of(indexNames));
+
+    final ConceptResultList results = new ConceptResultList();
+    results.setParameters(searchCriteria);
+    results.setTotal(hits.getTotalHits());
+    results.setConcepts(hits.stream().map(SearchHit::getContent).collect(Collectors.toList()));
+    return results;
+  }
 
   /**
    * search for the given search criteria.

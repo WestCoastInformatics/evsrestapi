@@ -24,6 +24,19 @@ public interface OpenSearchService {
       List<Terminology> terminologies, SearchCriteria searchCriteria) throws Exception;
 
   /**
+   * Finds concepts whose preferred names complete a partially typed term: every typed word must
+   * appear, in any order, with the last word allowed to be partial. General concepts with short
+   * names come first, with a small preference for names that start with the typed text.
+   *
+   * @param terminologies the terminologies to search
+   * @param searchCriteria the search criteria; its term is the partially typed term, and it also
+   *     supplies the page size and included fields
+   * @return the first page of matching concepts, best match first
+   */
+  public ConceptResultList findTypeaheadConcepts(
+      List<Terminology> terminologies, SearchCriteria searchCriteria);
+
+  /**
    * search for the given search criteria in mappings.
    *
    * @param query the query to search for the mappings
