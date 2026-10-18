@@ -15,7 +15,6 @@ import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.model.sparql.Bindings;
 import gov.nih.nci.evs.api.model.sparql.Sparql;
 import gov.nih.nci.evs.api.properties.GraphProperties;
-import gov.nih.nci.evs.api.query.EvsQuery;
 import gov.nih.nci.evs.api.query.SearchAsYouType;
 import gov.nih.nci.evs.api.service.MetadataService;
 import gov.nih.nci.evs.api.service.OpenSearchService;
@@ -46,6 +45,10 @@ import java.util.stream.Collectors;
 import org.apache.jena.query.QueryException;
 import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.script.Script;
+import org.opensearch.script.ScriptType;
+import org.opensearch.search.sort.ScriptSortBuilder;
 import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
 import org.slf4j.Logger;
@@ -85,6 +88,51 @@ public class SearchController extends BaseController {
 
   /** The field typeahead matches against: the search_as_you_type subfield of preferred names. */
   private static final String TYPEAHEAD_FIELD = "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+
+  /** Keyword field holding the normalized preferred name, used to rank typeahead matches. */
+  private static final String NORMALIZED_NAME_FIELD = "normName";
+
+  /**
+   * Bonus for names that start with the typed text. Small enough that a much more general concept
+   * whose name only contains the typed words, like "Acute Lymphoblastic Leukemia" for
+   * "lymphoblastic", can still rank above it.
+   */
+  private static final double STARTS_WITH_BONUS = 1.0;
+
+  /**
+   * How many descendants one extra word in a name is worth when ranking typeahead matches. With a
+   * penalty of 1, a name with one more word needs about e (2.7) times as many descendants to rank
+   * the same.
+   */
+  private static final double WORD_PENALTY = 1.0;
+
+  /**
+   * Ranks general concepts with short names first: log(1 + descendant count), minus the word
+   * penalty for each word in the normalized name, plus the starts-with bonus when the normalized
+   * name starts with the typed text. The log keeps concepts with huge hierarchies from outranking
+   * everything. A concept without a normalized name sorts last.
+   *
+   * <p>Every descendant has a leaf flag, and boolean doc values keep duplicates, so the number of
+   * leaf values is the number of descendants.
+   *
+   * <p>TODO: This is for testing the ranking only. Store a descendant count field when concepts are
+   * loaded and rank on it instead, which needs a mapping change and a reindex.
+   */
+  private static final String GENERAL_SHORT_NAME_FIRST_SOURCE =
+      "if (doc['"
+          + NORMALIZED_NAME_FIELD
+          + "'].size() == 0) { return -Double.MAX_VALUE; }"
+          + " String name = doc['"
+          + NORMALIZED_NAME_FIELD
+          + "'].value;"
+          + " int wordCount = 1;"
+          + " for (int i = 0; i < name.length(); i++) {"
+          + "   if (name.charAt(i) == (char) ' ') { wordCount++; }"
+          + " }"
+          + " double startsWithBonus ="
+          + "   name.startsWith(params.typedText) ? params.startsWithBonus : 0;"
+          + " return Math.log(1 + doc['descendants.leaf'].size())"
+          + "   - params.wordPenalty * wordCount + startsWithBonus;";
 
   /** The Constant log. */
   private static final Logger logger = LoggerFactory.getLogger(SearchController.class);
@@ -375,8 +423,9 @@ public class SearchController extends BaseController {
       description =
           "Returns NCI Thesaurus concepts whose preferred names contain every word typed so far,"
               + " in any order, with the last word allowed to be partial. Ignores case and"
-              + " punctuation. Intended for autocomplete use cases; a blank term returns an empty"
-              + " result.")
+              + " punctuation. General concepts (those with more descendants) with short names come"
+              + " first, with a small preference for names that start with the typed text."
+              + " Intended for autocomplete use cases; a blank term returns an empty result.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -432,8 +481,9 @@ public class SearchController extends BaseController {
 
   /**
    * Finds concepts whose preferred names contain every word typed so far, in any order, with the
-   * last word allowed to be partial. Ignores case and punctuation. Searches ncit, the default
-   * terminology.
+   * last word allowed to be partial. Ignores case and punctuation. General concepts with short
+   * names come first, with a small preference for names that start with the typed text. Searches
+   * ncit, the default terminology.
    *
    * @param incompleteTerm the partially typed term to complete
    * @param license the license key from the request header
@@ -474,10 +524,14 @@ public class SearchController extends BaseController {
     checkLicenses(terminologies, license);
     checkTermAgainstSearchCriteriaValidation(terminologies, searchCriteria);
 
-    final EvsQuery typeaheadQuery =
-        new SearchAsYouType(terminologies, TYPEAHEAD_FIELD, incompleteTerm);
+    final QueryBuilder typeaheadQuery =
+        new SearchAsYouType(terminologies, TYPEAHEAD_FIELD, incompleteTerm).getQueryBuilder();
     final ConceptResultList results =
-        fetchTypeaheadConceptsSortedByCode(typeaheadQuery, searchCriteria);
+        fetchTypeaheadConceptsSortedByRank(
+            typeaheadQuery,
+            getTypeaheadRankingScript(normalizedTerm),
+            terminologies,
+            searchCriteria);
     highlightConceptMatches(results);
 
     results.setTimeTaken(System.currentTimeMillis() - timerStartDate);
@@ -485,29 +539,53 @@ public class SearchController extends BaseController {
   }
 
   /**
-   * Runs the typeahead query against the concept indexes of its terminologies, returning the
-   * matches in ascending code order. Relevance score is not used for ordering.
+   * Builds the script that ranks typeahead matches. See {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}.
+   *
+   * @param normalizedTerm the partially typed term, normalized like {@link #NORMALIZED_NAME_FIELD}
+   * @return the ranking script
+   */
+  private Script getTypeaheadRankingScript(final String normalizedTerm) {
+    return new Script(
+        ScriptType.INLINE,
+        Script.DEFAULT_SCRIPT_LANG,
+        GENERAL_SHORT_NAME_FIRST_SOURCE,
+        Map.of(
+            "typedText", normalizedTerm,
+            "wordPenalty", WORD_PENALTY,
+            "startsWithBonus", STARTS_WITH_BONUS));
+  }
+
+  /**
+   * Runs the typeahead query against the concept indexes of the terminologies, returning general
+   * concepts with short names first (see {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}), then by
+   * ascending code so results are stable between requests.
    *
    * @param typeaheadQuery the query to run
+   * @param rankingScript the script that ranks the matches
+   * @param terminologies the terminologies whose concept indexes are searched
    * @param searchCriteria the search criteria supplying page size and included fields
-   * @return the first page of matching concepts, sorted by code ascending
+   * @return the first page of matching concepts, sorted by rank, then code
    */
-  private ConceptResultList fetchTypeaheadConceptsSortedByCode(
-      final EvsQuery typeaheadQuery, final SearchCriteria searchCriteria) {
+  private ConceptResultList fetchTypeaheadConceptsSortedByRank(
+      final QueryBuilder typeaheadQuery,
+      final Script rankingScript,
+      final List<Terminology> terminologies,
+      final SearchCriteria searchCriteria) {
     final IncludeParam include = new IncludeParam(searchCriteria.getInclude());
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
-            .withQuery(typeaheadQuery.getQueryBuilder())
+            .withQuery(typeaheadQuery)
             .withPageable(PageRequest.of(0, searchCriteria.getPageSize()))
             .withSourceFilter(
                 new FetchSourceFilter(
                     true, include.getIncludedFields(), include.getExcludedFields()))
-            .withSorts(SortBuilders.fieldSort("code").order(SortOrder.ASC))
+            .withSorts(
+                SortBuilders.scriptSort(rankingScript, ScriptSortBuilder.ScriptSortType.NUMBER)
+                    .order(SortOrder.DESC),
+                SortBuilders.fieldSort("code").order(SortOrder.ASC))
             .build();
     final String[] indexNames =
-        typeaheadQuery.getTerminologies().stream()
-            .map(Terminology::getIndexName)
-            .toArray(String[]::new);
+        terminologies.stream().map(Terminology::getIndexName).toArray(String[]::new);
 
     final SearchHits<Concept> hits =
         operationsService

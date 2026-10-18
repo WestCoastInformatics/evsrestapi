@@ -2,7 +2,9 @@ package gov.nih.nci.evs.api.query;
 
 import org.opensearch.index.query.QueryBuilder;
 
-/** A query that can also be run ignoring case. Required to be wrapped by {@link CaseInsensitive}. */
+/**
+ * A query that can also be run ignoring case. Required to be wrapped by {@link CaseInsensitive}.
+ */
 public interface SupportsIgnoringCase {
 
   /**

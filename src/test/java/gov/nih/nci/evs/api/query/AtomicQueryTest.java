@@ -18,9 +18,9 @@ import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.annotation.Id;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 import org.springframework.data.elasticsearch.core.IndexOperations;
@@ -62,8 +62,7 @@ public class AtomicQueryTest {
 
   /** The names in the index. Note the two spellings of melanoma that differ only by case. */
   private static final List<String> INDEXED_NAMES =
-      List.of(
-          "Melanoma", "melanoma", "Malignant Melanoma", "Melanocyte", "Carcinoma", "Stage 1*");
+      List.of("Melanoma", "melanoma", "Malignant Melanoma", "Melanocyte", "Carcinoma", "Stage 1*");
 
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
   @Autowired private OpensearchOperationsService operationsService;
@@ -190,8 +189,8 @@ public class AtomicQueryTest {
   }
 
   /**
-   * Fuzzy rejects values that are too different. "Melan" is three letters short of "Melanoma",
-   * more than the one typo allowed for a five-letter term.
+   * Fuzzy rejects values that are too different. "Melan" is three letters short of "Melanoma", more
+   * than the one typo allowed for a five-letter term.
    */
   @Test
   public void testFuzzyRejectsDistantValues() {
@@ -220,8 +219,7 @@ public class AtomicQueryTest {
   /** A case-insensitive Match finds every value equal to the term, whatever its case. */
   @Test
   public void testCaseInsensitiveMatch() {
-    final EvsQuery query =
-        new CaseInsensitive(new Match(TERMINOLOGIES, NAME_FIELD, "MELANOMA"));
+    final EvsQuery query = new CaseInsensitive(new Match(TERMINOLOGIES, NAME_FIELD, "MELANOMA"));
 
     assertEquals(Set.of("Melanoma", "melanoma"), fetchMatchingNames(query));
   }
@@ -229,8 +227,7 @@ public class AtomicQueryTest {
   /** A case-insensitive StartsWith finds every value beginning with the term, whatever its case. */
   @Test
   public void testCaseInsensitiveStartsWith() {
-    final EvsQuery query =
-        new CaseInsensitive(new StartsWith(TERMINOLOGIES, NAME_FIELD, "melano"));
+    final EvsQuery query = new CaseInsensitive(new StartsWith(TERMINOLOGIES, NAME_FIELD, "melano"));
 
     assertEquals(Set.of("Melanoma", "melanoma", "Melanocyte"), fetchMatchingNames(query));
   }
@@ -238,15 +235,14 @@ public class AtomicQueryTest {
   /** A case-insensitive Contains finds every value including the term, whatever its case. */
   @Test
   public void testCaseInsensitiveContains() {
-    final EvsQuery query =
-        new CaseInsensitive(new Contains(TERMINOLOGIES, NAME_FIELD, "MELANOMA"));
+    final EvsQuery query = new CaseInsensitive(new Contains(TERMINOLOGIES, NAME_FIELD, "MELANOMA"));
 
     assertEquals(Set.of("Melanoma", "melanoma", "Malignant Melanoma"), fetchMatchingNames(query));
   }
 
   /**
-   * Wrapping a query does not change it. The original query is still case sensitive and can be
-   * used on its own.
+   * Wrapping a query does not change it. The original query is still case sensitive and can be used
+   * on its own.
    */
   @Test
   public void testCaseInsensitiveLeavesWrappedQueryUnchanged() {
