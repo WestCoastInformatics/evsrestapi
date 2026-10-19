@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gov.nih.nci.evs.api.model.Association;
 import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.ConceptMinimal;
 import gov.nih.nci.evs.api.model.ConceptResultList;
 import gov.nih.nci.evs.api.model.Definition;
 import gov.nih.nci.evs.api.model.IncludeParam;
@@ -40,6 +42,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
@@ -5519,6 +5522,93 @@ public class SearchControllerTests {
     assertThat(list.getParameters().getTerminology()).containsExactly(requestedTerminology);
     assertThat(list.getConcepts()).isNotEmpty();
     assertThat(list.getConcepts()).allMatch(c -> requestedTerminology.equals(c.getTerminology()));
+  }
+
+  /**
+   * Test the typeahead endpoint rejects an unknown terminology.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadUnknownTerminology() throws Exception {
+    final String url = "/api/v1/concept/typeahead";
+    log.info("Testing url - " + url + "?terminology=ncitXXX&term=melan");
+    mvc.perform(get(url).param("terminology", "ncitXXX").param("term", "melan"))
+        .andExpect(status().isNotFound());
+  }
+
+  /**
+   * Test the typeahead endpoint requires a license key for license-restricted terminologies.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadLicenseRestricted() throws Exception {
+    final String url = "/api/v1/concept/typeahead";
+
+    log.info("Testing url - " + url + "?terminology=mdr&term=canc");
+    mvc.perform(get(url).param("terminology", "mdr").param("term", "canc"))
+        .andExpect(status().isForbidden());
+
+    log.info("Testing url - " + url + "?terminology=mdr&term=canc (with license)");
+    mvc.perform(
+            get(url)
+                .header("X-EVSRESTAPI-License-Key", appProperties.getUiLicense())
+                .param("terminology", "mdr")
+                .param("term", "canc"))
+        .andExpect(status().isOk());
+  }
+
+  /**
+   * Test typeahead across ncit and ncim finds every match from both. A failure ranking one
+   * terminology's matches would drop them without failing the request, so the totals are compared.
+   * Skipped until ncim is reindexed with the typeahead field.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadMultipleTerminologiesFindsMatchesFromEach() throws Exception {
+    assumeTrue(getHasTypeaheadField("ncim"), "ncim is not indexed with the typeahead field");
+    final String incompleteTerm = "melan";
+
+    final ConceptResultList ncitList =
+        searchController.typeaheadService(incompleteTerm, List.of("ncit"), null, null);
+    final ConceptResultList ncimList =
+        searchController.typeaheadService(incompleteTerm, List.of("ncim"), null, null);
+    final ConceptResultList bothList =
+        searchController.typeaheadService(incompleteTerm, List.of("ncit", "ncim"), null, null);
+
+    assertThat(ncimList.getConcepts()).isNotEmpty();
+    assertThat(ncimList.getConcepts()).allMatch(c -> "ncim".equals(c.getTerminology()));
+    assertThat(bothList.getTotal()).isEqualTo(ncitList.getTotal() + ncimList.getTotal());
+  }
+
+  /**
+   * Indicates whether a terminology's concept index has the typeahead field, which is only added
+   * when the terminology is reindexed.
+   *
+   * @param terminology the terminology name
+   * @return whether preferred names are indexed for typeahead
+   * @throws Exception the exception
+   */
+  @SuppressWarnings("unchecked")
+  private boolean getHasTypeaheadField(final String terminology) throws Exception {
+    final String indexName =
+        terminologyUtils
+            .getIndexedTerminology(terminology, opensearchQueryService, true)
+            .getIndexName();
+    final Map<String, Object> mapping =
+        opensearchOperationsService
+            .getOpenSearchOperations()
+            .indexOps(IndexCoordinates.of(indexName))
+            .getMapping();
+    final Map<String, Object> properties =
+        (Map<String, Object>) mapping.getOrDefault("properties", Map.of());
+    final Map<String, Object> nameField =
+        (Map<String, Object>) properties.getOrDefault("name", Map.of());
+    final Map<String, Object> nameSubfields =
+        (Map<String, Object>) nameField.getOrDefault("fields", Map.of());
+    return nameSubfields.containsKey(ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX);
   }
 
   /**
