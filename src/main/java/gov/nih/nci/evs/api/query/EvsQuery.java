@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -10,9 +11,11 @@ import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.search.sort.SortBuilder;
 import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
@@ -25,6 +28,9 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
  * <p>Building a node's query may run searches first. A node can depend on other concepts, e.g. a
  * role's target. One OpenSearch query only looks at one document, so the node runs the other query
  * first with {@link #declareDependencies} and matches the concepts it found.
+ *
+ * <p>EXPERIMENTAL: nodes may also contribute sorts (see {@link #getSorts()}), and any node can be
+ * run as the outermost query of a search request (see {@link #getNativeSearchQuery}).
  */
 public abstract class EvsQuery {
 
@@ -108,13 +114,60 @@ public abstract class EvsQuery {
   public abstract QueryBuilder fetchOpenSearchQuery(OpenSearchOperations operations);
 
   /**
-   * Returns the concept indexes of the terminologies, to search.
+   * EXPERIMENTAL: returns the sorts this node wants applied, in priority order. Most nodes only
+   * match, so the default is none.
+   *
+   * <p>Composite nodes must return their own sorts first, then each child's sorts in child order. A
+   * nested node's sorts therefore only break ties left by the nodes above and before it. A node
+   * that negates its children (e.g. {@code Not}) contributes none of their sorts.
+   *
+   * @return the sorts, highest priority first
+   */
+  public List<SortBuilder<?>> getSorts() {
+    return List.of();
+  }
+
+  /**
+   * EXPERIMENTAL: builds a search request with this node as the outermost query. Sorts come from
+   * {@link #getSorts()}, with duplicates dropped, followed by terminology and code so results are
+   * stable between requests.
+   *
+   * @param pageable the page to return
+   * @param include the fields to return for each hit
+   * @param operations the OpenSearch operations, for any searches the tree needs to run first
+   * @return the search request
+   */
+  public final NativeSearchQuery getNativeSearchQuery(
+      final Pageable pageable, final IncludeParam include, final OpenSearchOperations operations) {
+    return new NativeSearchQueryBuilder()
+        .withQuery(fetchOpenSearchQuery(operations))
+        .withSorts(getSortsWithTieBreak())
+        .withSourceFilter(
+            new FetchSourceFilter(true, include.getIncludedFields(), include.getExcludedFields()))
+        .withPageable(pageable)
+        .build();
+  }
+
+  /**
+   * Returns the concept indexes of the terminologies, for running {@link #getNativeSearchQuery}.
    *
    * @return the index coordinates
    */
   public IndexCoordinates getIndexCoordinates() {
     return IndexCoordinates.of(
         terminologies.stream().map(Terminology::getIndexName).toArray(String[]::new));
+  }
+
+  /**
+   * Returns this node's sorts without duplicates, then the terminology and code tie-break.
+   *
+   * @return the sorts, highest priority first
+   */
+  private List<SortBuilder<?>> getSortsWithTieBreak() {
+    final List<SortBuilder<?>> sorts = new ArrayList<>(getSorts());
+    sorts.add(SortBuilders.fieldSort(INDEX_FIELD).order(SortOrder.ASC));
+    sorts.add(SortBuilders.fieldSort(CODE_FIELD).order(SortOrder.ASC));
+    return sorts.stream().distinct().collect(Collectors.toList());
   }
 
   /**
