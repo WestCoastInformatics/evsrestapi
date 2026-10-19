@@ -7,6 +7,10 @@ dispatch), not by switching on a `type` string as `OpenSearchServiceImpl.getTerm
 - **Atomic queries** are the leaves. Each one matches a single field using a single strategy.
 - **Composite queries** (planned) combine other queries with `and`, `or`, and so on.
 
+`ComposableQueryTest` holds the target: one query that uses every planned node (boolean logic,
+hierarchy, roles, associations, properties and qualifiers, subsets, traversal, facets). It does not
+compile until those classes exist, and the compiler errors list what is left to build.
+
 Because every node has the same interface, any query can be nested inside any composite:
 
 ```lisp
