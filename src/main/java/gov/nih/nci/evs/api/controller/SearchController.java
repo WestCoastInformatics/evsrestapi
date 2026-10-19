@@ -13,6 +13,7 @@ import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.model.sparql.Bindings;
 import gov.nih.nci.evs.api.model.sparql.Sparql;
 import gov.nih.nci.evs.api.properties.GraphProperties;
+import gov.nih.nci.evs.api.query.Typeahead;
 import gov.nih.nci.evs.api.service.MetadataService;
 import gov.nih.nci.evs.api.service.OpenSearchService;
 import gov.nih.nci.evs.api.service.OpensearchQueryService;
@@ -442,13 +443,8 @@ public class SearchController extends BaseController {
       final Integer pageSize)
       throws Exception {
 
-    // Normalized only to detect input with no words in it. The search service gets the raw term,
-    // because the search_as_you_type field's analyzer handles case and punctuation.
-    final String normalizedTerm =
-        incompleteTerm == null ? "" : ConceptUtils.normalize(incompleteTerm);
-
     // Nothing typed yet (or only punctuation), so there is nothing to complete
-    final boolean shouldReturnEmptyList = normalizedTerm.isEmpty();
+    final boolean shouldReturnEmptyList = !Typeahead.getHasWords(incompleteTerm);
     if (shouldReturnEmptyList) {
       final ConceptResultList results = new ConceptResultList();
       results.setTotal(0L);
@@ -470,8 +466,9 @@ public class SearchController extends BaseController {
     final List<Terminology> terminologies =
         parseAndValidateTerminologiesFromSearchCriteria(searchCriteria, license);
 
+    final Typeahead typeahead = new Typeahead(terminologies, incompleteTerm);
     final ConceptResultList results =
-        openSearchService.findTypeaheadConcepts(terminologies, searchCriteria);
+        openSearchService.findTypeaheadConcepts(typeahead, searchCriteria);
     highlightConceptMatches(results);
 
     results.setTimeTaken(System.currentTimeMillis() - timerStartDate);
