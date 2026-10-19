@@ -21,6 +21,7 @@ import org.opensearch.search.sort.SortOrder;
  *       any order, with only the last word allowed to be partial. Case and punctuation are ignored.
  *   <li>Ranking puts general concepts (those with more descendants) with short names first, with a
  *       small preference for names that start with the typed text. See {@link #getSorts()}.
+ *   <li>Run it with {@link #getNativeSearchQuery}, which applies the ranking.
  * </ul>
  */
 public class Typeahead extends EvsQuery {
@@ -30,9 +31,6 @@ public class Typeahead extends EvsQuery {
 
   /** Keyword field holding the normalized preferred name, used to rank typeahead matches. */
   private static final String NORMALIZED_NAME_FIELD = "normName";
-
-  /** Field that breaks ties between equally ranked matches, so results are stable. */
-  private static final String TIE_BREAK_FIELD = "code";
 
   /**
    * Bonus for names that start with the typed text. Small enough that a much more general concept
@@ -123,16 +121,17 @@ public class Typeahead extends EvsQuery {
   }
 
   /**
-   * Returns the sorts that order matches best first: general concepts with short names first (see
-   * {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}), then by ascending code.
+   * Orders matches best first: general concepts with short names first (see {@link
+   * #GENERAL_SHORT_NAME_FIRST_SOURCE}). Ties fall through to the default tie-break in {@link
+   * EvsQuery#getNativeSearchQuery}.
    *
-   * @return the sorts, in priority order
+   * @return the ranking sort
    */
+  @Override
   public List<SortBuilder<?>> getSorts() {
     return List.of(
         SortBuilders.scriptSort(getRankingScript(), ScriptSortBuilder.ScriptSortType.NUMBER)
-            .order(SortOrder.DESC),
-        SortBuilders.fieldSort(TIE_BREAK_FIELD).order(SortOrder.ASC));
+            .order(SortOrder.DESC));
   }
 
   /**

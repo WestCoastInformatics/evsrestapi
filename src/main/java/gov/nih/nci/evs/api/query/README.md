@@ -26,6 +26,9 @@ classDiagram
         #List~Terminology~ terminologies
         +getTerminologies() List~Terminology~
         +getQueryBuilder()* QueryBuilder
+        +getSorts() List~SortBuilder~
+        +getNativeSearchQuery(Pageable, IncludeParam) NativeSearchQuery
+        +getIndexCoordinates() IndexCoordinates
     }
 
     class AtomicQuery {
@@ -89,11 +92,11 @@ classDiagram
 
 | Class | Role |
 |---|---|
-| `EvsQuery` | Base type for every node. Its contract is `getQueryBuilder()`. It also holds an unmodifiable copy of the terminologies being searched. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
+| `EvsQuery` | Base type for every node. Its contract is `getQueryBuilder()`. It also holds an unmodifiable copy of the terminologies being searched, and (experimental, see [Sorting](#sorting-experimental)) contributes sorts and builds a whole search request. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
 | `AtomicQuery` | Base type for leaves. It adds the `field` and `term` every leaf needs and rejects `null` for either. Subclasses only decide which OpenSearch query to build. |
 | `SupportsIgnoringCase` | Implemented by queries that can also run ignoring case: `Match`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper node. It runs the wrapped query ignoring case by calling `getCaseInsensitiveQueryBuilder()`. The wrapped query is not changed. |
-| `Typeahead` | The query behind `/concept/typeahead`. Matches preferred names with `SearchAsYouType` and also supplies the sorts that rank general concepts with short names first (`getSorts()`). `Typeahead.getHasWords(term)` says whether a term has anything to complete; the constructor rejects terms that don't. |
+| `Typeahead` | The query behind `/concept/typeahead`. Matches preferred names with `SearchAsYouType` and overrides `getSorts()` to rank general concepts with short names first. `Typeahead.getHasWords(term)` says whether a term has anything to complete; the constructor rejects terms that don't. |
 | `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a term. |
 
 ## Atomic queries
@@ -151,6 +154,45 @@ The constructor only accepts queries that implement `SupportsIgnoringCase`, so
 `new CaseInsensitive(new Fuzzy(...))` doesn't compile. To let a new query be wrapped, implement
 `SupportsIgnoringCase` and return the same OpenSearch query with case ignored, usually by calling
 `.caseInsensitive(true)` on the builder.
+
+## Sorting (experimental)
+
+> **Experimental** (branch `eas/typeahead-composed-sorts`). This lets query nodes contribute
+> sorts that compose by priority. If it turns out not to fit, go back to commit `5765d1eb`, where
+> `Typeahead` supplied its sorts and `OpenSearchServiceImpl` built the request. The alternatives
+> considered were ranking through the score (`script_score` / `rank_feature`, which blends across
+> branches) and a separate top-level sort object (an `EvsSort` tree passed alongside the query).
+
+Any node can be the outermost query of a search request:
+
+```java
+final NativeSearchQuery search = query.getNativeSearchQuery(pageable, include);
+operations.search(search, Concept.class, query.getIndexCoordinates());
+```
+
+The request's sort order comes from `getSorts()`. Most nodes only match and return no sorts.
+`Typeahead` returns its ranking sort. The rules:
+
+1. **A node's own sorts come first, then each child's sorts in child order.** Composites must
+   implement `getSorts()` this way. A nested node's sorts therefore only break ties left by the
+   nodes above and before it, like `ORDER BY a, b, c` in SQL. `And(a, b)` and `And(b, a)` match the
+   same concepts but can order them differently.
+2. **Negating composites contribute nothing.** A `Not` returns none of its children's sorts.
+3. **Duplicates are dropped.** The first occurrence of a sort keeps its position.
+4. **`getNativeSearchQuery` always appends the tie-break `_index`, then `code`.** Each terminology
+   has its own index, so this orders by terminology, then code, and results are stable between
+   requests. (`terminology` is analyzed text and can't be sorted on.)
+
+Known limits:
+
+- **A sort ranks every hit, not just the hits its node matched.** Under `And`, every hit matched
+  every child, so this doesn't come up. Under `Or`, a child's sort also orders hits that only its
+  sibling matched. Script sorts like `Typeahead`'s work on any concept. Field sorts put documents
+  missing the field last.
+- **There's no way to replace the tree's sorts yet,** for example with a user-chosen "name A to Z".
+  Add an override parameter to `getNativeSearchQuery` when one is needed.
+- **Sorts can't blend.** A higher-priority sort always wins outright. Blending relevance across
+  branches needs ranking through the score instead.
 
 ## Extending
 

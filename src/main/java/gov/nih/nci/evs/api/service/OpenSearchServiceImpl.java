@@ -77,21 +77,12 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   @Override
   public ConceptResultList findTypeaheadConcepts(
       final Typeahead typeahead, final SearchCriteria searchCriteria) {
-    final IncludeParam include = new IncludeParam(searchCriteria.getInclude());
     final NativeSearchQuery search =
-        new NativeSearchQueryBuilder()
-            .withQuery(typeahead.getQueryBuilder())
-            .withPageable(PageRequest.of(0, searchCriteria.getPageSize()))
-            .withSourceFilter(
-                new FetchSourceFilter(
-                    true, include.getIncludedFields(), include.getExcludedFields()))
-            .withSorts(typeahead.getSorts())
-            .build();
-    final String[] indexNames =
-        typeahead.getTerminologies().stream().map(Terminology::getIndexName).toArray(String[]::new);
-
+        typeahead.getNativeSearchQuery(
+            PageRequest.of(0, searchCriteria.getPageSize()),
+            new IncludeParam(searchCriteria.getInclude()));
     final SearchHits<Concept> hits =
-        operations.search(search, Concept.class, IndexCoordinates.of(indexNames));
+        operations.search(search, Concept.class, typeahead.getIndexCoordinates());
 
     final ConceptResultList results = new ConceptResultList();
     results.setParameters(searchCriteria);
