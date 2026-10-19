@@ -1,0 +1,155 @@
+package gov.nih.nci.evs.api.query;
+
+import gov.nih.nci.evs.api.model.ConceptMinimal;
+import gov.nih.nci.evs.api.model.Terminology;
+import gov.nih.nci.evs.api.util.ConceptUtils;
+import java.util.List;
+import java.util.Map;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.script.Script;
+import org.opensearch.script.ScriptType;
+import org.opensearch.search.sort.ScriptSortBuilder;
+import org.opensearch.search.sort.SortBuilder;
+import org.opensearch.search.sort.SortBuilders;
+import org.opensearch.search.sort.SortOrder;
+
+/**
+ * Completes a partially typed term against concept preferred names.
+ *
+ * <ul>
+ *   <li>Matching is {@link SearchAsYouType} on the preferred name: every typed word must appear, in
+ *       any order, with only the last word allowed to be partial. Case and punctuation are ignored.
+ *   <li>Ranking puts general concepts (those with more descendants) with short names first, with a
+ *       small preference for names that start with the typed text. See {@link #getSorts()}.
+ * </ul>
+ */
+public class Typeahead extends EvsQuery {
+
+  /** The field typeahead matches against: the search_as_you_type subfield of preferred names. */
+  private static final String TYPEAHEAD_FIELD = "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+
+  /** Keyword field holding the normalized preferred name, used to rank typeahead matches. */
+  private static final String NORMALIZED_NAME_FIELD = "normName";
+
+  /** Field that breaks ties between equally ranked matches, so results are stable. */
+  private static final String TIE_BREAK_FIELD = "code";
+
+  /**
+   * Bonus for names that start with the typed text. Small enough that a much more general concept
+   * whose name only contains the typed words, like "Acute Lymphoblastic Leukemia" for
+   * "lymphoblastic", can still rank above it.
+   */
+  private static final double STARTS_WITH_BONUS = 1.0;
+
+  /**
+   * How many descendants one extra word in a name is worth when ranking typeahead matches. With a
+   * penalty of 1, a name with one more word needs about e (2.7) times as many descendants to rank
+   * the same.
+   */
+  private static final double WORD_PENALTY = 1.0;
+
+  /**
+   * Ranks general concepts with short names first: log(1 + descendant count), minus the word
+   * penalty for each word in the normalized name, plus the starts-with bonus when the normalized
+   * name starts with the typed text. The log keeps concepts with huge hierarchies from outranking
+   * everything. A concept without a normalized name sorts last.
+   *
+   * <p>Every descendant has a leaf flag, and boolean doc values keep duplicates, so the number of
+   * leaf values is the number of descendants.
+   *
+   * <p>TODO: This is for testing the ranking only. Store a descendant count field when concepts are
+   * loaded and rank on it instead, which needs a mapping change and a reindex.
+   */
+  private static final String GENERAL_SHORT_NAME_FIRST_SOURCE =
+      "if (doc['"
+          + NORMALIZED_NAME_FIELD
+          + "'].size() == 0) { return -Double.MAX_VALUE; }"
+          + " String name = doc['"
+          + NORMALIZED_NAME_FIELD
+          + "'].value;"
+          + " int wordCount = 1;"
+          + " for (int i = 0; i < name.length(); i++) {"
+          + "   if (name.charAt(i) == (char) ' ') { wordCount++; }"
+          + " }"
+          + " double startsWithBonus ="
+          + "   name.startsWith(params.typedText) ? params.startsWithBonus : 0;"
+          + " return Math.log(1 + doc['descendants.leaf'].size())"
+          + "   - params.wordPenalty * wordCount + startsWithBonus;";
+
+  /** The text typed so far, as entered. The search_as_you_type analyzer handles normalization. */
+  private final String incompleteTerm;
+
+  /**
+   * Instantiates a {@link Typeahead}.
+   *
+   * @param terminologies the terminologies being searched
+   * @param incompleteTerm the text typed so far; must contain at least one word (see {@link
+   *     #getHasWords(String)})
+   */
+  public Typeahead(final List<Terminology> terminologies, final String incompleteTerm) {
+    super(terminologies);
+    final boolean hasWords = getHasWords(incompleteTerm);
+    if (!hasWords) {
+      throw new IllegalArgumentException("Typeahead term has no words: " + incompleteTerm);
+    }
+    this.incompleteTerm = incompleteTerm;
+  }
+
+  /**
+   * Indicates whether the typed text has anything to complete. Null, blank, and punctuation-only
+   * text has no words.
+   *
+   * @param incompleteTerm the text typed so far
+   * @return whether the text has at least one word
+   */
+  public static boolean getHasWords(final String incompleteTerm) {
+    final boolean hasText = incompleteTerm != null;
+    return hasText && !ConceptUtils.normalize(incompleteTerm).isEmpty();
+  }
+
+  /**
+   * Returns the text typed so far.
+   *
+   * @return the incomplete term
+   */
+  public String getIncompleteTerm() {
+    return incompleteTerm;
+  }
+
+  /* see superclass */
+  @Override
+  public QueryBuilder getQueryBuilder() {
+    return new SearchAsYouType(terminologies, TYPEAHEAD_FIELD, incompleteTerm).getQueryBuilder();
+  }
+
+  /**
+   * Returns the sorts that order matches best first: general concepts with short names first (see
+   * {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}), then by ascending code.
+   *
+   * @return the sorts, in priority order
+   */
+  public List<SortBuilder<?>> getSorts() {
+    return List.of(
+        SortBuilders.scriptSort(getRankingScript(), ScriptSortBuilder.ScriptSortType.NUMBER)
+            .order(SortOrder.DESC),
+        SortBuilders.fieldSort(TIE_BREAK_FIELD).order(SortOrder.ASC));
+  }
+
+  /**
+   * Builds the script that ranks typeahead matches. See {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}.
+   *
+   * @return the ranking script
+   */
+  private Script getRankingScript() {
+    // Normalized like NORMALIZED_NAME_FIELD so the starts-with comparison lines up
+    final String normalizedTerm = ConceptUtils.normalize(incompleteTerm);
+    return new Script(
+        ScriptType.INLINE,
+        Script.DEFAULT_SCRIPT_LANG,
+        GENERAL_SHORT_NAME_FIRST_SOURCE,
+        Map.of(
+            "typedText", normalizedTerm,
+            "wordPenalty", WORD_PENALTY,
+            "startsWithBonus", STARTS_WITH_BONUS));
+  }
+}

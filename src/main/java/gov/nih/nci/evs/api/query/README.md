@@ -60,6 +60,13 @@ classDiagram
         +getQueryBuilder() FuzzyQueryBuilder
     }
 
+    class Typeahead {
+        -String incompleteTerm
+        +getHasWords(String)$ boolean
+        +getQueryBuilder() QueryBuilder
+        +getSorts() List~SortBuilder~
+    }
+
     class CompositeQuery {
         <<planned>>
         #List~EvsQuery~ children
@@ -68,6 +75,7 @@ classDiagram
     EvsQuery <|-- AtomicQuery
     EvsQuery <|-- CompositeQuery
     EvsQuery <|-- CaseInsensitive
+    EvsQuery <|-- Typeahead
     AtomicQuery <|-- Match
     AtomicQuery <|-- Contains
     AtomicQuery <|-- StartsWith
@@ -85,6 +93,7 @@ classDiagram
 | `AtomicQuery` | Base type for leaves. It adds the `field` and `term` every leaf needs and rejects `null` for either. Subclasses only decide which OpenSearch query to build. |
 | `SupportsIgnoringCase` | Implemented by queries that can also run ignoring case: `Match`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper node. It runs the wrapped query ignoring case by calling `getCaseInsensitiveQueryBuilder()`. The wrapped query is not changed. |
+| `Typeahead` | The query behind `/concept/typeahead`. Matches preferred names with `SearchAsYouType` and also supplies the sorts that rank general concepts with short names first (`getSorts()`). `Typeahead.getHasWords(term)` says whether a term has anything to complete; the constructor rejects terms that don't. |
 | `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a term. |
 
 ## Atomic queries

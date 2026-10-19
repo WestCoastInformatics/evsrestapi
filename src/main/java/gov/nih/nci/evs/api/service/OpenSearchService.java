@@ -5,6 +5,7 @@ import gov.nih.nci.evs.api.model.Mapping;
 import gov.nih.nci.evs.api.model.MappingResultList;
 import gov.nih.nci.evs.api.model.SearchCriteria;
 import gov.nih.nci.evs.api.model.Terminology;
+import gov.nih.nci.evs.api.query.Typeahead;
 import java.util.List;
 import org.springframework.web.client.HttpClientErrorException;
 
@@ -24,17 +25,16 @@ public interface OpenSearchService {
       List<Terminology> terminologies, SearchCriteria searchCriteria) throws Exception;
 
   /**
-   * Finds concepts whose preferred names complete a partially typed term: every typed word must
-   * appear, in any order, with the last word allowed to be partial. General concepts with short
-   * names come first, with a small preference for names that start with the typed text.
+   * Runs a typeahead query against the concept indexes of its terminologies, returning matches in
+   * the order the query ranks them.
    *
-   * @param terminologies the terminologies to search
-   * @param searchCriteria the search criteria; its term is the partially typed term, and it also
-   *     supplies the page size and included fields
+   * @param typeahead the typeahead query, which decides what matches and how matches are ranked
+   * @param searchCriteria the search criteria supplying the page size and included fields, echoed
+   *     back as the result parameters
    * @return the first page of matching concepts, best match first
    */
   public ConceptResultList findTypeaheadConcepts(
-      List<Terminology> terminologies, SearchCriteria searchCriteria);
+      Typeahead typeahead, SearchCriteria searchCriteria);
 
   /**
    * search for the given search criteria in mappings.
