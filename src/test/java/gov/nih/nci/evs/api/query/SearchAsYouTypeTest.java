@@ -70,6 +70,8 @@ public class SearchAsYouTypeTest {
           "Giant cell arteritis",
           "Acute lymphoblastic leukemia",
           "Lymphoblastic lymphoma",
+          "Non-Hodgkin lymphoma",
+          "Hodgkin lymphoma",
           "Melanoma");
 
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
@@ -185,6 +187,19 @@ public class SearchAsYouTypeTest {
     final EvsQuery query = new SearchAsYouType(TERMINOLOGIES, NAME_FIELD, "GIANT SUBEP");
 
     assertEquals(Set.of("Subependymal giant cell astrocytoma"), fetchMatchingNames(query));
+  }
+
+  /**
+   * Punctuation is ignored, because the field's analyzer splits words on it. "non-hodgkin" and "non
+   * hodgkin" both find "Non-Hodgkin lymphoma", and neither finds "Hodgkin lymphoma".
+   */
+  @Test
+  public void testPunctuationIsIgnored() {
+    for (final String incompleteTerm : new String[] {"non-hodgkin", "non hodgkin", "non-hodg"}) {
+      final EvsQuery query = new SearchAsYouType(TERMINOLOGIES, NAME_FIELD, incompleteTerm);
+
+      assertEquals(Set.of("Non-Hodgkin lymphoma"), fetchMatchingNames(query), incompleteTerm);
+    }
   }
 
   /**
