@@ -10,11 +10,9 @@ import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.service.OpensearchOperationsService;
 import gov.nih.nci.evs.api.util.ConceptUtils;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -266,7 +264,7 @@ public class TypeaheadTest {
       concept.setCode(code);
       concept.setName(name);
       concept.setNormName(normalizedName);
-      concept.setDescendants(getDescendants(code, descendantCount));
+      concept.setDescendantCount(descendantCount);
     }
 
     /**
@@ -287,25 +285,6 @@ public class TypeaheadTest {
      */
     Concept getConcept() {
       return concept;
-    }
-
-    /**
-     * Builds leaf descendants. The ranking counts descendants by their leaf flags.
-     *
-     * @param code the code of the ancestor
-     * @param descendantCount the number of descendants
-     * @return the descendants
-     */
-    private static List<Concept> getDescendants(final String code, final int descendantCount) {
-      return IntStream.range(0, descendantCount)
-          .mapToObj(
-              i -> {
-                final Concept descendant = new Concept();
-                descendant.setCode(code + "-" + i);
-                descendant.setLeaf(true);
-                return descendant;
-              })
-          .collect(Collectors.toCollection(ArrayList::new));
     }
   }
 }

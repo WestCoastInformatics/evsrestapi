@@ -47,17 +47,25 @@ public class Typeahead extends EvsQuery {
    */
   private static final double WORD_PENALTY = 1.0;
 
+  /** Field holding each concept's number of descendants, stored when concepts are loaded. */
+  private static final String DESCENDANT_COUNT_FIELD = "descendantCount";
+
+  /**
+   * Field counted in place of {@link #DESCENDANT_COUNT_FIELD} on indexes loaded before it existed.
+   * Every descendant has a leaf flag, and boolean doc values keep duplicates, so the number of leaf
+   * values is the number of descendants.
+   */
+  private static final String DESCENDANT_LEAF_FIELD = "descendants.leaf";
+
   /**
    * Ranks general concepts with short names first: log(1 + descendant count), minus the word
    * penalty for each word in the normalized name, plus the starts-with bonus when the normalized
    * name starts with the typed text. The log keeps concepts with huge hierarchies from outranking
-   * everything. A concept without a normalized name sorts last.
+   * everything. A concept without a normalized name sorts last, and one without a descendant count
+   * counts as having none.
    *
-   * <p>Every descendant has a leaf flag, and boolean doc values keep duplicates, so the number of
-   * leaf values is the number of descendants.
-   *
-   * <p>TODO: This is for testing the ranking only. Store a descendant count field when concepts are
-   * loaded and rank on it instead, which needs a mapping change and a reindex.
+   * <p>TODO: Drop the {@link #DESCENDANT_LEAF_FIELD} fallback once every index has been reloaded
+   * with {@link #DESCENDANT_COUNT_FIELD}.
    */
   private static final String GENERAL_SHORT_NAME_FIRST_SOURCE =
       "if (doc['"
@@ -72,7 +80,21 @@ public class Typeahead extends EvsQuery {
           + " }"
           + " double startsWithBonus ="
           + "   name.startsWith(params.typedText) ? params.startsWithBonus : 0;"
-          + " return Math.log(1 + doc['descendants.leaf'].size())"
+          + " int descendantCount = 0;"
+          + " if (doc.containsKey('"
+          + DESCENDANT_COUNT_FIELD
+          + "')) {"
+          + "   if (doc['"
+          + DESCENDANT_COUNT_FIELD
+          + "'].size() != 0) { descendantCount = (int) doc['"
+          + DESCENDANT_COUNT_FIELD
+          + "'].value; }"
+          + " } else {"
+          + "   descendantCount = doc['"
+          + DESCENDANT_LEAF_FIELD
+          + "'].size();"
+          + " }"
+          + " return Math.log(1 + descendantCount)"
           + "   - params.wordPenalty * wordCount + startsWithBonus;";
 
   /** The text typed so far, as entered. The search_as_you_type analyzer handles normalization. */
