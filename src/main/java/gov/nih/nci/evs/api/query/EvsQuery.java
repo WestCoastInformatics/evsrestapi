@@ -120,34 +120,70 @@ public abstract class EvsQuery {
    * child query describes a different concept, e.g. a role's target. Only each concept's code,
    * terminology, and version are fetched: enough to identify it.
    *
+   * <p>Since this code should run on every node, but every node has a specialized query, we
+   * abstract the query builder but keep everything else concrete, effectively dynamic dispatch
+   *
    * @param operations the OpenSearch operations
    * @return the matching concepts
    */
   List<Concept> fetchMatchingConcepts(final OpenSearchOperations operations) {
     final QueryBuilder queryBuilder = fetchOpenSearchQuery(operations);
+
     final List<Concept> concepts = new ArrayList<>();
-    List<Object> searchAfter = null;
+
+    fetchAndAddConceptsFromAllPagesToList(operations, queryBuilder, concepts);
+
+    return concepts;
+  }
+
+  private void fetchAndAddConceptsFromAllPagesToList(
+      final OpenSearchOperations operations,
+      final QueryBuilder queryToFetchBuilder,
+      final List<Concept> concepts) {
+    // List<Object> is the shape of the page cursor that is relevant to OpenSearch
+    // what is actually in it is largely irrelevant to us beyond the fact that OpenSearch
+    // can use it as a pageCursor
+    List<Object> pageCursor = null;
+
     boolean hasMorePages = true;
     while (hasMorePages) {
-      final SearchHits<Concept> page =
-          operations.search(
-              getConceptPageQuery(queryBuilder, searchAfter), Concept.class, getIndexCoordinates());
-      page.getSearchHits().stream().map(SearchHit::getContent).forEach(concepts::add);
+      final SearchHits<Concept> page = fetchPage(operations, queryToFetchBuilder, pageCursor);
+
+      addPageHitsToArrayList(concepts, page);
+
+      // should continue leafing through pages and recording their concepts?
       hasMorePages = page.getSearchHits().size() == CONCEPTS_PER_PAGE;
-      searchAfter = hasMorePages ? getLastSortValues(page) : null;
+      pageCursor = hasMorePages ? getNextPageCursor(page) : null;
     }
-    return concepts;
+  }
+
+  private SearchHits<Concept> fetchPage(
+      final OpenSearchOperations operations,
+      final QueryBuilder queryToFetchBuilder,
+      List<Object> pageCursor) {
+    final SearchHits<Concept> page =
+        operations.search(
+            getConceptPageQuery(queryToFetchBuilder, pageCursor),
+            Concept.class,
+            getIndexCoordinates());
+    return page;
+  }
+
+  private void addPageHitsToArrayList(
+      final List<Concept> concepts, final SearchHits<Concept> page) {
+    page.getSearchHits().stream().map(SearchHit::getContent).forEach(concepts::add);
   }
 
   /**
    * Builds the search for one page of matching concepts, ordered by code so pages don't overlap.
    *
    * @param queryBuilder the query
-   * @param searchAfter the sort values of the previous page's last hit, or null for the first page
+   * @param pageCursor where the page starts: the sort values of the previous page's last hit, or
+   *     null for the first page
    * @return the search
    */
   private static NativeSearchQuery getConceptPageQuery(
-      final QueryBuilder queryBuilder, final List<Object> searchAfter) {
+      final QueryBuilder queryBuilder, final List<Object> pageCursor) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
             .withQuery(queryBuilder)
@@ -157,17 +193,17 @@ public abstract class EvsQuery {
             .withSourceFilter(new FetchSourceFilter(true, IDENTIFYING_FIELDS, null))
             .withPageable(PageRequest.of(FIRST_PAGE, CONCEPTS_PER_PAGE))
             .build();
-    search.setSearchAfter(searchAfter);
+    search.setSearchAfter(pageCursor);
     return search;
   }
 
   /**
-   * Returns the sort values of a page's last hit, to start the next page after it.
+   * Returns the cursor that starts the next page: the sort values of a page's last hit.
    *
    * @param page a non-empty page
-   * @return the sort values
+   * @return the cursor
    */
-  private static List<Object> getLastSortValues(final SearchHits<Concept> page) {
+  private static List<Object> getNextPageCursor(final SearchHits<Concept> page) {
     final List<SearchHit<Concept>> hits = page.getSearchHits();
     return hits.get(hits.size() - 1).getSortValues();
   }
