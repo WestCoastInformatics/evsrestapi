@@ -444,7 +444,7 @@ public class SearchController extends BaseController {
       throws Exception {
 
     // Nothing typed yet (or only punctuation), so there is nothing to complete
-    final boolean shouldReturnEmptyList = !Typeahead.getHasWords(incompleteTerm);
+    final boolean shouldReturnEmptyList = !Typeahead.getHasWordsToComplete(incompleteTerm);
     if (shouldReturnEmptyList) {
       final ConceptResultList results = new ConceptResultList();
       results.setTotal(0L);

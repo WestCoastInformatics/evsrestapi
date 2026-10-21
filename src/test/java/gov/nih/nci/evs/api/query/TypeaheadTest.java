@@ -129,7 +129,7 @@ public class TypeaheadTest {
   @Test
   public void testTextWithoutWordsHasNoWords() {
     for (final String incompleteTerm : new String[] {null, "", "   ", "---", " , . "}) {
-      assertFalse(Typeahead.getHasWords(incompleteTerm), "[" + incompleteTerm + "]");
+      assertFalse(Typeahead.getHasWordsToComplete(incompleteTerm), "[" + incompleteTerm + "]");
     }
   }
 
@@ -137,7 +137,7 @@ public class TypeaheadTest {
   @Test
   public void testPartialWordHasWords() {
     for (final String incompleteTerm : new String[] {"m", "melan", " -melan- "}) {
-      assertTrue(Typeahead.getHasWords(incompleteTerm), "[" + incompleteTerm + "]");
+      assertTrue(Typeahead.getHasWordsToComplete(incompleteTerm), "[" + incompleteTerm + "]");
     }
   }
 

@@ -83,12 +83,12 @@ public class Typeahead extends EvsQuery {
    *
    * @param terminologies the terminologies being searched
    * @param incompleteTerm the text typed so far; must contain at least one word (see {@link
-   *     #getHasWords(String)})
+   *     #getHasWordsToComplete(String)})
    */
   public Typeahead(final List<Terminology> terminologies, final String incompleteTerm) {
     super(terminologies);
-    final boolean hasWords = getHasWords(incompleteTerm);
-    if (!hasWords) {
+    final boolean hasWordsToComplete = getHasWordsToComplete(incompleteTerm);
+    if (!hasWordsToComplete) {
       throw new IllegalArgumentException("Typeahead term has no words: " + incompleteTerm);
     }
     this.incompleteTerm = incompleteTerm;
@@ -101,7 +101,7 @@ public class Typeahead extends EvsQuery {
    * @param incompleteTerm the text typed so far
    * @return whether the text has at least one word
    */
-  public static boolean getHasWords(final String incompleteTerm) {
+  public static boolean getHasWordsToComplete(final String incompleteTerm) {
     final boolean hasText = incompleteTerm != null;
     return hasText && !ConceptUtils.normalize(incompleteTerm).isEmpty();
   }
