@@ -5670,21 +5670,27 @@ public class SearchControllerTests {
   }
 
   /**
-   * Test typeahead returns names as stored, without highlight markup, since typeahead requests no
-   * highlighting.
+   * Test typeahead highlights mark only the typed part, not whole words: "lung ca" marks the "Ca"
+   * of "Carcinoma". This is the expected behavior, so this test should change only if that decision
+   * does. Names themselves are returned as stored.
    *
    * @throws Exception the exception
    */
   @Test
-  public void testTypeaheadNamesAreNotHighlighted() throws Exception {
-    log.info("Testing typeahead - incompleteTerm = melan");
-    final ConceptResultList list = searchController.typeaheadService("melan", null, null, null);
-    assertThat(list.getConcepts()).isNotEmpty();
-    for (final Concept concept : list.getConcepts()) {
-      assertThat(concept.getHighlight()).isNull();
-      assertThat(concept.getHighlights()).isNullOrEmpty();
-      assertThat(concept.getName()).doesNotContain("<em>");
-    }
+  public void testTypeaheadHighlightsOnlyTypedPart() throws Exception {
+    log.info("Testing typeahead - incompleteTerm = lung ca");
+    ConceptResultList list = searchController.typeaheadService("lung ca", null, null, null);
+    final Concept lungCarcinoma = list.getConcepts().get(0);
+    assertThat(lungCarcinoma.getName()).isEqualTo("Lung Carcinoma");
+    assertThat(lungCarcinoma.getHighlight()).isEqualTo("<em>Lung</em> <em>Ca</em>rcinoma");
+    assertThat(list.getConcepts()).allMatch(c -> c.getHighlight() != null);
+    assertThat(list.getConcepts()).allMatch(c -> !c.getName().contains("<em>"));
+
+    log.info("Testing typeahead - incompleteTerm = c322");
+    list = searchController.typeaheadService("c322", null, null, 100);
+    final Concept melanoma =
+        list.getConcepts().stream().filter(c -> "C3224".equals(c.getCode())).findFirst().get();
+    assertThat(melanoma.getHighlight()).isEqualTo("<em>C322</em>4");
   }
 
   /**
