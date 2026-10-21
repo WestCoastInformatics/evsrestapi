@@ -31,7 +31,9 @@ public interface OpenSearchService {
    * @param typeahead the typeahead query, which decides what matches and how matches are ranked
    * @param searchCriteria the search criteria supplying the page size and included fields, echoed
    *     back as the result parameters
-   * @return the first page of matching concepts, best match first
+   * @return the first page of matching concepts, best match first. The total counts matches only up
+   *     to OpenSearch's default limit of 10,000, then reports 10,000. Unlike {@link #findConcepts},
+   *     it doesn't run a second query for the exact count, since typeahead doesn't page.
    */
   public ConceptResultList findTypeaheadConcepts(
       Typeahead typeahead, SearchCriteria searchCriteria);

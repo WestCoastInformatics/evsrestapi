@@ -86,6 +86,9 @@ public class SearchControllerTests {
   /** The search controller. */
   @Autowired SearchController searchController;
 
+  /** The most matches typeahead counts before its total stops at this number. */
+  private static final long TYPEAHEAD_COUNTED_HIT_LIMIT = 10_000L;
+
   /** The base url. */
   private String baseUrl = "";
 
@@ -5610,20 +5613,51 @@ public class SearchControllerTests {
   }
 
   /**
-   * Test typeahead reports the total number of matches, not just the number returned, even past
-   * OpenSearch's default limit of 10,000 counted hits.
+   * Test typeahead's total is the exact number of matches while there are fewer than 10,000.
    *
    * @throws Exception the exception
    */
   @Test
-  public void testTypeaheadTotalCountsEveryMatch() throws Exception {
-    // "c" starts a word in tens of thousands of ncit names, and every ncit code
-    final String incompleteTerm = "c";
-    final long countedHitLimit = 10_000L;
+  public void testTypeaheadTotalIsExactBelowCountedHitLimit() throws Exception {
+    // "car" starts a word in a few thousand ncit names, and no ncit code
+    final String incompleteTerm = "car";
     log.info("Testing typeahead - incompleteTerm = " + incompleteTerm);
     final ConceptResultList list =
         searchController.typeaheadService(incompleteTerm, null, null, null);
 
+    final long matchCount = fetchTypeaheadMatchCount(incompleteTerm);
+    assertThat(matchCount).isLessThan(TYPEAHEAD_COUNTED_HIT_LIMIT);
+    assertThat(list.getTotal()).isEqualTo(matchCount);
+  }
+
+  /**
+   * Test typeahead's total stops at 10,000, OpenSearch's default limit of counted hits. This is
+   * expected: typeahead doesn't page, so unlike search it doesn't run a second query for the exact
+   * count. If typeahead starts reporting exact totals, this test should change with it.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadTotalCapsAtCountedHitLimit() throws Exception {
+    // "c" starts a word in tens of thousands of ncit names, and every ncit code
+    final String incompleteTerm = "c";
+    log.info("Testing typeahead - incompleteTerm = " + incompleteTerm);
+    final ConceptResultList list =
+        searchController.typeaheadService(incompleteTerm, null, null, null);
+
+    final long matchCount = fetchTypeaheadMatchCount(incompleteTerm);
+    assertThat(matchCount).isGreaterThan(TYPEAHEAD_COUNTED_HIT_LIMIT);
+    assertThat(list.getTotal()).isEqualTo(TYPEAHEAD_COUNTED_HIT_LIMIT);
+  }
+
+  /**
+   * Counts every ncit concept a typeahead matches, with no limit.
+   *
+   * @param incompleteTerm the partially typed term
+   * @return the number of matching concepts
+   * @throws Exception the exception
+   */
+  private long fetchTypeaheadMatchCount(final String incompleteTerm) throws Exception {
     final Terminology ncit =
         terminologyUtils.getIndexedTerminology("ncit", opensearchQueryService, true);
     final Typeahead typeahead = new Typeahead(List.of(ncit), incompleteTerm);
@@ -5632,11 +5666,7 @@ public class SearchControllerTests {
         new NativeSearchQueryBuilder()
             .withQuery(typeahead.fetchOpenSearchQuery(operations))
             .build();
-    final long matchCount =
-        operations.count(countQuery, Concept.class, typeahead.getIndexCoordinates());
-
-    assertThat(matchCount).isGreaterThan(countedHitLimit);
-    assertThat(list.getTotal()).isEqualTo(matchCount);
+    return operations.count(countQuery, Concept.class, typeahead.getIndexCoordinates());
   }
 
   /**

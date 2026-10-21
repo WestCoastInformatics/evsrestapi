@@ -362,7 +362,8 @@ public class SearchController extends BaseController {
               + " name matches, then concepts that only matched by code. Within each, general"
               + " concepts (those with more descendants) with short names come first, with a small"
               + " preference for names that start with the typed text. Intended for autocomplete"
-              + " use cases; a blank term returns an empty result.")
+              + " use cases; a blank term returns an empty result. Returns only the first page, and"
+              + " the total counts matches only up to 10,000.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",

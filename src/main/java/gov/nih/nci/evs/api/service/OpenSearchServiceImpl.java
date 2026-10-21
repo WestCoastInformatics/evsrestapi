@@ -89,6 +89,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     final ConceptResultList results = new ConceptResultList();
     results.setParameters(searchCriteria);
+    // Capped at 10,000 on purpose: typeahead doesn't page, so it doesn't need the exact count
+    // that findConcepts runs a second query for
     results.setTotal(hits.getTotalHits());
     results.setConcepts(hits.stream().map(SearchHit::getContent).collect(Collectors.toList()));
     return results;
