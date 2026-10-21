@@ -112,6 +112,7 @@ public class TypeaheadTest {
           // Lesson 5: only active concepts, matched on their preferred names
           new IndexedConcept("C17", "Hemangioma of Liver", 0).retire(),
           new IndexedConcept("C18", "Hemangioma", 0),
+          new IndexedConcept("C27", "Lymphangioma", 0).clearActiveFlag(),
           new IndexedConcept("C19", "Myocardial Infarction", 0).addSynonym("Heart Attack"),
           // Lesson 6: codes complete too
           new IndexedConcept("C9001", "Fibroma", 0),
@@ -279,6 +280,15 @@ public class TypeaheadTest {
   @Test
   public void testRetiredConceptsAreNotSuggested() {
     assertEquals(List.of("Hemangioma"), fetchRankedNames("hemangioma"));
+  }
+
+  /**
+   * A concept without an active flag is still suggested, so terminologies that don't set the flag
+   * still complete.
+   */
+  @Test
+  public void testConceptsWithoutActiveFlagAreSuggested() {
+    assertEquals(List.of("Lymphangioma"), fetchRankedNames("lymphang"));
   }
 
   /**
@@ -525,6 +535,16 @@ public class TypeaheadTest {
      */
     IndexedConcept retire() {
       concept.setActive(false);
+      return this;
+    }
+
+    /**
+     * Removes the concept's active flag, like a terminology that doesn't set one.
+     *
+     * @return this
+     */
+    IndexedConcept clearActiveFlag() {
+      concept.setActive(null);
       return this;
     }
 

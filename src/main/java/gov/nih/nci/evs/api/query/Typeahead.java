@@ -22,6 +22,7 @@ import org.opensearch.search.sort.SortOrder;
  *   <li>Matching is {@link SearchAsYouType} on the preferred name: every typed word must appear, in
  *       any order, with only the last word allowed to be partial. Case and punctuation are ignored.
  *   <li>A partial code matches the same way, so "c322" finds C3224 and C32240.
+ *   <li>Retired (inactive) concepts are left out, since they can't be used.
  *   <li>Ranking comes in tiers: a concept whose code is exactly what was typed, then name matches,
  *       then concepts that only matched by code. Every NCIt code starts with "C", so without the
  *       tiers, typing "c" or "c3" would bury names under codes. Within a tier, general concepts
@@ -39,6 +40,9 @@ public class Typeahead extends EvsQuery {
   /** The search_as_you_type subfield of codes, which typeahead matches against. */
   private static final String CODE_TYPEAHEAD_FIELD =
       "code." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+
+  /** Boolean field that is false for retired concepts, which typeahead leaves out. */
+  private static final String ACTIVE_FIELD = "active";
 
   /** Keyword field holding the code, used to find a whole typed code. */
   private static final String CODE_FIELD = "code";
@@ -173,6 +177,9 @@ public class Typeahead extends EvsQuery {
    * typed code, {@link #NAME_MATCH_SCORE} for a name match, and {@link #CODE_MATCH_SCORE} for a
    * partial code. So a whole code scores at least 2, a name match 1, and a code-only match 0.
    *
+   * <p>Concepts marked inactive are left out. Concepts without an active flag are kept, so
+   * terminologies that don't set it still complete.
+   *
    * @param operations the OpenSearch operations
    * @return the query builder
    */
@@ -188,7 +195,10 @@ public class Typeahead extends EvsQuery {
     // Codes aren't normalized, so only surrounding whitespace is dropped before comparing
     final QueryBuilder wholeCodeQuery =
         QueryBuilders.termQuery(CODE_FIELD, incompleteTerm.trim()).caseInsensitive(true);
+    final boolean inactiveFlag = false;
+    final QueryBuilder inactiveQuery = QueryBuilders.termQuery(ACTIVE_FIELD, inactiveFlag);
     return QueryBuilders.boolQuery()
+        .mustNot(inactiveQuery)
         .should(QueryBuilders.constantScoreQuery(wholeCodeQuery).boost(WHOLE_CODE_SCORE))
         .should(QueryBuilders.constantScoreQuery(nameQuery).boost(NAME_MATCH_SCORE))
         .should(QueryBuilders.constantScoreQuery(codeQuery).boost(CODE_MATCH_SCORE))
