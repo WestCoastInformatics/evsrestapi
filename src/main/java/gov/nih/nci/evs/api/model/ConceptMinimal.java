@@ -24,14 +24,22 @@ import org.springframework.data.elasticsearch.annotations.MultiField;
 public class ConceptMinimal extends BaseModel implements Comparable<ConceptMinimal> {
 
   /**
-   * Suffix of the search_as_you_type subfield indexed alongside name fields, e.g.
+   * Suffix of the search_as_you_type subfield indexed alongside name and code fields, e.g.
    * "name.search_as_you_type".
    */
   public static final String SEARCH_AS_YOU_TYPE_SUFFIX = "search_as_you_type";
 
-  /** The code. */
+  /**
+   * The code. The main field is a keyword, for exact lookups and sorting. A concept's own code is
+   * mapped as a keyword even with a plain {@code @Field}, because it is the document id. The
+   * search_as_you_type subfield lets typeahead complete partial codes.
+   */
   @Id
-  @Field(type = FieldType.Text)
+  @MultiField(
+      mainField = @Field(type = FieldType.Keyword),
+      otherFields = {
+        @InnerField(suffix = SEARCH_AS_YOU_TYPE_SUFFIX, type = FieldType.Search_As_You_Type)
+      })
   private String code;
 
   /** The uri. */

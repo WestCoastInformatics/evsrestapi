@@ -355,11 +355,13 @@ public class SearchController extends BaseController {
       summary = "Get typeahead suggestions for a partially typed term",
       description =
           "Returns concepts from the requested terminologies (NCI Thesaurus by default) whose"
-              + " preferred names contain every word typed so far,"
-              + " in any order, with the last word allowed to be partial. Ignores case and"
-              + " punctuation. General concepts (those with more descendants) with short names come"
-              + " first, with a small preference for names that start with the typed text."
-              + " Intended for autocomplete use cases; a blank term returns an empty result.")
+              + " preferred names contain every word typed so far, in any order, with the last word"
+              + " allowed to be partial, or whose codes start with the typed text. Ignores case and"
+              + " punctuation. A concept whose code is exactly the typed text comes first, then"
+              + " name matches, then concepts that only matched by code. Within each, general"
+              + " concepts (those with more descendants) with short names come first, with a small"
+              + " preference for names that start with the typed text. Intended for autocomplete"
+              + " use cases; a blank term returns an empty result.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -425,9 +427,11 @@ public class SearchController extends BaseController {
 
   /**
    * Finds concepts whose preferred names contain every word typed so far, in any order, with the
-   * last word allowed to be partial. Ignores case and punctuation. General concepts with short
-   * names come first, with a small preference for names that start with the typed text. Searches
-   * the requested terminologies, defaulting to ncit when none are requested.
+   * last word allowed to be partial, or whose codes start with the typed text. Ignores case and
+   * punctuation. A concept whose code is exactly the typed text comes first, then name matches,
+   * then concepts that only matched by code. Within each, general concepts with short names come
+   * first, with a small preference for names that start with the typed text. Searches the requested
+   * terminologies, defaulting to ncit when none are requested.
    *
    * @param incompleteTerm the partially typed term to complete
    * @param requestedTerminologies the names of the terminologies to search, or null for ncit

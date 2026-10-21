@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.script.Script;
 import org.opensearch.script.ScriptType;
 import org.opensearch.search.sort.ScriptSortBuilder;
@@ -15,20 +16,32 @@ import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
 
 /**
- * Completes a partially typed term against concept preferred names.
+ * Completes a partially typed term against concept preferred names and codes.
  *
  * <ul>
  *   <li>Matching is {@link SearchAsYouType} on the preferred name: every typed word must appear, in
  *       any order, with only the last word allowed to be partial. Case and punctuation are ignored.
- *   <li>Ranking puts general concepts (those with more descendants) with short names first, with a
- *       small preference for names that start with the typed text. See {@link #getSorts()}.
+ *   <li>A partial code matches the same way, so "c322" finds C3224 and C32240.
+ *   <li>Ranking comes in tiers: a concept whose code is exactly what was typed, then name matches,
+ *       then concepts that only matched by code. Every NCIt code starts with "C", so without the
+ *       tiers, typing "c" or "c3" would bury names under codes. Within a tier, general concepts
+ *       (those with more descendants) with short names come first, with a small preference for
+ *       names that start with the typed text. See {@link #getSorts()}.
  *   <li>Run it with {@link #getNativeSearchQuery}, which applies the ranking.
  * </ul>
  */
 public class Typeahead extends EvsQuery {
 
-  /** The field typeahead matches against: the search_as_you_type subfield of preferred names. */
-  private static final String TYPEAHEAD_FIELD = "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+  /** The search_as_you_type subfield of preferred names, which typeahead matches against. */
+  private static final String NAME_TYPEAHEAD_FIELD =
+      "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+
+  /** The search_as_you_type subfield of codes, which typeahead matches against. */
+  private static final String CODE_TYPEAHEAD_FIELD =
+      "code." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+
+  /** Keyword field holding the code, used to find a whole typed code. */
+  private static final String CODE_FIELD = "code";
 
   /** Keyword field holding the normalized preferred name, used to rank typeahead matches. */
   private static final String NORMALIZED_NAME_FIELD = "normName";
@@ -56,6 +69,21 @@ public class Typeahead extends EvsQuery {
    * values is the number of descendants.
    */
   private static final String DESCENDANT_LEAF_FIELD = "descendants.leaf";
+
+  /**
+   * Query score added when a concept's code is exactly what was typed. Above every other score, so
+   * the whole code comes first. See {@link #fetchOpenSearchQuery}.
+   */
+  private static final float WHOLE_CODE_SCORE = 2.0f;
+
+  /** Query score added when a concept's name matched. See {@link #fetchOpenSearchQuery}. */
+  private static final float NAME_MATCH_SCORE = 1.0f;
+
+  /**
+   * Query score added when a concept's code starts with what was typed. Nothing, so concepts that
+   * only matched by code rank below name matches. See {@link #fetchOpenSearchQuery}.
+   */
+  private static final float CODE_MATCH_SCORE = 0.0f;
 
   /**
    * Ranks general concepts with short names first: log(1 + descendant count), minus the word
@@ -139,29 +167,53 @@ public class Typeahead extends EvsQuery {
     return incompleteTerm;
   }
 
-  /* see superclass */
+  /**
+   * Matches concepts whose preferred name or code completes the typed text. The score sorts matches
+   * into tiers, because each clause adds a constant score: {@link #WHOLE_CODE_SCORE} for a whole
+   * typed code, {@link #NAME_MATCH_SCORE} for a name match, and {@link #CODE_MATCH_SCORE} for a
+   * partial code. So a whole code scores at least 2, a name match 1, and a code-only match 0.
+   *
+   * @param operations the OpenSearch operations
+   * @return the query builder
+   */
   @Override
   public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
-    return new SearchAsYouType(terminologies, TYPEAHEAD_FIELD, incompleteTerm)
-        .fetchOpenSearchQuery(operations);
+    final int eitherFieldMatches = 1;
+    final QueryBuilder nameQuery =
+        new SearchAsYouType(terminologies, NAME_TYPEAHEAD_FIELD, incompleteTerm)
+            .fetchOpenSearchQuery(operations);
+    final QueryBuilder codeQuery =
+        new SearchAsYouType(terminologies, CODE_TYPEAHEAD_FIELD, incompleteTerm)
+            .fetchOpenSearchQuery(operations);
+    // Codes aren't normalized, so only surrounding whitespace is dropped before comparing
+    final QueryBuilder wholeCodeQuery =
+        QueryBuilders.termQuery(CODE_FIELD, incompleteTerm.trim()).caseInsensitive(true);
+    return QueryBuilders.boolQuery()
+        .should(QueryBuilders.constantScoreQuery(wholeCodeQuery).boost(WHOLE_CODE_SCORE))
+        .should(QueryBuilders.constantScoreQuery(nameQuery).boost(NAME_MATCH_SCORE))
+        .should(QueryBuilders.constantScoreQuery(codeQuery).boost(CODE_MATCH_SCORE))
+        .minimumShouldMatch(eitherFieldMatches);
   }
 
   /**
-   * Orders matches best first: general concepts with short names first (see {@link
+   * Orders matches best first: by tier, which is the query score (see {@link
+   * #fetchOpenSearchQuery}), then general concepts with short names first within a tier (see {@link
    * #GENERAL_SHORT_NAME_FIRST_SOURCE}). Ties fall through to the default tie-break in {@link
    * EvsQuery#getNativeSearchQuery}.
    *
-   * @return the ranking sort
+   * @return the tier sort, then the ranking sort
    */
   @Override
   public List<SortBuilder<?>> getSorts() {
     return List.of(
+        SortBuilders.scoreSort().order(SortOrder.DESC),
         SortBuilders.scriptSort(getRankingScript(), ScriptSortBuilder.ScriptSortType.NUMBER)
             .order(SortOrder.DESC));
   }
 
   /**
-   * Builds the script that ranks typeahead matches. See {@link #GENERAL_SHORT_NAME_FIRST_SOURCE}.
+   * Builds the script that ranks typeahead matches within a tier. See {@link
+   * #GENERAL_SHORT_NAME_FIRST_SOURCE}.
    *
    * @return the ranking script
    */

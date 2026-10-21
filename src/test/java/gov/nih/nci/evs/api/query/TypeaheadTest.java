@@ -116,6 +116,7 @@ public class TypeaheadTest {
           // Lesson 6: codes complete too
           new IndexedConcept("C9001", "Fibroma", 0),
           new IndexedConcept("C90011", "Desmoplastic Fibroma", 5),
+          new IndexedConcept("C26", "C9 Deficiency", 0),
           // Lesson 7: several terminologies rank together
           new IndexedConcept("C20", "Retinoblastoma", 0),
           new IndexedConcept("C25", "Wilms Tumor", 0),
@@ -308,6 +309,15 @@ public class TypeaheadTest {
   @Test
   public void testWholeCodeRanksFirst() {
     assertEquals(List.of("C9001", "C90011"), fetchRanked(List.of(terminology), "C9001", CODE));
+  }
+
+  /**
+   * Name matches rank above concepts that only matched by code. "c9" starts "C9 Deficiency" and the
+   * codes C9001 and C90011. C90011 would win on descendants, but it only matched by code.
+   */
+  @Test
+  public void testNameMatchesRankAboveCodeOnlyMatches() {
+    assertEquals(List.of("C26", "C90011", "C9001"), fetchRanked(List.of(terminology), "c9", CODE));
   }
 
   // ---------------------------------------------------------------------------------------------

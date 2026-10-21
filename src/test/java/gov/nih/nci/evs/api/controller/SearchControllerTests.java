@@ -5617,7 +5617,7 @@ public class SearchControllerTests {
    */
   @Test
   public void testTypeaheadTotalCountsEveryMatch() throws Exception {
-    // "c" starts a word in tens of thousands of ncit names
+    // "c" starts a word in tens of thousands of ncit names, and every ncit code
     final String incompleteTerm = "c";
     final long countedHitLimit = 10_000L;
     log.info("Testing typeahead - incompleteTerm = " + incompleteTerm);
@@ -5761,6 +5761,23 @@ public class SearchControllerTests {
     final ConceptResultList list = searchController.typeaheadService("C3224", null, null, null);
     assertThat(list.getConcepts()).isNotEmpty();
     assertThat(list.getConcepts().get(0).getCode()).isEqualTo("C3224");
+  }
+
+  /**
+   * Test typeahead ranks name matches above concepts that only matched by code. Every ncit code
+   * starts with "C", so "c3" matches thousands of codes, but names like "C3 Gene" come first.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadNameMatchesRankAboveCodes() throws Exception {
+    final String incompleteTerm = "c3";
+    log.info("Testing typeahead - incompleteTerm = " + incompleteTerm);
+    final ConceptResultList list =
+        searchController.typeaheadService(incompleteTerm, null, null, null);
+    assertThat(list.getConcepts()).isNotEmpty();
+    assertThat(list.getConcepts())
+        .allMatch(c -> ConceptUtils.normalize(c.getName()).matches("(^|.* )c3.*"));
   }
 
   /**
