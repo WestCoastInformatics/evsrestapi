@@ -89,7 +89,11 @@ public class OpenSearchServiceImpl implements OpenSearchService {
     // Capped at 10,000 on purpose: typeahead doesn't page, so it doesn't need the exact count
     // that findConcepts runs a second query for
     results.setTotal(hits.getTotalHits());
-    results.setConcepts(hits.stream().map(SearchHit::getContent).collect(Collectors.toList()));
+    results.setConcepts(
+        hits.stream()
+            .peek(OpenSearchServiceImpl::addHighlightsToConcept)
+            .map(SearchHit::getContent)
+            .collect(Collectors.toList()));
     return results;
   }
 
@@ -214,24 +218,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
     if (fromOffset == 0) {
       result.setConcepts(
           hits.stream()
-              .peek(
-                  h -> {
-                    if (Concept.class.isAssignableFrom(h.getContent().getClass())) {
-                      Map<String, List<String>> highlightMap = h.getHighlightFields();
-                      // searchQuery.withHighlightFields(new HighlightBuilder.Field("*"));
-                      for (String field : highlightMap.keySet()) {
-                        // Avoid highlights from "terminology" match
-                        if (field.equals("terminology")) {
-                          continue;
-                        }
-                        for (String text : highlightMap.get(field)) {
-                          h.getContent()
-                              .getHighlights()
-                              .put(text.replaceAll("<em>", "").replaceAll("</em>", ""), text);
-                        }
-                      }
-                    }
-                  })
+              .peek(OpenSearchServiceImpl::addHighlightsToConcept)
               .map(SearchHit::getContent)
               .collect(Collectors.toList()));
     } else {
@@ -244,6 +231,27 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       }
     }
     return result;
+  }
+
+  /**
+   * Copies a hit's OpenSearch highlights onto its concept, keyed by the unmarked text, for {@link
+   * ConceptUtils#applyHighlights}.
+   *
+   * @param hit the hit
+   */
+  private static void addHighlightsToConcept(final SearchHit<Concept> hit) {
+    final Map<String, List<String>> highlightMap = hit.getHighlightFields();
+    for (String field : highlightMap.keySet()) {
+      // Avoid highlights from "terminology" match
+      if (field.equals("terminology")) {
+        continue;
+      }
+      for (String text : highlightMap.get(field)) {
+        hit.getContent()
+            .getHighlights()
+            .put(text.replaceAll("<em>", "").replaceAll("</em>", ""), text);
+      }
+    }
   }
 
   private void suppressInactiveTerms(BoolQueryBuilder activeQuery) {

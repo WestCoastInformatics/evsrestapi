@@ -363,9 +363,10 @@ public class SearchController extends BaseController {
               + " concepts (those with more descendants) with short names come first, with a small"
               + " preference for names that start with the typed text. Intended for autocomplete"
               + " use cases; a blank term returns an empty result. Returns only the first page, and"
-              + " the total counts matches only up to 10,000. Each concept's highlight marks only"
-              + " the typed part of its name (or of its code, if only the code matched), e.g."
-              + " \"<em>Lung</em> <em>Ca</em>rcinoma\" for \"lung ca\", not whole words.")
+              + " the total counts matches only up to 10,000. Each concept's highlight is"
+              + " OpenSearch's highlight of its name (or of its code, if only the code matched),"
+              + " which marks whole words, e.g. \"<em>Lung</em> <em>Carcinoma</em>\" for"
+              + " \"lung ca\".")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -478,9 +479,7 @@ public class SearchController extends BaseController {
     final Typeahead typeahead = new Typeahead(terminologies, incompleteTerm);
     final ConceptResultList results =
         openSearchService.findTypeaheadConcepts(typeahead, searchCriteria);
-    for (final Concept concept : results.getConcepts()) {
-      concept.setHighlight(typeahead.getHighlight(concept));
-    }
+    highlightConceptMatches(results);
 
     results.setTimeTaken(System.currentTimeMillis() - timerStartDate);
     return results;
@@ -502,6 +501,7 @@ public class SearchController extends BaseController {
     final SearchCriteria searchCriteria = new SearchCriteria();
     searchCriteria.setTerm(incompleteTerm);
     searchCriteria.setType("startsWith");
+    searchCriteria.setInclude("minimal,highlights");
     final boolean hasRequestedTerminologies = requestedTerminologies != null;
     if (hasRequestedTerminologies) {
       searchCriteria.setTerminology(requestedTerminologies);

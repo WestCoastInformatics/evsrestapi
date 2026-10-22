@@ -11,6 +11,7 @@ import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.opensearch.search.sort.SortBuilder;
 import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
@@ -40,6 +41,9 @@ public abstract class EvsQuery {
    * on.
    */
   private static final String INDEX_FIELD = "_index";
+
+  /** Highlights every field the query matched, as the main concept search does. */
+  private static final String EVERY_MATCHED_FIELD = "*";
 
   /** Field that orders concepts within a terminology. */
   private static final String CODE_FIELD = "code";
@@ -130,25 +134,29 @@ public abstract class EvsQuery {
   /**
    * Runs this query and returns one page of the concepts it matches. Sorts come from {@link
    * #getSorts()}, with duplicates dropped, followed by terminology and code so results are stable
-   * between requests.
+   * between requests. When the include asks for highlights, each hit carries OpenSearch's
+   * highlights of the fields the query matched.
    *
    * @param operations the OpenSearch operations
    * @param page the page to return
-   * @param include the fields to return for each concept
+   * @param include the fields to return for each concept, and whether to highlight matches
    * @return the page of matching concepts, with the total match count
    */
   public final SearchHits<Concept> fetchConcepts(
       final OpenSearchOperations operations, final Pageable page, final IncludeParam include) {
-    final NativeSearchQuery search =
+    final NativeSearchQueryBuilder search =
         new NativeSearchQueryBuilder()
             .withQuery(fetchOpenSearchQuery(operations))
             .withSorts(getSortsWithTieBreak())
             .withSourceFilter(
                 new FetchSourceFilter(
                     true, include.getIncludedFields(), include.getExcludedFields()))
-            .withPageable(page)
-            .build();
-    return operations.search(search, Concept.class, getIndexCoordinates());
+            .withPageable(page);
+    final boolean shouldHighlightMatches = include.isHighlights();
+    if (shouldHighlightMatches) {
+      search.withHighlightFields(new HighlightBuilder.Field(EVERY_MATCHED_FIELD));
+    }
+    return operations.search(search.build(), Concept.class, getIndexCoordinates());
   }
 
   /**

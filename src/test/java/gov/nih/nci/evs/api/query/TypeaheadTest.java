@@ -76,6 +76,10 @@ public class TypeaheadTest {
   /** The fields to return for each hit. */
   private static final IncludeParam MINIMAL_FIELDS = new IncludeParam("minimal");
 
+  /** The fields to return for each hit, plus OpenSearch's highlights of the matched fields. */
+  private static final IncludeParam MINIMAL_FIELDS_AND_HIGHLIGHTS =
+      new IncludeParam("minimal,highlights");
+
   /** Opens a highlighted part. */
   private static final String START = "<em>";
 
@@ -391,59 +395,24 @@ public class TypeaheadTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 10: highlights mark only the typed part.
+  // Lesson 10: highlights come from OpenSearch.
   // ---------------------------------------------------------------------------------------------
 
-  /**
-   * Only the typed letters are marked, not the whole word: "ca" marks the "Ca" of "Carcinoma". This
-   * is deliberate. A finished word ("lung") is marked whole because all of it was typed.
-   */
+  /** With highlights included, OpenSearch marks the matched words of the name. */
   @Test
-  public void testHighlightMarksOnlyTypedPart() {
-    assertEquals(
-        START + "Lung" + END + " " + START + "Ca" + END + "rcinoma",
-        fetchHighlight("lung ca", "C4878", "Lung Carcinoma"));
-  }
+  public void testHighlightsComeFromOpenSearch() {
+    final Typeahead typeahead = new Typeahead(List.of(terminology), "lung carc");
+    final SearchHit<Concept> lungCarcinoma =
+        typeahead.fetchConcepts(operations, ALL_CONCEPTS, MINIMAL_FIELDS_AND_HIGHLIGHTS).stream()
+            .filter(hit -> hit.getContent().getCode().equals("C02"))
+            .findFirst()
+            .orElseThrow();
 
-  /** Highlights ignore case and punctuation, and keep the name as written. */
-  @Test
-  public void testHighlightIgnoresCaseAndPunctuation() {
-    assertEquals(
-        START + "Non" + END + "-" + START + "Hodg" + END + "kin Lymphoma",
-        fetchHighlight("NON hodg", "C3211", "Non-Hodgkin Lymphoma"));
-  }
-
-  /** When only the code matched, the typed part of the code is marked. */
-  @Test
-  public void testHighlightMarksCodeWhenOnlyCodeMatched() {
-    assertEquals(START + "C322" + END + "4", fetchHighlight("c322", "C3224", "Melanoma"));
-  }
-
-  /** When the name matched, the name is marked, even if the code matched too. */
-  @Test
-  public void testHighlightPrefersName() {
-    assertEquals(START + "C3" + END + " Gene", fetchHighlight("c3", "C3", "C3 Gene"));
-  }
-
-  /** A value missing a typed word isn't highlighted. */
-  @Test
-  public void testHighlightNeedsEveryTypedWord() {
-    assertEquals(null, fetchHighlight("lung ca", "C2916", "Carcinoma"));
-  }
-
-  /**
-   * Highlights a concept the way typeahead does.
-   *
-   * @param incompleteTerm the text typed so far
-   * @param code the concept's code
-   * @param name the concept's preferred name
-   * @return the highlight
-   */
-  private String fetchHighlight(final String incompleteTerm, final String code, final String name) {
-    final Concept concept = new Concept();
-    concept.setCode(code);
-    concept.setName(name);
-    return new Typeahead(List.of(terminology), incompleteTerm).getHighlight(concept);
+    final boolean hasMarkedName =
+        lungCarcinoma.getHighlightFields().values().stream()
+            .flatMap(List::stream)
+            .anyMatch(highlight -> highlight.contains(START + "Lung" + END));
+    assertTrue(hasMarkedName);
   }
 
   /**

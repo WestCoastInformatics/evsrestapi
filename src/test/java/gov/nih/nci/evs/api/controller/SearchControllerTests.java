@@ -5670,27 +5670,26 @@ public class SearchControllerTests {
   }
 
   /**
-   * Test typeahead highlights mark only the typed part, not whole words: "lung ca" marks the "Ca"
-   * of "Carcinoma". This is the expected behavior, so this test should change only if that decision
-   * does. Names themselves are returned as stored.
+   * Test typeahead highlights are OpenSearch's highlights of the matched name, or of the code when
+   * only the code matched. Names themselves are returned as stored.
    *
    * @throws Exception the exception
    */
   @Test
-  public void testTypeaheadHighlightsOnlyTypedPart() throws Exception {
+  public void testTypeaheadHighlightsComeFromOpenSearch() throws Exception {
     log.info("Testing typeahead - incompleteTerm = lung ca");
     ConceptResultList list = searchController.typeaheadService("lung ca", null, null, null);
     final Concept lungCarcinoma = list.getConcepts().get(0);
     assertThat(lungCarcinoma.getName()).isEqualTo("Lung Carcinoma");
-    assertThat(lungCarcinoma.getHighlight()).isEqualTo("<em>Lung</em> <em>Ca</em>rcinoma");
+    assertThat(lungCarcinoma.getHighlight()).contains("<em>Lung</em>");
     assertThat(list.getConcepts()).allMatch(c -> c.getHighlight() != null);
     assertThat(list.getConcepts()).allMatch(c -> !c.getName().contains("<em>"));
 
-    log.info("Testing typeahead - incompleteTerm = c322");
-    list = searchController.typeaheadService("c322", null, null, 100);
+    log.info("Testing typeahead - incompleteTerm = C322");
+    list = searchController.typeaheadService("C322", null, null, 100);
     final Concept melanoma =
         list.getConcepts().stream().filter(c -> "C3224".equals(c.getCode())).findFirst().get();
-    assertThat(melanoma.getHighlight()).isEqualTo("<em>C322</em>4");
+    assertThat(melanoma.getHighlight()).contains("<em>");
   }
 
   /**

@@ -1,18 +1,10 @@
 package gov.nih.nci.evs.api.query;
 
-import gov.nih.nci.evs.api.model.Concept;
 import gov.nih.nci.evs.api.model.ConceptMinimal;
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.util.ConceptUtils;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
@@ -37,9 +29,6 @@ import org.opensearch.search.sort.SortOrder;
  *       (those with more descendants) with short names come first, with a small preference for
  *       names that start with the typed text. See {@link #getSorts()}.
  *   <li>Run it with {@link #fetchConcepts}, which applies the ranking.
- *   <li>{@link #getHighlight(Concept)} marks the typed part of each match, e.g. {@code
- *       <em>Lung</em> <em>Ca</em>rcinoma} for "lung ca". Only the typed letters are marked, not the
- *       whole word.
  * </ul>
  */
 public class Typeahead extends EvsQuery {
@@ -142,27 +131,8 @@ public class Typeahead extends EvsQuery {
       """
           .formatted(NORMALIZED_NAME_FIELD, DESCENDANT_COUNT_FIELD, DESCENDANT_LEAF_FIELD);
 
-  /**
-   * A word, the way the search_as_you_type analyzer splits text: a run of letters and digits.
-   * Highlighting splits names, codes, and the typed text with it, so it marks the same words that
-   * matched.
-   */
-  private static final Pattern WORD_PATTERN = Pattern.compile("[\\p{L}\\p{N}]+");
-
-  /** Opens a highlighted part, the same markup search highlights use. */
-  private static final String HIGHLIGHT_START = "<em>";
-
-  /** Closes a highlighted part. */
-  private static final String HIGHLIGHT_END = "</em>";
-
   /** The text typed so far, as entered. The search_as_you_type analyzer handles normalization. */
   private final String incompleteTerm;
-
-  /** The typed words before the last one. They are finished, so they match whole words only. */
-  private final Set<String> completeWords;
-
-  /** The last typed word. The user may still be typing it, so it matches the start of a word. */
-  private final String partialWord;
 
   /**
    * Instantiates a {@link Typeahead}.
@@ -178,26 +148,6 @@ public class Typeahead extends EvsQuery {
       throw new IllegalArgumentException("Typeahead term has no words: " + incompleteTerm);
     }
     this.incompleteTerm = incompleteTerm;
-
-    final List<String> typedWords = getWords(incompleteTerm);
-    final int partialWordIndex = typedWords.size() - 1;
-    this.completeWords = new LinkedHashSet<>(typedWords.subList(0, partialWordIndex));
-    this.partialWord = typedWords.get(partialWordIndex);
-  }
-
-  /**
-   * Splits text into words the way the search_as_you_type analyzer does, lowercased.
-   *
-   * @param text the text
-   * @return the words, in order
-   */
-  private static List<String> getWords(final String text) {
-    final List<String> words = new ArrayList<>();
-    final Matcher word = WORD_PATTERN.matcher(text);
-    while (word.find()) {
-      words.add(word.group().toLowerCase());
-    }
-    return words;
   }
 
   /**
@@ -219,77 +169,6 @@ public class Typeahead extends EvsQuery {
    */
   public String getIncompleteTerm() {
     return incompleteTerm;
-  }
-
-  /**
-   * Marks the typed part of a match: its name when the name matched, otherwise its code. Only the
-   * typed letters are marked, not the whole word: "lung ca" gives {@code <em>Lung</em>
-   * <em>Ca</em>rcinoma} and "c322" gives {@code <em>C322</em>4}. OpenSearch's own highlighter can
-   * only mark whole words on search_as_you_type fields, so typeahead marks matches itself.
-   *
-   * @param concept a concept the typeahead matched
-   * @return the highlighted name or code, or null if neither contains every typed word
-   */
-  public String getHighlight(final Concept concept) {
-    final Optional<String> nameHighlight = getHighlight(concept.getName());
-    return nameHighlight.or(() -> getHighlight(concept.getCode())).orElse(null);
-  }
-
-  /**
-   * Marks the typed part of a value: every word equal to a complete typed word, and the start of
-   * every word starting with the partial word. Case is ignored.
-   *
-   * @param value a name or code
-   * @return the highlighted value, or empty if the value is null or lacks a typed word
-   */
-  private Optional<String> getHighlight(final String value) {
-    final boolean hasValue = value != null;
-    if (!hasValue) {
-      return Optional.empty();
-    }
-
-    final StringBuilder highlight = new StringBuilder();
-    final Set<String> matchedTypedWords = new HashSet<>();
-    final Matcher word = WORD_PATTERN.matcher(value);
-    int copiedUpTo = 0;
-    while (word.find()) {
-      highlight.append(value, copiedUpTo, word.start());
-      highlight.append(markWordAndRecordMatch(word.group(), matchedTypedWords));
-      copiedUpTo = word.end();
-    }
-    highlight.append(value.substring(copiedUpTo));
-
-    final boolean hasEveryTypedWord =
-        matchedTypedWords.containsAll(completeWords) && matchedTypedWords.contains(partialWord);
-    return hasEveryTypedWord ? Optional.of(highlight.toString()) : Optional.empty();
-  }
-
-  /**
-   * Marks one word of a value if it matches a typed word, and records which typed word it matched.
-   *
-   * @param word a word of the value, as written
-   * @param matchedTypedWords the typed words matched so far; the word's match is added to it
-   * @return the word, with the matching part marked
-   */
-  private String markWordAndRecordMatch(final String word, final Set<String> matchedTypedWords) {
-    final Optional<String> completeWord =
-        completeWords.stream().filter(word::equalsIgnoreCase).findFirst();
-    if (completeWord.isPresent()) {
-      matchedTypedWords.add(completeWord.get());
-      return HIGHLIGHT_START + word + HIGHLIGHT_END;
-    }
-
-    final int partialLength = partialWord.length();
-    final boolean isStartingWithPartialWord =
-        word.regionMatches(true, 0, partialWord, 0, partialLength);
-    if (!isStartingWithPartialWord) {
-      return word;
-    }
-    matchedTypedWords.add(partialWord);
-    return HIGHLIGHT_START
-        + word.substring(0, partialLength)
-        + HIGHLIGHT_END
-        + word.substring(partialLength);
   }
 
   /**
