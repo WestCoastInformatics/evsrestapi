@@ -314,11 +314,17 @@ public class TypeaheadTest {
   // Lesson 6: codes complete as well as names.
   // ---------------------------------------------------------------------------------------------
 
-  /** A partial code finds the concepts whose codes start with it, ignoring case. */
+  /** A partial code finds the concepts whose codes start with it. */
   @Test
   public void testPartialCodeCompletes() {
     assertEquals(
-        Set.of("C9001", "C90011"), Set.copyOf(fetchRanked(List.of(terminology), "c900", CODE)));
+        Set.of("C9001", "C90011"), Set.copyOf(fetchRanked(List.of(terminology), "C900", CODE)));
+  }
+
+  /** Codes are matched case sensitively, so a lowercase code finds nothing. */
+  @Test
+  public void testPartialCodeIsCaseSensitive() {
+    assertEquals(List.of(), fetchRanked(List.of(terminology), "c900", CODE));
   }
 
   /**
@@ -331,12 +337,12 @@ public class TypeaheadTest {
   }
 
   /**
-   * Name matches rank above concepts that only matched by code. "c9" starts "C9 Deficiency" and the
+   * Name matches rank above concepts that only matched by code. "C9" starts "C9 Deficiency" and the
    * codes C9001 and C90011. C90011 would win on descendants, but it only matched by code.
    */
   @Test
   public void testNameMatchesRankAboveCodeOnlyMatches() {
-    assertEquals(List.of("C26", "C90011", "C9001"), fetchRanked(List.of(terminology), "c9", CODE));
+    assertEquals(List.of("C26", "C90011", "C9001"), fetchRanked(List.of(terminology), "C9", CODE));
   }
 
   // ---------------------------------------------------------------------------------------------

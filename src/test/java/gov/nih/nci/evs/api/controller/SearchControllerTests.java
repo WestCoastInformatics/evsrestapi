@@ -5772,14 +5772,14 @@ public class SearchControllerTests {
   }
 
   /**
-   * Test typeahead completes a partial code, ignoring case.
+   * Test typeahead completes a partial code. Codes are case sensitive.
    *
    * @throws Exception the exception
    */
   @Test
   public void testTypeaheadCompletesCodes() throws Exception {
-    log.info("Testing typeahead - incompleteTerm = c322, pageSize = 100");
-    final ConceptResultList list = searchController.typeaheadService("c322", null, null, 100);
+    log.info("Testing typeahead - incompleteTerm = C322, pageSize = 100");
+    final ConceptResultList list = searchController.typeaheadService("C322", null, null, 100);
     assertThat(list.getConcepts()).extracting(Concept::getCode).contains("C3224", "C32240");
     assertThat(list.getConcepts()).allMatch(c -> c.getCode().startsWith("C322"));
   }

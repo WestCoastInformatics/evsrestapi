@@ -357,8 +357,9 @@ public class SearchController extends BaseController {
           "Returns concepts from the requested terminologies (NCI Thesaurus by default) whose"
               + " preferred names contain every word typed so far, in any order, with the last word"
               + " allowed to be partial, or whose codes start with the typed text. Ignores case and"
-              + " punctuation. Leaves out retired (inactive) concepts. A concept whose code is"
-              + " exactly the typed text comes first, then"
+              + " punctuation in names; codes are matched case sensitively. Leaves out retired"
+              + " (inactive) concepts. A concept whose code is exactly the typed text comes first,"
+              + " then"
               + " name matches, then concepts that only matched by code. Within each, general"
               + " concepts (those with more descendants) with short names come first, with a small"
               + " preference for names that start with the typed text. Intended for autocomplete"
@@ -433,11 +434,11 @@ public class SearchController extends BaseController {
   /**
    * Finds concepts whose preferred names contain every word typed so far, in any order, with the
    * last word allowed to be partial, or whose codes start with the typed text. Ignores case and
-   * punctuation, and leaves out retired (inactive) concepts. A concept whose code is exactly the
-   * typed text comes first, then name matches, then concepts that only matched by code. Within
-   * each, general concepts with short names come first, with a small preference for names that
-   * start with the typed text. Searches the requested terminologies, defaulting to ncit when none
-   * are requested.
+   * punctuation in names (codes are case sensitive), and leaves out retired (inactive) concepts. A
+   * concept whose code is exactly the typed text comes first, then name matches, then concepts that
+   * only matched by code. Within each, general concepts with short names come first, with a small
+   * preference for names that start with the typed text. Searches the requested terminologies,
+   * defaulting to ncit when none are requested.
    *
    * @param incompleteTerm the partially typed term to complete
    * @param requestedTerminologies the names of the terminologies to search, or null for ncit

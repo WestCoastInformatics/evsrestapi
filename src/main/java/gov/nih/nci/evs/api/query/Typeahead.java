@@ -21,7 +21,8 @@ import org.opensearch.search.sort.SortOrder;
  * <ul>
  *   <li>Matching is {@link SearchAsYouType} on the preferred name: every typed word must appear, in
  *       any order, with only the last word allowed to be partial. Case and punctuation are ignored.
- *   <li>A partial code matches the same way, so "c322" finds C3224 and C32240.
+ *   <li>A partial code matches the start of a code, case sensitively, so "C322" finds C3224 and
+ *       C32240 but "c322" finds neither.
  *   <li>Retired (inactive) concepts are left out, since they can't be used.
  *   <li>Ranking comes in tiers: a concept whose code is exactly what was typed, then name matches,
  *       then concepts that only matched by code. Every NCIt code starts with "C", so without the
@@ -37,14 +38,10 @@ public class Typeahead extends EvsQuery {
   private static final String NAME_TYPEAHEAD_FIELD =
       "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
 
-  /** The search_as_you_type subfield of codes, which typeahead matches against. */
-  private static final String CODE_TYPEAHEAD_FIELD =
-      "code." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
-
   /** Boolean field that is false for retired concepts, which typeahead leaves out. */
   private static final String ACTIVE_FIELD = "active";
 
-  /** Keyword field holding the code, used to find a whole typed code. */
+  /** Keyword field holding the code, which a typed code is matched against. */
   private static final String CODE_FIELD = "code";
 
   /** Keyword field holding the normalized preferred name, used to rank typeahead matches. */
@@ -186,22 +183,25 @@ public class Typeahead extends EvsQuery {
   @Override
   public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
     final int eitherFieldMatches = 1;
+    // Codes aren't normalized, so only surrounding whitespace is dropped before comparing
+    final String typedCode = incompleteTerm.trim();
     final QueryBuilder nameQuery =
         new SearchAsYouType(terminologies, NAME_TYPEAHEAD_FIELD, incompleteTerm)
             .fetchOpenSearchQuery(operations);
-    final QueryBuilder codeQuery =
-        new SearchAsYouType(terminologies, CODE_TYPEAHEAD_FIELD, incompleteTerm)
-            .fetchOpenSearchQuery(operations);
-    // Codes aren't normalized, so only surrounding whitespace is dropped before comparing
+    final QueryBuilder partialCodeQuery =
+        new StartsWith(terminologies, CODE_FIELD, typedCode).fetchOpenSearchQuery(operations);
     final QueryBuilder wholeCodeQuery =
-        QueryBuilders.termQuery(CODE_FIELD, incompleteTerm.trim()).caseInsensitive(true);
-    final boolean inactiveFlag = false;
-    final QueryBuilder inactiveQuery = QueryBuilders.termQuery(ACTIVE_FIELD, inactiveFlag);
+        new Match(terminologies, CODE_FIELD, typedCode).fetchOpenSearchQuery(operations);
+    final String inactiveFlag = Boolean.toString(false);
+    final QueryBuilder inactiveQuery =
+        new Match(terminologies, ACTIVE_FIELD, inactiveFlag).fetchOpenSearchQuery(operations);
+
+    // TODO: the score tiers and leaving out inactive concepts have no query nodes yet
     return QueryBuilders.boolQuery()
         .mustNot(inactiveQuery)
         .should(QueryBuilders.constantScoreQuery(wholeCodeQuery).boost(WHOLE_CODE_SCORE))
         .should(QueryBuilders.constantScoreQuery(nameQuery).boost(NAME_MATCH_SCORE))
-        .should(QueryBuilders.constantScoreQuery(codeQuery).boost(CODE_MATCH_SCORE))
+        .should(QueryBuilders.constantScoreQuery(partialCodeQuery).boost(CODE_MATCH_SCORE))
         .minimumShouldMatch(eitherFieldMatches);
   }
 
