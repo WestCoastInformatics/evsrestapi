@@ -160,29 +160,47 @@ The constructor only accepts queries that implement `SupportsIgnoringCase`, so
 
 ## Queries about other concepts (joins)
 
-Some nodes hold a query that describes a different concept than the one being matched. For
-example, a role's target: "primary site is Skin or anything below Skin" (spec 1.4). One OpenSearch
-query only looks at one document, and a role entry only stores its target's code, so such a node
-can't become one OpenSearch query.
+Some nodes hold a query that describes a *different* concept from the one being matched:
+
+- `HasRole`'s target: "primary site is Skin or anything below Skin" (spec 1.4)
+- Planned: `HasAssociation`'s target (1.5), and `Reachable`'s seeds and hops (1.11)
+
+OpenSearch can't join across documents. A nested query only reaches inside the same concept
+document, and a role entry only stores its target's code. So
+`HasRole(type, Or(Match(code, Skin), DescendantOf(Skin)))` can't become one OpenSearch query.
 
 **How it works:** building such a node runs the inner query first. `fetchOpenSearchQuery(operations)`
-takes the OpenSearch operations so it can. The node calls `declareDependencies(operations,
-dependencies...)`, which runs each dependency and pages through every matching concept with
-`search_after` (sorted by code, then index, so pages don't overlap), fetching only each concept's
-code, terminology, and version. It returns one `ConceptKeys` per dependency: the codes found in
-each terminology version. The node then matches what it found, e.g. with a `terms` query on codes.
-The paging itself is private to `EvsQuery`. An inner query can hold its own query about another
-concept, which runs first in the same way, to any depth. Nodes that don't hold a query about
-another concept ignore `operations`.
+takes the OpenSearch operations, and `HasRole` calls `declareDependencies(operations,
+roleTarget.getQuery())`. That pages through every matching concept with `search_after` (privately,
+inside `EvsQuery`), fetching only each concept's code, terminology, and version, and returns a
+`ConceptKeys`: the codes found in each terminology version. For each terminology version, `HasRole` matches concepts from that terminology version
+with a role entry pointing to one of its codes. An inner query can hold its own role target, which
+runs first in the same way, to any depth. Nodes that don't hold a query about another concept ignore
+`operations`.
+
+**Why codes are matched per terminology version:** a code alone doesn't identify a concept. Two
+versions of a terminology share codes, and a role's target code refers to a concept in the role's
+own terminology version. So a target found in one version must only match roles on concepts from
+that version. `HasRole` filters on the exact `terminology.keyword` and `version.keyword` subfields
+(the main `terminology` and `version` fields are analyzed text). The filter sits outside the
+`nested` roles query, because a nested query only sees the role entry's own fields.
 
 **Why `operations` is a parameter:** a static lookup hides which nodes search and makes tests
 change global state; injecting it at construction means every tree containing a search needs it
 just to be built. Taking it in `fetchOpenSearchQuery` keeps trees plain data, and lets unit tests pass a
 mock (see `DeclareDependenciesTest`).
 
-**Limits are the caller's:** how many codes the caller can match (one `terms` query accepts at most
-65,536 by default) depends on how it uses them, so the node that matches them checks, not the
-fetch.
+**Why the inner query always runs first:** handing codes between searches is cheap. On local NCIt
+25.12e, OpenSearch ran a `terms` query over about 23,000 codes in 80ms. A plan that starts from the
+other side of the join could sometimes pass fewer codes, but it isn't worth a planner. The
+benchmark, and the SPARQL (Fuseki) comparison, is written up under 1.4 Role in the project notes.
+
+**Limit:** one `terms` query accepts at most 65,536 codes (OpenSearch's default
+`index.max_terms_count`). A role target matching more concepts in one terminology version fails with
+an `IllegalStateException`, instead of cutting the codes short and silently returning wrong results.
+
+**Reindex:** `terminology.keyword` and `version.keyword` are new subfields, and `roles` is now
+nested. Existing concept indexes have neither, so `HasRole` needs a reindex.
 
 ## Extending
 
