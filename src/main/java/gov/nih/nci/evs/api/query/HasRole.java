@@ -3,7 +3,6 @@ package gov.nih.nci.evs.api.query;
 import gov.nih.nci.evs.api.model.ConceptMinimal;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.apache.lucene.search.join.ScoreMode;
@@ -185,12 +184,12 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
       final QueryBuilder roleTypeQuery, final ConceptKeys targetKeys) {
     final BoolQueryBuilder targetInOwnVersionQuery =
         QueryBuilders.boolQuery().minimumShouldMatch(MINIMUM_MATCHING_TERMINOLOGY_VERSIONS);
-    for (final Map.Entry<ConceptKeys.TerminologyVersion, Set<String>> versionTargetCodes :
-        targetKeys.getCodesByTerminologyVersion().entrySet()) {
-      targetInOwnVersionQuery.should(
-          getTerminologyVersionQuery(
-              roleTypeQuery, versionTargetCodes.getKey(), versionTargetCodes.getValue()));
-    }
+    targetKeys
+        .getCodesByTerminologyVersion()
+        .forEach(
+            (terminologyVersion, targetCodes) ->
+                targetInOwnVersionQuery.should(
+                    getTerminologyVersionQuery(roleTypeQuery, terminologyVersion, targetCodes)));
     return targetInOwnVersionQuery;
   }
 
