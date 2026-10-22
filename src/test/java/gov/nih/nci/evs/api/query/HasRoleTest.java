@@ -54,7 +54,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  * and primary site at or below C12219 finds 64; below Neoplasm (C3262) with primary site at or
  * below C12219 finds 13,335. The C3262 branch has 15,233 descendants, so a target over it also
  * exercises paging past one page of codes against a live index. Paging and the code limit are unit
- * tested with mocks in {@link FetchMatchingConceptsTest}.
+ * tested with mocks in {@link DeclareDependenciesTest}.
  */
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
