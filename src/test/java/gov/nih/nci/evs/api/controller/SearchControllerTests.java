@@ -5639,7 +5639,7 @@ public class SearchControllerTests {
    */
   @Test
   public void testTypeaheadTotalCapsAtCountedHitLimit() throws Exception {
-    // "c" starts a word in tens of thousands of ncit names, and every ncit code
+    // "c" starts a word in tens of thousands of ncit names
     final String incompleteTerm = "c";
     log.info("Testing typeahead - incompleteTerm = " + incompleteTerm);
     final ConceptResultList list =
