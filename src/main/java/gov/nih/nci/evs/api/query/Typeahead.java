@@ -68,34 +68,36 @@ public class Typeahead extends EvsQuery {
    * with {@link #DESCENDANT_COUNT_FIELD}.
    */
   private static final String GENERAL_SHORT_NAME_FIRST_SOURCE =
-      "if (doc['"
-          + NORMALIZED_NAME_FIELD
-          + "'].size() == 0) { return -Double.MAX_VALUE; }"
-          + " String name = doc['"
-          + NORMALIZED_NAME_FIELD
-          + "'].value;"
-          + " int wordCount = 1;"
-          + " for (int i = 0; i < name.length(); i++) {"
-          + "   if (name.charAt(i) == (char) ' ') { wordCount++; }"
-          + " }"
-          + " double startsWithBonus ="
-          + "   name.startsWith(params.typedText) ? params.startsWithBonus : 0;"
-          + " int descendantCount = 0;"
-          + " if (doc.containsKey('"
-          + DESCENDANT_COUNT_FIELD
-          + "')) {"
-          + "   if (doc['"
-          + DESCENDANT_COUNT_FIELD
-          + "'].size() != 0) { descendantCount = (int) doc['"
-          + DESCENDANT_COUNT_FIELD
-          + "'].value; }"
-          + " } else {"
-          + "   descendantCount = doc['"
-          + DESCENDANT_LEAF_FIELD
-          + "'].size();"
-          + " }"
-          + " return Math.log(1 + descendantCount)"
-          + "   - params.wordPenalty * wordCount + startsWithBonus;";
+      """
+      boolean hasNormalizedName = doc['%1$s'].size() != 0;
+      if (!hasNormalizedName) {
+        return -Double.MAX_VALUE;
+      }
+      String name = doc['%1$s'].value;
+
+      int wordCount = 1;
+      for (int i = 0; i < name.length(); i++) {
+        boolean isWordBreak = name.charAt(i) == (char) ' ';
+        if (isWordBreak) {
+          wordCount++;
+        }
+      }
+
+      boolean isNameStartingWithIncompleteTerm = name.startsWith(params.normalizedIncompleteTerm);
+      double startsWithBonus = isNameStartingWithIncompleteTerm ? params.startsWithBonus : 0;
+
+      boolean hasDescendantCountField = doc.containsKey('%2$s');
+      boolean hasStoredDescendantCount = hasDescendantCountField && doc['%2$s'].size() != 0;
+      int descendantCount = 0;
+      if (hasStoredDescendantCount) {
+        descendantCount = (int) doc['%2$s'].value;
+      } else if (!hasDescendantCountField) {
+        descendantCount = doc['%3$s'].size();
+      }
+
+      return Math.log(1 + descendantCount) - params.wordPenalty * wordCount + startsWithBonus;
+      """
+          .formatted(NORMALIZED_NAME_FIELD, DESCENDANT_COUNT_FIELD, DESCENDANT_LEAF_FIELD);
 
   /** The text typed so far, as entered. The search_as_you_type analyzer handles normalization. */
   private final String incompleteTerm;
@@ -165,13 +167,13 @@ public class Typeahead extends EvsQuery {
    */
   private Script getRankingScript() {
     // Normalized like NORMALIZED_NAME_FIELD so the starts-with comparison lines up
-    final String normalizedTerm = ConceptUtils.normalize(incompleteTerm);
+    final String normalizedIncompleteTerm = ConceptUtils.normalize(incompleteTerm);
     return new Script(
         ScriptType.INLINE,
         Script.DEFAULT_SCRIPT_LANG,
         GENERAL_SHORT_NAME_FIRST_SOURCE,
         Map.of(
-            "typedText", normalizedTerm,
+            "normalizedIncompleteTerm", normalizedIncompleteTerm,
             "wordPenalty", WORD_PENALTY,
             "startsWithBonus", STARTS_WITH_BONUS));
   }

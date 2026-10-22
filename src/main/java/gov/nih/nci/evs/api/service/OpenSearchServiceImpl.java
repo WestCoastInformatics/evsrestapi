@@ -77,9 +77,11 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   @Override
   public ConceptResultList findTypeaheadConcepts(
       final Typeahead typeahead, final SearchCriteria searchCriteria) {
+    // Typeahead only returns the best matches, which are on the first page
+    final int bestMatchesPage = 0;
     final NativeSearchQuery search =
         typeahead.getNativeSearchQuery(
-            PageRequest.of(0, searchCriteria.getPageSize()),
+            PageRequest.of(bestMatchesPage, searchCriteria.getPageSize()),
             new IncludeParam(searchCriteria.getInclude()),
             operations);
     final SearchHits<Concept> hits =
