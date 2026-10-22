@@ -188,6 +188,8 @@ public class Typeahead extends EvsQuery {
     final QueryBuilder nameQuery =
         new SearchAsYouType(terminologies, NAME_TYPEAHEAD_FIELD, incompleteTerm)
             .fetchOpenSearchQuery(operations);
+    // Codes are always case sensitive, so they're completed with a prefix on the code keyword,
+    // not a search_as_you_type field, which lowercases what it compares
     final QueryBuilder partialCodeQuery =
         new StartsWith(terminologies, CODE_FIELD, typedCode).fetchOpenSearchQuery(operations);
     final QueryBuilder wholeCodeQuery =
