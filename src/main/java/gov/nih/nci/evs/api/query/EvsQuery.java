@@ -2,10 +2,8 @@ package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Concept;
 import gov.nih.nci.evs.api.model.Terminology;
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
@@ -24,7 +22,7 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
  *
  * <p>Building a node's query may run searches first. A node can hold a child query about a
  * different concept, e.g. a role's target. One OpenSearch query only looks at one document, so the
- * node runs the child first with {@link #fetchMatchingCodes} and matches the codes it found.
+ * node runs the child first with {@link #fetchMatchingConcepts} and matches the concepts it found.
  */
 public abstract class EvsQuery {
 
@@ -38,14 +36,19 @@ public abstract class EvsQuery {
   /** Field that orders concepts within a terminology. */
   private static final String CODE_FIELD = "code";
 
-  /** Codes fetched per page by {@link #fetchMatchingCodes}, at OpenSearch's default page limit. */
-  static final int CODES_PER_PAGE = 10_000;
+  /**
+   * Concepts fetched per page by {@link #fetchMatchingConcepts}, at OpenSearch's default page
+   * limit.
+   */
+  static final int CONCEPTS_PER_PAGE = 10_000;
 
-  /** Most codes one {@code terms} query accepts: OpenSearch's default index.max_terms_count. */
-  static final int MAX_MATCHING_CODES = 65_536;
-
-  /** The page every code page starts from. With search_after, paging is by sort values instead. */
+  /**
+   * The page every concept page starts from. With search_after, paging is by sort values instead.
+   */
   private static final int FIRST_PAGE = 0;
+
+  /** The fields fetched for each matching concept: enough to identify it. */
+  private static final String[] IDENTIFYING_FIELDS = {CODE_FIELD, "terminology", "version"};
 
   /** The terminologies being searched. Unmodifiable. */
   protected final List<Terminology> terminologies;
@@ -70,7 +73,7 @@ public abstract class EvsQuery {
 
   /**
    * Returns the OpenSearch query for this node. Nodes holding a query about a different concept run
-   * it first (see {@link #fetchMatchingCodes}).
+   * it first (see {@link #fetchMatchingConcepts}).
    *
    * <p>Most nodes ignore {@code operations}. It's a parameter, rather than something nodes look up
    * themselves, so tests can pass a mock:
@@ -113,38 +116,37 @@ public abstract class EvsQuery {
   }
 
   /**
-   * Runs this query and returns the codes of every concept it matches, a page at a time. Used by
-   * nodes whose child query describes a different concept, e.g. a role's target.
+   * Runs this query and returns every concept it matches, a page at a time. Used by nodes whose
+   * child query describes a different concept, e.g. a role's target. Only each concept's code,
+   * terminology, and version are fetched: enough to identify it.
    *
    * @param operations the OpenSearch operations
-   * @return the matching codes
-   * @throws IllegalStateException if more concepts match than one {@code terms} query accepts
+   * @return the matching concepts
    */
-  Set<String> fetchMatchingCodes(final OpenSearchOperations operations) {
+  List<Concept> fetchMatchingConcepts(final OpenSearchOperations operations) {
     final QueryBuilder queryBuilder = fetchOpenSearchQuery(operations);
-    final Set<String> codes = new HashSet<>();
+    final List<Concept> concepts = new ArrayList<>();
     List<Object> searchAfter = null;
     boolean hasMorePages = true;
     while (hasMorePages) {
       final SearchHits<Concept> page =
           operations.search(
-              getCodePageQuery(queryBuilder, searchAfter), Concept.class, getIndexCoordinates());
-      codes.addAll(getCodes(page));
-      checkMatchingCodeCount(codes.size());
-      hasMorePages = page.getSearchHits().size() == CODES_PER_PAGE;
+              getConceptPageQuery(queryBuilder, searchAfter), Concept.class, getIndexCoordinates());
+      page.getSearchHits().stream().map(SearchHit::getContent).forEach(concepts::add);
+      hasMorePages = page.getSearchHits().size() == CONCEPTS_PER_PAGE;
       searchAfter = hasMorePages ? getLastSortValues(page) : null;
     }
-    return codes;
+    return concepts;
   }
 
   /**
-   * Builds the search for one page of matching codes, ordered by code so pages don't overlap.
+   * Builds the search for one page of matching concepts, ordered by code so pages don't overlap.
    *
    * @param queryBuilder the query
    * @param searchAfter the sort values of the previous page's last hit, or null for the first page
    * @return the search
    */
-  private static NativeSearchQuery getCodePageQuery(
+  private static NativeSearchQuery getConceptPageQuery(
       final QueryBuilder queryBuilder, final List<Object> searchAfter) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
@@ -152,24 +154,11 @@ public abstract class EvsQuery {
             .withSorts(
                 SortBuilders.fieldSort(CODE_FIELD).order(SortOrder.ASC),
                 SortBuilders.fieldSort(INDEX_FIELD).order(SortOrder.ASC))
-            .withSourceFilter(new FetchSourceFilter(true, new String[] {CODE_FIELD}, null))
-            .withPageable(PageRequest.of(FIRST_PAGE, CODES_PER_PAGE))
+            .withSourceFilter(new FetchSourceFilter(true, IDENTIFYING_FIELDS, null))
+            .withPageable(PageRequest.of(FIRST_PAGE, CONCEPTS_PER_PAGE))
             .build();
     search.setSearchAfter(searchAfter);
     return search;
-  }
-
-  /**
-   * Returns the codes of the concepts on a page.
-   *
-   * @param page the page
-   * @return the codes
-   */
-  private static Set<String> getCodes(final SearchHits<Concept> page) {
-    return page.stream()
-        .map(SearchHit::getContent)
-        .map(Concept::getCode)
-        .collect(Collectors.toSet());
   }
 
   /**
@@ -181,22 +170,5 @@ public abstract class EvsQuery {
   private static List<Object> getLastSortValues(final SearchHits<Concept> page) {
     final List<SearchHit<Concept>> hits = page.getSearchHits();
     return hits.get(hits.size() - 1).getSortValues();
-  }
-
-  /**
-   * Fails if more concepts matched than one {@code terms} query accepts, rather than cutting the
-   * codes short and silently giving wrong results.
-   *
-   * @param codeCount the number of codes collected so far
-   * @throws IllegalStateException if there are too many
-   */
-  private static void checkMatchingCodeCount(final int codeCount) {
-    final boolean hasTooManyCodes = codeCount > MAX_MATCHING_CODES;
-    if (hasTooManyCodes) {
-      throw new IllegalStateException(
-          "A query about another concept matched more than "
-              + MAX_MATCHING_CODES
-              + " concepts, more than one OpenSearch terms query accepts. Narrow that query.");
-    }
   }
 }

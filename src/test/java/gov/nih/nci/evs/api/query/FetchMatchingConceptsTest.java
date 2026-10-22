@@ -2,7 +2,6 @@ package gov.nih.nci.evs.api.query;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -17,10 +16,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -30,22 +29,31 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.Query;
 
 /**
- * Unit tests for {@link EvsQuery#fetchMatchingCodes}, which runs a query about another concept
- * (e.g. a role target) and collects the codes of every match, a page at a time.
+ * Unit tests for {@link EvsQuery#fetchMatchingConcepts}, which runs a query about another concept
+ * (e.g. a role target) and returns every match, a page at a time.
  *
  * <p>No OpenSearch or Spring: a mocked {@link OpenSearchOperations} returns pages of made-up
- * concepts. That makes it cheap to return more than one page, or more codes than one {@code terms}
- * query accepts, which would otherwise take tens of thousands of indexed documents.
+ * concepts. That makes it cheap to return more than one page, which would otherwise take tens of
+ * thousands of indexed documents.
  */
-public class FetchMatchingCodesTest {
+public class FetchMatchingConceptsTest {
 
   /** Index name the mocked pages claim their hits came from. */
   private static final String INDEX_NAME = "concept_test";
 
+  /** Terminology of the made-up concepts. */
+  private static final String TERMINOLOGY = "ncit";
+
+  /** Version of the made-up concepts. */
+  private static final String VERSION = "25.12e";
+
   /** Hits on a page that isn't full, so it's the last page. */
   private static final int PARTIAL_PAGE_SIZE = 3;
 
-  /** The query whose matching codes are fetched. The mock ignores what it matches. */
+  /** The terminology searched. */
+  private List<Terminology> terminologies;
+
+  /** The query whose matching concepts are fetched. The mock ignores what it matches. */
   private EvsQuery query;
 
   /** Mocked OpenSearch operations, stubbed per test. */
@@ -56,37 +64,52 @@ public class FetchMatchingCodesTest {
   public void setUp() {
     final Terminology terminology = new Terminology();
     terminology.setIndexName(INDEX_NAME);
-    query = new Match(List.of(terminology), "code", "C12470");
+    terminologies = List.of(terminology);
+    query = new Match(terminologies, "code", "C12470");
     operations = mock(OpenSearchOperations.class);
   }
 
-  /** One page that isn't full is the only page: one search, all of its codes. */
+  /** One page that isn't full is the only page: one search, all of its concepts. */
   @Test
   public void testPartialPageIsTheLastPage() {
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(getPage(0, PARTIAL_PAGE_SIZE));
 
-    final Set<String> codes = query.fetchMatchingCodes(operations);
+    final List<Concept> concepts = query.fetchMatchingConcepts(operations);
 
-    assertEquals(PARTIAL_PAGE_SIZE, codes.size());
-    final int expectedSearches = 1;
-    verify(operations, times(expectedSearches))
-        .search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class));
+    assertEquals(PARTIAL_PAGE_SIZE, concepts.size());
+    captureSearches(1);
+  }
+
+  /**
+   * Only the fields that identify a concept are fetched: its code, terminology, and version. The
+   * terminology and version say which version of the terminology a code belongs to.
+   */
+  @Test
+  public void testFetchesCodeTerminologyAndVersion() {
+    when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
+        .thenReturn(getPage(0, PARTIAL_PAGE_SIZE));
+
+    query.fetchMatchingConcepts(operations);
+
+    final NativeSearchQuery search = (NativeSearchQuery) captureSearches(1).get(0);
+    assertEquals(
+        Set.of("code", "terminology", "version"), Set.of(search.getSourceFilter().getIncludes()));
   }
 
   /**
    * A full page means there may be more, so the next page is fetched starting after the last hit's
-   * sort values. Codes from every page are collected.
+   * sort values. Concepts from every page are returned.
    */
   @Test
   public void testFullPageFetchesTheNextPageAfterItsLastHit() {
-    final SearchHits<Concept> fullPage = getPage(0, EvsQuery.CODES_PER_PAGE);
+    final SearchHits<Concept> fullPage = getPage(0, EvsQuery.CONCEPTS_PER_PAGE);
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
-        .thenReturn(fullPage, getPage(EvsQuery.CODES_PER_PAGE, PARTIAL_PAGE_SIZE));
+        .thenReturn(fullPage, getPage(EvsQuery.CONCEPTS_PER_PAGE, PARTIAL_PAGE_SIZE));
 
-    final Set<String> codes = query.fetchMatchingCodes(operations);
+    final List<Concept> concepts = query.fetchMatchingConcepts(operations);
 
-    assertEquals(EvsQuery.CODES_PER_PAGE + PARTIAL_PAGE_SIZE, codes.size());
+    assertEquals(EvsQuery.CONCEPTS_PER_PAGE + PARTIAL_PAGE_SIZE, concepts.size());
     final List<Query> searches = captureSearches(2);
     assertNull(searches.get(0).getSearchAfter());
     final List<SearchHit<Concept>> firstPageHits = fullPage.getSearchHits();
@@ -96,39 +119,20 @@ public class FetchMatchingCodesTest {
   }
 
   /**
-   * A last page of exactly {@link EvsQuery#CODES_PER_PAGE} hits looks like there may be more, so
+   * A last page of exactly {@link EvsQuery#CONCEPTS_PER_PAGE} hits looks like there may be more, so
    * one more search runs and comes back empty.
    */
   @Test
   public void testExactlyFullLastPageEndsOnAnEmptyPage() {
     final int noHits = 0;
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
-        .thenReturn(getPage(0, EvsQuery.CODES_PER_PAGE), getPage(EvsQuery.CODES_PER_PAGE, noHits));
+        .thenReturn(
+            getPage(0, EvsQuery.CONCEPTS_PER_PAGE), getPage(EvsQuery.CONCEPTS_PER_PAGE, noHits));
 
-    final Set<String> codes = query.fetchMatchingCodes(operations);
+    final List<Concept> concepts = query.fetchMatchingConcepts(operations);
 
-    assertEquals(EvsQuery.CODES_PER_PAGE, codes.size());
+    assertEquals(EvsQuery.CONCEPTS_PER_PAGE, concepts.size());
     captureSearches(2);
-  }
-
-  /**
-   * More matches than one {@code terms} query accepts fails, rather than cutting the codes short.
-   * It fails on the first page that crosses the limit, without fetching the rest.
-   */
-  @Test
-  public void testMoreCodesThanOneTermsQueryAcceptsFails() {
-    final AtomicInteger pagesReturned = new AtomicInteger();
-    when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
-        .thenAnswer(
-            invocation ->
-                getPage(
-                    pagesReturned.getAndIncrement() * EvsQuery.CODES_PER_PAGE,
-                    EvsQuery.CODES_PER_PAGE));
-
-    assertThrows(IllegalStateException.class, () -> query.fetchMatchingCodes(operations));
-
-    final int pagesToCrossLimit = EvsQuery.MAX_MATCHING_CODES / EvsQuery.CODES_PER_PAGE + 1;
-    assertEquals(pagesToCrossLimit, pagesReturned.get());
   }
 
   /**
@@ -146,7 +150,7 @@ public class FetchMatchingCodesTest {
 
   /**
    * Builds a page of made-up concepts with consecutive codes, each hit sorted by code then index
-   * like the real code-page search.
+   * like the real concept-page search.
    *
    * @param firstCodeNumber the number in the first concept's code
    * @param hitCount how many hits the page holds
@@ -180,6 +184,8 @@ public class FetchMatchingCodesTest {
   private static SearchHit<Concept> getHit(final String code) {
     final Concept concept = new Concept();
     concept.setCode(code);
+    concept.setTerminology(TERMINOLOGY);
+    concept.setVersion(VERSION);
     final float score = 0f;
     final Object[] sortValues = {code, INDEX_NAME};
     return new SearchHit<>(
