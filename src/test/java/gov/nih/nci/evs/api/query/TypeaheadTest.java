@@ -22,7 +22,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -470,9 +469,7 @@ public class TypeaheadTest {
       final String incompleteTerm,
       final Function<Concept, String> getValue) {
     final Typeahead typeahead = new Typeahead(terminologies, incompleteTerm);
-    final NativeSearchQuery search =
-        typeahead.getNativeSearchQuery(ALL_CONCEPTS, MINIMAL_FIELDS, operations);
-    return operations.search(search, Concept.class, typeahead.getIndexCoordinates()).stream()
+    return typeahead.fetchConcepts(operations, ALL_CONCEPTS, MINIMAL_FIELDS).stream()
         .map(SearchHit::getContent)
         .map(getValue)
         .collect(Collectors.toList());

@@ -36,7 +36,7 @@ import org.opensearch.search.sort.SortOrder;
  *       tiers, typing "c" or "c3" would bury names under codes. Within a tier, general concepts
  *       (those with more descendants) with short names come first, with a small preference for
  *       names that start with the typed text. See {@link #getSorts()}.
- *   <li>Run it with {@link #getNativeSearchQuery}, which applies the ranking.
+ *   <li>Run it with {@link #fetchConcepts}, which applies the ranking.
  *   <li>{@link #getHighlight(Concept)} marks the typed part of each match, e.g. {@code
  *       <em>Lung</em> <em>Ca</em>rcinoma} for "lung ca". Only the typed letters are marked, not the
  *       whole word.
@@ -330,12 +330,12 @@ public class Typeahead extends EvsQuery {
    * Orders matches best first: by tier, which is the query score (see {@link
    * #fetchOpenSearchQuery}), then general concepts with short names first within a tier (see {@link
    * #GENERAL_SHORT_NAME_FIRST_SOURCE}). Ties fall through to the default tie-break in {@link
-   * EvsQuery#getNativeSearchQuery}.
+   * EvsQuery#fetchConcepts}.
    *
    * @return the tier sort, then the ranking sort
    */
   @Override
-  public List<SortBuilder<?>> getSorts() {
+  protected List<SortBuilder<?>> getSorts() {
     return List.of(
         SortBuilders.scoreSort().order(SortOrder.DESC),
         SortBuilders.scriptSort(getRankingScript(), ScriptSortBuilder.ScriptSortType.NUMBER)

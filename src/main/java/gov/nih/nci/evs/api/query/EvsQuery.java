@@ -29,8 +29,8 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
  * role's target. One OpenSearch query only looks at one document, so the node runs the other query
  * first with {@link #declareDependencies} and matches the concepts it found.
  *
- * <p>EXPERIMENTAL: nodes may also contribute sorts (see {@link #getSorts()}), and any node can be
- * run as the outermost query of a search request (see {@link #getNativeSearchQuery}).
+ * <p>Run a tree with {@link #fetchConcepts}. EXPERIMENTAL: nodes may also contribute sorts (see
+ * {@link #getSorts()}).
  */
 public abstract class EvsQuery {
 
@@ -114,8 +114,8 @@ public abstract class EvsQuery {
   public abstract QueryBuilder fetchOpenSearchQuery(OpenSearchOperations operations);
 
   /**
-   * EXPERIMENTAL: returns the sorts this node wants applied, in priority order. Most nodes only
-   * match, so the default is none.
+   * EXPERIMENTAL: returns the sorts this node wants applied when it's the query {@link
+   * #fetchConcepts} runs, in priority order. Most nodes only match, so the default is none.
    *
    * <p>Composite nodes must return their own sorts first, then each child's sorts in child order. A
    * nested node's sorts therefore only break ties left by the nodes above and before it. A node
@@ -123,33 +123,36 @@ public abstract class EvsQuery {
    *
    * @return the sorts, highest priority first
    */
-  public List<SortBuilder<?>> getSorts() {
+  protected List<SortBuilder<?>> getSorts() {
     return List.of();
   }
 
   /**
-   * EXPERIMENTAL: builds a search request with this node as the outermost query. Sorts come from
-   * {@link #getSorts()}, with duplicates dropped, followed by terminology and code so results are
-   * stable between requests.
+   * Runs this query and returns one page of the concepts it matches. Sorts come from {@link
+   * #getSorts()}, with duplicates dropped, followed by terminology and code so results are stable
+   * between requests.
    *
-   * @param pageable the page to return
-   * @param include the fields to return for each hit
-   * @param operations the OpenSearch operations, for any searches the tree needs to run first
-   * @return the search request
+   * @param operations the OpenSearch operations
+   * @param page the page to return
+   * @param include the fields to return for each concept
+   * @return the page of matching concepts, with the total match count
    */
-  public final NativeSearchQuery getNativeSearchQuery(
-      final Pageable pageable, final IncludeParam include, final OpenSearchOperations operations) {
-    return new NativeSearchQueryBuilder()
-        .withQuery(fetchOpenSearchQuery(operations))
-        .withSorts(getSortsWithTieBreak())
-        .withSourceFilter(
-            new FetchSourceFilter(true, include.getIncludedFields(), include.getExcludedFields()))
-        .withPageable(pageable)
-        .build();
+  public final SearchHits<Concept> fetchConcepts(
+      final OpenSearchOperations operations, final Pageable page, final IncludeParam include) {
+    final NativeSearchQuery search =
+        new NativeSearchQueryBuilder()
+            .withQuery(fetchOpenSearchQuery(operations))
+            .withSorts(getSortsWithTieBreak())
+            .withSourceFilter(
+                new FetchSourceFilter(
+                    true, include.getIncludedFields(), include.getExcludedFields()))
+            .withPageable(page)
+            .build();
+    return operations.search(search, Concept.class, getIndexCoordinates());
   }
 
   /**
-   * Returns the concept indexes of the terminologies, for running {@link #getNativeSearchQuery}.
+   * Returns the concept indexes of the terminologies, which {@link #fetchConcepts} searches.
    *
    * @return the index coordinates
    */

@@ -26,8 +26,8 @@ classDiagram
         #List~Terminology~ terminologies
         +getTerminologies() List~Terminology~
         +fetchOpenSearchQuery(OpenSearchOperations)* QueryBuilder
-        +getSorts() List~SortBuilder~
-        +getNativeSearchQuery(Pageable, IncludeParam, OpenSearchOperations) NativeSearchQuery
+        +fetchConcepts(OpenSearchOperations, Pageable, IncludeParam) SearchHits~Concept~
+        #getSorts() List~SortBuilder~
         +getIndexCoordinates() IndexCoordinates
     }
 
@@ -163,11 +163,10 @@ The constructor only accepts queries that implement `SupportsIgnoringCase`, so
 > considered were ranking through the score (`script_score` / `rank_feature`, which blends across
 > branches) and a separate top-level sort object (an `EvsSort` tree passed alongside the query).
 
-Any node can be the outermost query of a search request:
+Any node can be run as the outermost query of a search, one page at a time:
 
 ```java
-final NativeSearchQuery search = query.getNativeSearchQuery(pageable, include, operations);
-operations.search(search, Concept.class, query.getIndexCoordinates());
+final SearchHits<Concept> hits = query.fetchConcepts(operations, pageable, include);
 ```
 
 The request's sort order comes from `getSorts()`. Most nodes only match and return no sorts.
@@ -179,7 +178,7 @@ The request's sort order comes from `getSorts()`. Most nodes only match and retu
    same concepts but can order them differently.
 2. **Negating composites contribute nothing.** A `Not` returns none of its children's sorts.
 3. **Duplicates are dropped.** The first occurrence of a sort keeps its position.
-4. **`getNativeSearchQuery` always appends the tie-break `_index`, then `code`.** Each terminology
+4. **`fetchConcepts` always appends the tie-break `_index`, then `code`.** Each terminology
    has its own index, so this orders by terminology, then code, and results are stable between
    requests. (`terminology` is analyzed text and can't be sorted on.)
 
@@ -190,7 +189,7 @@ Known limits:
   sibling matched. Script sorts like `Typeahead`'s work on any concept. Field sorts put documents
   missing the field last.
 - **There's no way to replace the tree's sorts yet,** for example with a user-chosen "name A to Z".
-  Add an override parameter to `getNativeSearchQuery` when one is needed.
+  Add an override parameter to `fetchConcepts` when one is needed.
 - **Sorts can't blend.** A higher-priority sort always wins outright. Blending relevance across
   branches needs ranking through the score instead.
 

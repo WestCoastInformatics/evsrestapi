@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.common.unit.Fuzziness;
-import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -79,13 +78,11 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       final Typeahead typeahead, final SearchCriteria searchCriteria) {
     // Typeahead only returns the best matches, which are on the first page
     final int bestMatchesPage = 0;
-    final NativeSearchQuery search =
-        typeahead.getNativeSearchQuery(
-            PageRequest.of(bestMatchesPage, searchCriteria.getPageSize()),
-            new IncludeParam(searchCriteria.getInclude()),
-            operations);
     final SearchHits<Concept> hits =
-        operations.search(search, Concept.class, typeahead.getIndexCoordinates());
+        typeahead.fetchConcepts(
+            operations,
+            PageRequest.of(bestMatchesPage, searchCriteria.getPageSize()),
+            new IncludeParam(searchCriteria.getInclude()));
 
     final ConceptResultList results = new ConceptResultList();
     results.setParameters(searchCriteria);
