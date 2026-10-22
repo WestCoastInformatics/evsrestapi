@@ -43,7 +43,8 @@ public abstract class EvsQuery {
   static final int CONCEPTS_PER_PAGE = 10_000;
 
   /**
-   * The page every concept page starts from. With search_after, paging is by sort values instead.
+   * The page number every concept page asks for. The page cursor, not the page number, moves
+   * through the pages.
    */
   private static final int FIRST_PAGE = 0;
 
@@ -136,6 +137,13 @@ public abstract class EvsQuery {
     return concepts;
   }
 
+  /**
+   * Fetches every page of the query's matches, adding each page's concepts to the list.
+   *
+   * @param operations the OpenSearch operations
+   * @param queryToFetchBuilder the query to fetch the matches of
+   * @param concepts the list to add the matching concepts to
+   */
   private void fetchAndAddConceptsFromAllPagesToList(
       final OpenSearchOperations operations,
       final QueryBuilder queryToFetchBuilder,
@@ -149,7 +157,7 @@ public abstract class EvsQuery {
     while (hasMorePages) {
       final SearchHits<Concept> page = fetchPage(operations, queryToFetchBuilder, pageCursor);
 
-      addPageHitsToArrayList(concepts, page);
+      addPageConceptsToList(concepts, page);
 
       // should continue leafing through pages and recording their concepts?
       hasMorePages = page.getSearchHits().size() == CONCEPTS_PER_PAGE;
@@ -157,19 +165,29 @@ public abstract class EvsQuery {
     }
   }
 
+  /**
+   * Fetches one page of the query's matches.
+   *
+   * @param operations the OpenSearch operations
+   * @param queryToFetchBuilder the query to fetch the matches of
+   * @param pageCursor where the page starts, or null for the first page
+   * @return the page
+   */
   private SearchHits<Concept> fetchPage(
       final OpenSearchOperations operations,
       final QueryBuilder queryToFetchBuilder,
-      List<Object> pageCursor) {
-    final SearchHits<Concept> page =
-        operations.search(
-            getConceptPageQuery(queryToFetchBuilder, pageCursor),
-            Concept.class,
-            getIndexCoordinates());
-    return page;
+      final List<Object> pageCursor) {
+    return operations.search(
+        getConceptPageQuery(queryToFetchBuilder, pageCursor), Concept.class, getIndexCoordinates());
   }
 
-  private void addPageHitsToArrayList(
+  /**
+   * Adds a page's concepts to the list.
+   *
+   * @param concepts the list to add to
+   * @param page the page
+   */
+  private static void addPageConceptsToList(
       final List<Concept> concepts, final SearchHits<Concept> page) {
     page.getSearchHits().stream().map(SearchHit::getContent).forEach(concepts::add);
   }
