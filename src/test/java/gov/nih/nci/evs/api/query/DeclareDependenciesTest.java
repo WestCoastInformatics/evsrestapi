@@ -2,6 +2,7 @@ package gov.nih.nci.evs.api.query;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -30,11 +32,12 @@ import org.springframework.data.elasticsearch.core.query.Query;
 
 /**
  * Unit tests for {@link EvsQuery#declareDependencies}, which runs a query about another concept
- * (e.g. a role target) and returns every match, a page at a time.
+ * (e.g. a role target) and returns every match, a page at a time, and for {@link RoleTarget}'s
+ * limit on how many target codes it can match.
  *
  * <p>No OpenSearch or Spring: a mocked {@link OpenSearchOperations} returns pages of made-up
- * concepts. That makes it cheap to return more than one page, which would otherwise take tens of
- * thousands of indexed documents.
+ * concepts. That makes it cheap to return more than one page, or more codes than one {@code terms}
+ * query accepts, which would otherwise take tens of thousands of indexed documents.
  */
 public class DeclareDependenciesTest {
 
@@ -143,6 +146,27 @@ public class DeclareDependenciesTest {
   private int fetchDependencyCodeCount() {
     final ConceptKeys keys = EvsQuery.declareDependencies(operations, query).get(0);
     return keys.getCodesByTerminologyVersion().values().stream().mapToInt(Set::size).sum();
+  }
+
+  /**
+   * A role target matching more codes than one {@code terms} query accepts fails, rather than
+   * cutting the codes short.
+   */
+  @Test
+  public void testRoleTargetWithMoreCodesThanOneTermsQueryAcceptsFails() {
+    final int pagesOverLimit = RoleTarget.MAX_TARGET_CODES / EvsQuery.CONCEPTS_PER_PAGE + 1;
+    final AtomicInteger pagesReturned = new AtomicInteger();
+    when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
+        .thenAnswer(
+            invocation -> {
+              final int pageNumber = pagesReturned.getAndIncrement();
+              final boolean isLastPage = pageNumber == pagesOverLimit;
+              final int hitCount = isLastPage ? 0 : EvsQuery.CONCEPTS_PER_PAGE;
+              return getPage(pageNumber * EvsQuery.CONCEPTS_PER_PAGE, hitCount);
+            });
+    final RoleTarget roleTarget = new RoleTarget(query);
+
+    assertThrows(IllegalStateException.class, () -> roleTarget.fetchOpenSearchQuery(operations));
   }
 
   /**

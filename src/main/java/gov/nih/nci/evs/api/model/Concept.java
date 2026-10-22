@@ -220,11 +220,8 @@ public class Concept extends ConceptMinimal {
   @Field(type = FieldType.Object, enabled = false)
   private List<Association> inverseAssociations;
 
-  /**
-   * The roles. enabled = false will set the index = false, to avoid indexing the fields in this
-   * Concept model
-   */
-  @Field(type = FieldType.Object, enabled = false)
+  /** The roles. Nested so a role's type and target can be searched together (see HasRole). */
+  @Field(type = FieldType.Nested)
   private List<Role> roles;
 
   /**
