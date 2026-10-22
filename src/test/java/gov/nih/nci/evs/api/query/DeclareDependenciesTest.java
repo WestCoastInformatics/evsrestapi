@@ -29,14 +29,14 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.Query;
 
 /**
- * Unit tests for {@link EvsQuery#fetchMatchingConcepts}, which runs a query about another concept
+ * Unit tests for {@link EvsQuery#declareDependencies}, which runs a query about another concept
  * (e.g. a role target) and returns every match, a page at a time.
  *
  * <p>No OpenSearch or Spring: a mocked {@link OpenSearchOperations} returns pages of made-up
  * concepts. That makes it cheap to return more than one page, which would otherwise take tens of
  * thousands of indexed documents.
  */
-public class FetchMatchingConceptsTest {
+public class DeclareDependenciesTest {
 
   /** Index name the mocked pages claim their hits came from. */
   private static final String INDEX_NAME = "concept_test";
@@ -75,9 +75,9 @@ public class FetchMatchingConceptsTest {
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(getPage(0, PARTIAL_PAGE_SIZE));
 
-    final List<Concept> concepts = query.fetchMatchingConcepts(operations);
+    final int codeCount = fetchDependencyCodeCount();
 
-    assertEquals(PARTIAL_PAGE_SIZE, concepts.size());
+    assertEquals(PARTIAL_PAGE_SIZE, codeCount);
     captureSearches(1);
   }
 
@@ -90,7 +90,7 @@ public class FetchMatchingConceptsTest {
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(getPage(0, PARTIAL_PAGE_SIZE));
 
-    query.fetchMatchingConcepts(operations);
+    fetchDependencyCodeCount();
 
     final NativeSearchQuery search = (NativeSearchQuery) captureSearches(1).get(0);
     assertEquals(
@@ -107,9 +107,9 @@ public class FetchMatchingConceptsTest {
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(fullPage, getPage(EvsQuery.CONCEPTS_PER_PAGE, PARTIAL_PAGE_SIZE));
 
-    final List<Concept> concepts = query.fetchMatchingConcepts(operations);
+    final int codeCount = fetchDependencyCodeCount();
 
-    assertEquals(EvsQuery.CONCEPTS_PER_PAGE + PARTIAL_PAGE_SIZE, concepts.size());
+    assertEquals(EvsQuery.CONCEPTS_PER_PAGE + PARTIAL_PAGE_SIZE, codeCount);
     final List<Query> searches = captureSearches(2);
     assertNull(searches.get(0).getSearchAfter());
     final List<SearchHit<Concept>> firstPageHits = fullPage.getSearchHits();
@@ -129,10 +129,20 @@ public class FetchMatchingConceptsTest {
         .thenReturn(
             getPage(0, EvsQuery.CONCEPTS_PER_PAGE), getPage(EvsQuery.CONCEPTS_PER_PAGE, noHits));
 
-    final List<Concept> concepts = query.fetchMatchingConcepts(operations);
+    final int codeCount = fetchDependencyCodeCount();
 
-    assertEquals(EvsQuery.CONCEPTS_PER_PAGE, concepts.size());
+    assertEquals(EvsQuery.CONCEPTS_PER_PAGE, codeCount);
     captureSearches(2);
+  }
+
+  /**
+   * Runs {@link #query} as a dependency and counts the codes it found.
+   *
+   * @return the number of codes found, across terminology versions
+   */
+  private int fetchDependencyCodeCount() {
+    final ConceptKeys keys = EvsQuery.declareDependencies(operations, query).get(0);
+    return keys.getCodesByTerminologyVersion().values().stream().mapToInt(Set::size).sum();
   }
 
   /**

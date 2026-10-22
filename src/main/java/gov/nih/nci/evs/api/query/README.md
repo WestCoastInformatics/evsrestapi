@@ -151,17 +151,19 @@ query only looks at one document, and a role entry only stores its target's code
 can't become one OpenSearch query.
 
 **How it works:** building such a node runs the inner query first. `fetchOpenSearchQuery(operations)`
-takes the OpenSearch operations so it can. The node calls `EvsQuery.fetchMatchingConcepts`, which
-pages through every matching concept with `search_after` (sorted by code, then index, so pages don't
-overlap), fetching only each concept's code, terminology, and version. The node then matches what
-it found, e.g. with a `terms` query on codes. An inner query can hold its own query about another
+takes the OpenSearch operations so it can. The node calls `declareDependencies(operations,
+dependencies...)`, which runs each dependency and pages through every matching concept with
+`search_after` (sorted by code, then index, so pages don't overlap), fetching only each concept's
+code, terminology, and version. It returns one `ConceptKeys` per dependency: the codes found in
+each terminology version. The node then matches what it found, e.g. with a `terms` query on codes.
+The paging itself is private to `EvsQuery`. An inner query can hold its own query about another
 concept, which runs first in the same way, to any depth. Nodes that don't hold a query about
 another concept ignore `operations`.
 
 **Why `operations` is a parameter:** a static lookup hides which nodes search and makes tests
 change global state; injecting it at construction means every tree containing a search needs it
 just to be built. Taking it in `fetchOpenSearchQuery` keeps trees plain data, and lets unit tests pass a
-mock (see `FetchMatchingConceptsTest`).
+mock (see `DeclareDependenciesTest`).
 
 **Limits are the caller's:** how many codes the caller can match (one `terms` query accepts at most
 65,536 by default) depends on how it uses them, so the node that matches them checks, not the
@@ -268,7 +270,7 @@ final EvsQuery query =
 
 1. Name it after what it matches, and document that behavior in the class Javadoc.
 2. Build an OpenSearch query in `fetchOpenSearchQuery(operations)`. Only run a search there for a query
-   about another concept, through `fetchMatchingConcepts` (see
+   about another concept, through `declareDependencies` (see
    [Queries about other concepts](#queries-about-other-concepts-joins)).
 3. Escape any characters in the term that are syntax for the OpenSearch query you use (see
    `Contains.escapeWildcards`).

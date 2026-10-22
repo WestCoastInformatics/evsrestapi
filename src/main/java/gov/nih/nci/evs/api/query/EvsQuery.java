@@ -3,7 +3,9 @@ package gov.nih.nci.evs.api.query;
 import gov.nih.nci.evs.api.model.Concept;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
@@ -20,9 +22,9 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
  * A node in an EVS search query tree. Atomic queries match a single field with a single strategy;
  * composite queries combine other {@link EvsQuery} nodes.
  *
- * <p>Building a node's query may run searches first. A node can hold a child query about a
- * different concept, e.g. a role's target. One OpenSearch query only looks at one document, so the
- * node runs the child first with {@link #fetchMatchingConcepts} and matches the concepts it found.
+ * <p>Building a node's query may run searches first. A node can depend on other concepts, e.g. a
+ * role's target. One OpenSearch query only looks at one document, so the node runs the other query
+ * first with {@link #declareDependencies} and matches the concepts it found.
  */
 public abstract class EvsQuery {
 
@@ -37,8 +39,7 @@ public abstract class EvsQuery {
   private static final String CODE_FIELD = "code";
 
   /**
-   * Concepts fetched per page by {@link #fetchMatchingConcepts}, at OpenSearch's default page
-   * limit.
+   * Concepts fetched per page by {@link #declareDependencies}, at OpenSearch's default page limit.
    */
   static final int CONCEPTS_PER_PAGE = 10_000;
 
@@ -73,8 +74,8 @@ public abstract class EvsQuery {
   }
 
   /**
-   * Returns the OpenSearch query for this node. Nodes holding a query about a different concept run
-   * it first (see {@link #fetchMatchingConcepts}).
+   * Returns the OpenSearch query for this node. A node that depends on other concepts runs their
+   * queries first (see {@link #declareDependencies}), which is why this may go to OpenSearch.
    *
    * <p>Most nodes ignore {@code operations}. It's a parameter, rather than something nodes look up
    * themselves, so tests can pass a mock:
@@ -117,24 +118,36 @@ public abstract class EvsQuery {
   }
 
   /**
-   * Runs this query and returns every concept it matches, a page at a time. Used by nodes whose
-   * child query describes a different concept, e.g. a role's target. Only each concept's code,
-   * terminology, and version are fetched: enough to identify it.
+   * Runs each dependency query and returns every concept it matches, in the same order as the
+   * dependencies. For a node whose query depends on other concepts, e.g. a role's target, called
+   * from its {@link #fetchOpenSearchQuery}.
    *
-   * <p>Since this code should run on every node, but every node has a specialized query, we
-   * abstract the query builder but keep everything else concrete, effectively dynamic dispatch
+   * @param operations the OpenSearch operations
+   * @param dependencies the queries this node depends on
+   * @return the concepts each dependency matched
+   */
+  protected static List<ConceptKeys> declareDependencies(
+      final OpenSearchOperations operations, final EvsQuery... dependencies) {
+    return Arrays.stream(dependencies)
+        .map(dependency -> dependency.fetchConceptKeys(operations))
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * Runs this query and returns every concept it matches, a page at a time. Only each concept's
+   * code, terminology, and version are fetched: enough to identify it.
    *
    * @param operations the OpenSearch operations
    * @return the matching concepts
    */
-  List<Concept> fetchMatchingConcepts(final OpenSearchOperations operations) {
+  private ConceptKeys fetchConceptKeys(final OpenSearchOperations operations) {
     final QueryBuilder queryBuilder = fetchOpenSearchQuery(operations);
 
     final List<Concept> concepts = new ArrayList<>();
 
     fetchAndAddConceptsFromAllPagesToList(operations, queryBuilder, concepts);
 
-    return concepts;
+    return ConceptKeys.of(concepts);
   }
 
   /**
