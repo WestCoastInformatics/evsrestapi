@@ -196,6 +196,9 @@ public class Typeahead extends EvsQuery {
     final QueryBuilder inactiveQuery =
         new Match(terminologies, ACTIVE_FIELD, inactiveFlag).fetchOpenSearchQuery(operations);
 
+    // Confirm that the ordering has not been messed up
+    assert WHOLE_CODE_SCORE > NAME_MATCH_SCORE && NAME_MATCH_SCORE > CODE_MATCH_SCORE;
+
     // TODO: the score tiers and leaving out inactive concepts have no query nodes yet
     return QueryBuilders.boolQuery()
         .mustNot(inactiveQuery)
