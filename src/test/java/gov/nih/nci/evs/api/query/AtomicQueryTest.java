@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.service.OpensearchOperationsService;
@@ -62,7 +63,14 @@ public class AtomicQueryTest {
 
   /** The names in the index. Note the two spellings of melanoma that differ only by case. */
   private static final List<String> INDEXED_NAMES =
-      List.of("Melanoma", "melanoma", "Malignant Melanoma", "Melanocyte", "Carcinoma", "Stage 1*");
+      List.of(
+          "Melanoma",
+          "melanoma",
+          "Malignant Melanoma",
+          "Melanocyte",
+          "Carcinoma",
+          "Stage 1*",
+          "NEVUS");
 
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
   @Autowired private OpensearchOperationsService operationsService;
@@ -251,6 +259,48 @@ public class AtomicQueryTest {
 
     assertEquals(Set.of("melanoma", "Melanoma"), fetchMatchingNames(caseInsensitiveQuery));
     assertEquals(Set.of("melanoma"), fetchMatchingNames(caseSensitiveQuery));
+  }
+
+  /**
+   * Ignoring case only adds matches. A lowercase value ("melanoma") needs no change of case to
+   * match itself, so it still matches when case is ignored.
+   */
+  @Test
+  public void testIgnoringCaseKeepsLowercaseMatches() {
+    final String lowercaseValue = "melanoma";
+
+    assertIgnoringCaseKeepsMatches(new Match(TERMINOLOGIES, NAME_FIELD, lowercaseValue));
+    assertIgnoringCaseKeepsMatches(new StartsWith(TERMINOLOGIES, NAME_FIELD, lowercaseValue));
+    assertIgnoringCaseKeepsMatches(new Contains(TERMINOLOGIES, NAME_FIELD, lowercaseValue));
+  }
+
+  /**
+   * Ignoring case only adds matches. An uppercase value ("NEVUS") needs no change of case to match
+   * itself, so it still matches when case is ignored.
+   */
+  @Test
+  public void testIgnoringCaseKeepsUppercaseMatches() {
+    final String uppercaseValue = "NEVUS";
+
+    assertIgnoringCaseKeepsMatches(new Match(TERMINOLOGIES, NAME_FIELD, uppercaseValue));
+    assertIgnoringCaseKeepsMatches(new StartsWith(TERMINOLOGIES, NAME_FIELD, uppercaseValue));
+    assertIgnoringCaseKeepsMatches(new Contains(TERMINOLOGIES, NAME_FIELD, uppercaseValue));
+  }
+
+  /**
+   * Asserts that the query finds the value equal to its term, and that wrapping it in {@link
+   * CaseInsensitive} still finds everything the query finds on its own.
+   *
+   * @param <Q> the query type
+   * @param query a query whose term is also an indexed value
+   */
+  private <Q extends AtomicQuery & SupportsIgnoringCase> void assertIgnoringCaseKeepsMatches(
+      final Q query) {
+    final Set<String> caseSensitiveNames = fetchMatchingNames(query);
+    final Set<String> caseInsensitiveNames = fetchMatchingNames(new CaseInsensitive(query));
+
+    assertTrue(caseSensitiveNames.contains(query.getTerm()));
+    assertTrue(caseInsensitiveNames.containsAll(caseSensitiveNames));
   }
 
   /**
