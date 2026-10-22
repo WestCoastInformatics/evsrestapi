@@ -1,5 +1,6 @@
 package gov.nih.nci.evs.api.query;
 
+import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 
 /**
@@ -27,7 +28,7 @@ public class CaseInsensitive extends EvsQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery() {
-    return query.fetchCaseInsensitiveOpenSearchQuery();
+  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+    return query.fetchCaseInsensitiveOpenSearchQuery(operations);
   }
 }

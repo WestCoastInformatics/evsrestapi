@@ -3,6 +3,7 @@ package gov.nih.nci.evs.api.query;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
 import org.opensearch.common.unit.Fuzziness;
+import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
@@ -45,7 +46,7 @@ public class Fuzzy extends AtomicQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery() {
+  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
     return QueryBuilders.fuzzyQuery(field, term).fuzziness(fuzziness);
   }
 }

@@ -2,6 +2,7 @@ package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
+import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.MultiMatchQueryBuilder;
 import org.opensearch.index.query.Operator;
 import org.opensearch.index.query.QueryBuilder;
@@ -44,7 +45,7 @@ public class SearchAsYouType extends AtomicQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery() {
+  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
     return QueryBuilders.multiMatchQuery(
             term, field, field + WORD_PAIRS_SUFFIX, field + WORD_TRIPLES_SUFFIX)
         .type(MultiMatchQueryBuilder.Type.BOOL_PREFIX)

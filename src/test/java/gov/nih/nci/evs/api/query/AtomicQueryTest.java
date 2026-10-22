@@ -262,7 +262,7 @@ public class AtomicQueryTest {
   private Set<String> fetchMatchingNames(final EvsQuery query) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
-            .withQuery(query.fetchOpenSearchQuery())
+            .withQuery(query.fetchOpenSearchQuery(operations))
             .withPageable(ALL_NAMES)
             .build();
     return operations.search(search, IndexedName.class, INDEX).stream()

@@ -2,6 +2,7 @@ package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
+import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
@@ -24,13 +25,13 @@ public class Contains extends AtomicQuery implements SupportsIgnoringCase {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery() {
+  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
     return QueryBuilders.wildcardQuery(field, getPattern());
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchCaseInsensitiveOpenSearchQuery() {
+  public QueryBuilder fetchCaseInsensitiveOpenSearchQuery(final OpenSearchOperations operations) {
     return QueryBuilders.wildcardQuery(field, getPattern()).caseInsensitive(true);
   }
 
