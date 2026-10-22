@@ -25,7 +25,7 @@ classDiagram
         <<abstract>>
         #List~Terminology~ terminologies
         +getTerminologies() List~Terminology~
-        +fetchOpenSearchQuery()* QueryBuilder
+        +fetchOpenSearchQuery(OpenSearchOperations)* QueryBuilder
     }
 
     class AtomicQuery {
@@ -43,21 +43,21 @@ classDiagram
 
     class CaseInsensitive {
         -SupportsIgnoringCase query
-        +fetchOpenSearchQuery() QueryBuilder
+        +fetchOpenSearchQuery(OpenSearchOperations) QueryBuilder
     }
 
     class Match {
-        +fetchOpenSearchQuery() TermQueryBuilder
+        +fetchOpenSearchQuery(OpenSearchOperations) TermQueryBuilder
     }
     class Contains {
-        +fetchOpenSearchQuery() WildcardQueryBuilder
+        +fetchOpenSearchQuery(OpenSearchOperations) WildcardQueryBuilder
     }
     class StartsWith {
-        +fetchOpenSearchQuery() PrefixQueryBuilder
+        +fetchOpenSearchQuery(OpenSearchOperations) PrefixQueryBuilder
     }
     class Fuzzy {
         -Fuzziness fuzziness
-        +fetchOpenSearchQuery() FuzzyQueryBuilder
+        +fetchOpenSearchQuery(OpenSearchOperations) FuzzyQueryBuilder
     }
 
     class CompositeQuery {
@@ -81,7 +81,7 @@ classDiagram
 
 | Class | Role |
 |---|---|
-| `EvsQuery` | Base type for every node. Its contract is `fetchOpenSearchQuery()`. It also holds an unmodifiable copy of the terminologies being searched. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
+| `EvsQuery` | Base type for every node. Its contract is `fetchOpenSearchQuery(operations)`. It also holds an unmodifiable copy of the terminologies being searched. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
 | `AtomicQuery` | Base type for leaves. It adds the `field` and `term` every leaf needs and rejects `null` for either. Subclasses only decide which OpenSearch query to build. |
 | `SupportsIgnoringCase` | Implemented by queries that can also run ignoring case: `Match`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper node. It runs the wrapped query ignoring case by calling `fetchCaseInsensitiveOpenSearchQuery()`. The wrapped query is not changed. |
@@ -125,7 +125,7 @@ wrapped in a `nestedQuery`, which is a natural job for a future `Nested` composi
 
 ```java
 final EvsQuery query = new StartsWith(terminologies, "normName", "melan");
-boolQuery.must(query.fetchOpenSearchQuery());
+boolQuery.must(query.fetchOpenSearchQuery(operations));
 ```
 
 ## Ignoring case
@@ -142,6 +142,30 @@ The constructor only accepts queries that implement `SupportsIgnoringCase`, so
 `new CaseInsensitive(new Fuzzy(...))` doesn't compile. To let a new query be wrapped, implement
 `SupportsIgnoringCase` and return the same OpenSearch query with case ignored, usually by calling
 `.caseInsensitive(true)` on the builder.
+
+## Queries about other concepts (joins)
+
+Some nodes hold a query that describes a different concept than the one being matched. For
+example, a role's target: "primary site is Skin or anything below Skin" (spec 1.4). One OpenSearch
+query only looks at one document, and a role entry only stores its target's code, so such a node
+can't become one OpenSearch query.
+
+**How it works:** building such a node runs the inner query first. `fetchOpenSearchQuery(operations)`
+takes the OpenSearch operations so it can. The node calls `EvsQuery.fetchMatchingConcepts`, which
+pages through every matching concept with `search_after` (sorted by code, then index, so pages don't
+overlap), fetching only each concept's code, terminology, and version. The node then matches what
+it found, e.g. with a `terms` query on codes. An inner query can hold its own query about another
+concept, which runs first in the same way, to any depth. Nodes that don't hold a query about
+another concept ignore `operations`.
+
+**Why `operations` is a parameter:** a static lookup hides which nodes search and makes tests
+change global state; injecting it at construction means every tree containing a search needs it
+just to be built. Taking it in `fetchOpenSearchQuery` keeps trees plain data, and lets unit tests pass a
+mock (see `FetchMatchingConceptsTest`).
+
+**Limits are the caller's:** how many codes the caller can match (one `terms` query accepts at most
+65,536 by default) depends on how it uses them, so the node that matches them checks, not the
+fetch.
 
 ## Extending
 
@@ -174,7 +198,7 @@ public class Regex extends AtomicQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery() {
+  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
     return QueryBuilders.regexpQuery(field, term);
   }
 }
@@ -213,10 +237,10 @@ public class And extends EvsQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery() {
+  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
     final BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
     for (final EvsQuery child : children) {
-      boolQuery.must(child.fetchOpenSearchQuery());
+      boolQuery.must(child.fetchOpenSearchQuery(operations));
     }
     return boolQuery;
   }
@@ -243,7 +267,9 @@ final EvsQuery query =
 ### Checklist for a new query
 
 1. Name it after what it matches, and document that behavior in the class Javadoc.
-2. Build an OpenSearch query in `fetchOpenSearchQuery()`. Don't run searches or read services there.
+2. Build an OpenSearch query in `fetchOpenSearchQuery(operations)`. Only run a search there for a query
+   about another concept, through `fetchMatchingConcepts` (see
+   [Queries about other concepts](#queries-about-other-concepts-joins)).
 3. Escape any characters in the term that are syntax for the OpenSearch query you use (see
    `Contains.escapeWildcards`).
 4. If the OpenSearch query supports ignoring case, implement `SupportsIgnoringCase`.
