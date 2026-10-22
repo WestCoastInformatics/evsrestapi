@@ -5,7 +5,7 @@ an OpenSearch `QueryBuilder`. Behavior is chosen by which classes you put in the
 dispatch), not by switching on a `type` string as `OpenSearchServiceImpl.getTermQuery` does.
 
 - **Atomic queries** are the leaves. Each one matches a single field using a single strategy.
-- **Composite queries** (planned) combine other queries with `and`, `or`, and so on.
+- **Logical queries** (`And`, `Or`, `Not`, and the `Boost` wrapper) combine other queries.
 
 Because every node has the same interface, any query can be nested inside any composite:
 
@@ -85,7 +85,7 @@ classDiagram
 | `AtomicQuery` | Base type for leaves. It adds the `field` and `term` every leaf needs and rejects `null` for either. Subclasses only decide which OpenSearch query to build. |
 | `SupportsIgnoringCase` | Implemented by queries that can also run ignoring case: `Match`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper node. It runs the wrapped query ignoring case by calling `fetchCaseInsensitiveOpenSearchQuery()`. The wrapped query is not changed. |
-| `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a term. |
+| `And`, `Or`, `Not`, `Boost` | Logical queries. They hold child `EvsQuery` nodes instead of a field and a term. See [Logical queries](#logical-queries). |
 
 ## Atomic queries
 
@@ -100,6 +100,17 @@ Apart from `SearchAsYouType`, the atomic queries are **case sensitive** and comp
 | `StartsWith` | begins with the term | `prefix` |
 | `Fuzzy` | is within a small edit distance of the term (`Fuzziness.AUTO` by default, or pass one) | `fuzzy` |
 | `SearchAsYouType` | contains every typed word in any order, with only the last word allowed to be partial. Ignores case. Needs a field mapped as `search_as_you_type` | `multi_match` of type `bool_prefix` over the field and its `._2gram` / `._3gram` subfields |
+
+## Logical queries
+
+| Class | Matches when… | OpenSearch query |
+|---|---|---|
+| `And` | every child matches. No children matches everything. | `bool` with each child in `must` |
+| `Or` | at least one child matches. No children matches **nothing**, so an empty list of alternatives (e.g. a dependency that found no concepts) doesn't widen a search to everything. | `bool` with each child in `should`, `minimum_should_match: 1`; `must_not: match_all` when empty |
+| `Not` | the child doesn't match, including when the child's field is missing. Adds nothing to the score. | `bool` with `filter: match_all` and the child in `must_not` |
+| `Boost` | the child matches. Every match gets the same fixed score, however well it matched, so boosted alternatives inside an `Or` rank in tiers. | `constant_score` with `boost` |
+
+`LogicalQueryTest` runs each against a test index.
 
 ### Choosing a field
 
