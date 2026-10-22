@@ -32,8 +32,8 @@ import org.springframework.data.elasticsearch.core.query.Query;
 
 /**
  * Unit tests for {@link EvsQuery#declareDependencies}, which runs a query about another concept
- * (e.g. a role target) and returns every match, a page at a time, and for {@link RoleTarget}'s
- * limit on how many target codes it can match.
+ * (e.g. a role target) and returns every match, a page at a time, and for {@link HasRole}'s limit
+ * on how many target codes it can match.
  *
  * <p>No OpenSearch or Spring: a mocked {@link OpenSearchOperations} returns pages of made-up
  * concepts. That makes it cheap to return more than one page, or more codes than one {@code terms}
@@ -149,12 +149,12 @@ public class DeclareDependenciesTest {
   }
 
   /**
-   * A role target matching more codes than one {@code terms} query accepts fails, rather than
-   * cutting the codes short.
+   * A role target matching more codes in one terminology version than one {@code terms} query
+   * accepts fails, rather than cutting the codes short.
    */
   @Test
   public void testRoleTargetWithMoreCodesThanOneTermsQueryAcceptsFails() {
-    final int pagesOverLimit = RoleTarget.MAX_TARGET_CODES / EvsQuery.CONCEPTS_PER_PAGE + 1;
+    final int pagesOverLimit = HasRole.MAX_TARGET_CODES / EvsQuery.CONCEPTS_PER_PAGE + 1;
     final AtomicInteger pagesReturned = new AtomicInteger();
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenAnswer(
@@ -164,9 +164,9 @@ public class DeclareDependenciesTest {
               final int hitCount = isLastPage ? 0 : EvsQuery.CONCEPTS_PER_PAGE;
               return getPage(pageNumber * EvsQuery.CONCEPTS_PER_PAGE, hitCount);
             });
-    final RoleTarget roleTarget = new RoleTarget(query);
+    final HasRole hasRole = new HasRole(terminologies, new RoleType("R101"), new RoleTarget(query));
 
-    assertThrows(IllegalStateException.class, () -> roleTarget.fetchOpenSearchQuery(operations));
+    assertThrows(IllegalStateException.class, () -> hasRole.fetchOpenSearchQuery(operations));
   }
 
   /**

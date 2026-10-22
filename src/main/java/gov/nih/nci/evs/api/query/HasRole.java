@@ -1,8 +1,11 @@
 package gov.nih.nci.evs.api.query;
 
+import gov.nih.nci.evs.api.model.ConceptMinimal;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -20,7 +23,9 @@ import org.opensearch.index.query.QueryBuilders;
  * Target codes are always matched exactly.
  *
  * <p>A target is a query over other concepts. Building this query runs the target query first and
- * matches the codes it found (see {@link RoleTarget}).
+ * matches the concepts it found (see {@link RoleTarget}). A role's target code refers to a concept
+ * in the same terminology and version as the role's concept, and two versions share codes. So a
+ * target found in one terminology version only matches roles on concepts from that version.
  *
  * <p>Needs concept indexes mapped with nested roles. On an index loaded before that mapping, the
  * search fails instead of silently returning nothing.
@@ -29,6 +34,24 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
 
   /** Path of the nested role entries in a concept document. */
   private static final String ROLES_PATH = "roles";
+
+  /** Field holding the code of the concept a role points to. */
+  private static final String TARGET_CODE_FIELD = "roles.relatedCode";
+
+  /** Exact terminology of the concept holding the roles. */
+  private static final String TERMINOLOGY_FIELD = "terminology." + ConceptMinimal.KEYWORD_SUFFIX;
+
+  /** Exact version of the concept holding the roles. */
+  private static final String VERSION_FIELD = "version." + ConceptMinimal.KEYWORD_SUFFIX;
+
+  /** A concept matches when its roles match the targets of any one terminology version. */
+  private static final int MINIMUM_MATCHING_TERMINOLOGY_VERSIONS = 1;
+
+  /**
+   * Most target codes in one terminology version: OpenSearch's default index.max_terms_count, the
+   * most codes one {@code terms} query accepts.
+   */
+  static final int MAX_TARGET_CODES = 65_536;
 
   /**
    * The role's type: the kind of relationship the role expresses, e.g.
@@ -109,7 +132,7 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
    */
   @Override
   public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
-    return getRoleEntryQuery(roleType.getQueryBuilder(), operations);
+    return getRoleQuery(roleType.getQueryBuilder(), operations);
   }
 
   /**
@@ -121,30 +144,115 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
    */
   @Override
   public QueryBuilder fetchCaseInsensitiveOpenSearchQuery(final OpenSearchOperations operations) {
-    return getRoleEntryQuery(roleType.getCaseInsensitiveQueryBuilder(), operations);
+    return getRoleQuery(roleType.getCaseInsensitiveQueryBuilder(), operations);
   }
 
   /**
-   * Builds a query matching concepts that have at least one role entry satisfying both the type
-   * query and, if there is one, the target. A role entry is one item in the concept's {@code roles}
-   * list, pairing a type with a target.
+   * Builds the query on this node's roles. Without a target, any role entry of the type matches.
+   * With one, the target query runs first, and a role entry must point to one of the concepts it
+   * found in the same terminology version.
+   *
+   * @param roleTypeQuery the query on the role's type
+   * @param operations the OpenSearch operations, for running the target query
+   * @return the query builder
+   */
+  private QueryBuilder getRoleQuery(
+      final QueryBuilder roleTypeQuery, final OpenSearchOperations operations) {
+    final boolean hasRoleTarget = getHasRoleTarget();
+    if (!hasRoleTarget) {
+      return getRoleEntryQuery(roleTypeQuery);
+    }
+    final ConceptKeys targetKeys = declareDependencies(operations, roleTarget.getQuery()).get(0);
+    final boolean hasFoundTargetConcepts = !targetKeys.getCodesByTerminologyVersion().isEmpty();
+    if (!hasFoundTargetConcepts) {
+      // A bool query with no clauses would match everything, so match nothing explicitly
+      return QueryBuilders.boolQuery().mustNot(QueryBuilders.matchAllQuery());
+    }
+    return getTargetInOwnVersionQuery(roleTypeQuery, targetKeys);
+  }
+
+  /**
+   * Builds a query matching concepts whose role points to a target concept from the concept's own
+   * terminology version. Versions share codes, so a target found in one version must not match
+   * roles on concepts from another. There is one clause per version the targets came from, and a
+   * concept matches when the clause for its version does.
+   *
+   * @param roleTypeQuery the query on the role's type
+   * @param targetKeys the target concepts, from any of the searched terminology versions
+   * @return the query builder
+   */
+  private static QueryBuilder getTargetInOwnVersionQuery(
+      final QueryBuilder roleTypeQuery, final ConceptKeys targetKeys) {
+    final BoolQueryBuilder targetInOwnVersionQuery =
+        QueryBuilders.boolQuery().minimumShouldMatch(MINIMUM_MATCHING_TERMINOLOGY_VERSIONS);
+    for (final Map.Entry<ConceptKeys.TerminologyVersion, Set<String>> versionTargetCodes :
+        targetKeys.getCodesByTerminologyVersion().entrySet()) {
+      targetInOwnVersionQuery.should(
+          getTerminologyVersionQuery(
+              roleTypeQuery, versionTargetCodes.getKey(), versionTargetCodes.getValue()));
+    }
+    return targetInOwnVersionQuery;
+  }
+
+  /**
+   * Builds a query matching concepts from one terminology version whose role points to one of that
+   * version's target codes. The terminology and version are checked on the concept, outside the
+   * nested query, because a nested query only sees the role entry's own fields.
+   *
+   * @param roleTypeQuery the query on the role's type
+   * @param terminologyVersion the terminology version
+   * @param targetCodes the target codes in that terminology version
+   * @return the query builder
+   * @throws IllegalStateException if there are more target codes than one {@code terms} query
+   *     accepts
+   */
+  private static QueryBuilder getTerminologyVersionQuery(
+      final QueryBuilder roleTypeQuery,
+      final ConceptKeys.TerminologyVersion terminologyVersion,
+      final Set<String> targetCodes) {
+    checkTargetCodeCount(targetCodes.size());
+    final QueryBuilder roleEntryConditions =
+        QueryBuilders.boolQuery()
+            .must(roleTypeQuery)
+            .must(QueryBuilders.termsQuery(TARGET_CODE_FIELD, targetCodes));
+    return QueryBuilders.boolQuery()
+        .filter(QueryBuilders.termQuery(TERMINOLOGY_FIELD, terminologyVersion.terminology()))
+        .filter(QueryBuilders.termQuery(VERSION_FIELD, terminologyVersion.version()))
+        .filter(getRoleEntryQuery(roleEntryConditions));
+  }
+
+  /**
+   * Builds a query matching concepts that have at least one role entry satisfying all the given
+   * conditions. A role entry is one item in the concept's {@code roles} list, pairing a type with a
+   * target.
    *
    * <p>The conditions must hold on the same entry, which is why this is a {@code nested} query.
    * Without it, OpenSearch flattens every entry's fields together, and "Lung Carcinoma" (primary
    * site Lung, associated site Skin) would match "primary site: Skin" by taking the type from one
    * entry and the target from the other.
    *
-   * @param roleTypeQuery the query on the role's type
-   * @param operations the OpenSearch operations, for running the target query
+   * @param roleEntryConditions the conditions one role entry must meet
    * @return the query builder
    */
-  private QueryBuilder getRoleEntryQuery(
-      final QueryBuilder roleTypeQuery, final OpenSearchOperations operations) {
-    final BoolQueryBuilder roleEntryQuery = QueryBuilders.boolQuery().must(roleTypeQuery);
-    final boolean hasRoleTarget = getHasRoleTarget();
-    if (hasRoleTarget) {
-      roleEntryQuery.must(roleTarget.fetchOpenSearchQuery(operations));
+  private static QueryBuilder getRoleEntryQuery(final QueryBuilder roleEntryConditions) {
+    return QueryBuilders.nestedQuery(ROLES_PATH, roleEntryConditions, ScoreMode.None);
+  }
+
+  /**
+   * Fails if a terminology version has more target codes than one {@code terms} query accepts,
+   * rather than cutting the codes short and silently giving wrong results.
+   *
+   * @param targetCodeCount the number of target codes in one terminology version
+   * @throws IllegalStateException if there are too many
+   */
+  private static void checkTargetCodeCount(final int targetCodeCount) {
+    final boolean hasTooManyTargetCodes = targetCodeCount > MAX_TARGET_CODES;
+    if (hasTooManyTargetCodes) {
+      throw new IllegalStateException(
+          "A role target matched more than "
+              + MAX_TARGET_CODES
+              + " concepts in one terminology version, more than one OpenSearch terms query"
+              + " accepts. Narrow the role target.");
     }
-    return QueryBuilders.nestedQuery(ROLES_PATH, roleEntryQuery, ScoreMode.None);
   }
 }

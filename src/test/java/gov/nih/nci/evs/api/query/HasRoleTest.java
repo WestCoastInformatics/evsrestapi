@@ -54,7 +54,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  * and primary site at or below C12219 finds 64; below Neoplasm (C3262) with primary site at or
  * below C12219 finds 13,335. The C3262 branch has 15,233 descendants, so a target over it also
  * exercises paging past one page of codes against a live index. Paging and the code limit are unit
- * tested with mocks in {@link FetchMatchingCodesTest}.
+ * tested with mocks in {@link FetchMatchingConceptsTest}.
  */
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
@@ -63,6 +63,24 @@ public class HasRoleTest {
 
   /** A throwaway index used only by this tutorial. */
   private static final String INDEX_NAME = "evs_has_role_tutorial";
+
+  /**
+   * A second throwaway index, standing in for the next version of the same terminology. It reuses
+   * Skin's code for a concept named "Integument", so codes alone can't tell the versions apart.
+   */
+  private static final String NEXT_VERSION_INDEX_NAME = "evs_has_role_tutorial_next_version";
+
+  /** Terminology of every tutorial concept. */
+  private static final String TERMINOLOGY = "ncit";
+
+  /** Version of the concepts in the tutorial index. */
+  private static final String VERSION = "25.12e";
+
+  /** Version of the concepts in {@link #NEXT_VERSION_INDEX_NAME}. */
+  private static final String NEXT_VERSION = "26.01a";
+
+  /** A code no indexed concept has. */
+  private static final String UNUSED_CODE = "C00000";
 
   /** One page large enough to hold every indexed concept. */
   private static final Pageable ALL_CONCEPTS = PageRequest.of(0, 100);
@@ -123,6 +141,16 @@ public class HasRoleTest {
           getConcept(LUNG, "Lung"),
           getConcept(LIVER, "Liver"));
 
+  /**
+   * The concepts in {@link #NEXT_VERSION_INDEX_NAME}. Skin's code now names "Integument", and a
+   * melanoma points to it as its primary site.
+   */
+  private static final List<Concept> NEXT_VERSION_CONCEPTS =
+      List.of(
+          getConcept(SKIN, "Integument"),
+          getConcept(
+              "C06", "Melanoma of Integument", getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, SKIN)));
+
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
   @Autowired private OpensearchOperationsService operationsService;
 
@@ -132,27 +160,25 @@ public class HasRoleTest {
   /** The terminology whose concept index is the tutorial index. */
   private List<Terminology> terminologies;
 
-  /** Creates the index, mapped like a concept index, and loads {@link #INDEXED_CONCEPTS}. */
-  @BeforeAll
-  public void setUpIndex() {
-    operations = operationsService.getOpenSearchOperations();
-    final IndexCoordinates index = IndexCoordinates.of(INDEX_NAME);
-    final IndexOperations indexOperations = operations.indexOps(index);
-    indexOperations.delete();
-    indexOperations.create();
-    indexOperations.putMapping(Concept.class);
-    operations.save(INDEXED_CONCEPTS, index);
-    indexOperations.refresh();
+  /** Both versions: the tutorial index and {@link #NEXT_VERSION_INDEX_NAME}. */
+  private List<Terminology> bothVersions;
 
-    final Terminology terminology = new Terminology();
-    terminology.setIndexName(INDEX_NAME);
-    terminologies = List.of(terminology);
+  /** Creates both indexes, mapped like concept indexes, and loads their concepts. */
+  @BeforeAll
+  public void setUpIndexes() {
+    operations = operationsService.getOpenSearchOperations();
+    createIndex(INDEX_NAME, VERSION, INDEXED_CONCEPTS);
+    createIndex(NEXT_VERSION_INDEX_NAME, NEXT_VERSION, NEXT_VERSION_CONCEPTS);
+
+    terminologies = List.of(getTerminology(INDEX_NAME));
+    bothVersions = List.of(getTerminology(INDEX_NAME), getTerminology(NEXT_VERSION_INDEX_NAME));
   }
 
-  /** Removes the index. */
+  /** Removes both indexes. */
   @AfterAll
-  public void tearDownIndex() {
+  public void tearDownIndexes() {
     operations.indexOps(IndexCoordinates.of(INDEX_NAME)).delete();
+    operations.indexOps(IndexCoordinates.of(NEXT_VERSION_INDEX_NAME)).delete();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -234,6 +260,45 @@ public class HasRoleTest {
         new HasRole(terminologies, new RoleType(COMPLICATION_OF), new RoleTarget(skinDiseases));
 
     assertEquals(Set.of("Skin Ulcer"), fetchMatchingNames(query));
+  }
+
+  /** A target matching no concepts finds nothing, rather than matching any target. */
+  @Test
+  public void testTargetMatchingNothingFindsNothing() {
+    final EvsQuery query = getHasRole(PRIMARY_SITE, UNUSED_CODE);
+
+    assertEquals(Set.of(), fetchMatchingNames(query));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Lesson 2c: a target only matches roles in the terminology version it was found in.
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Searching both versions, the target "concepts named Skin" is only found in the first version.
+   * The next version's melanoma points to the same code, but there that code names "Integument", so
+   * it doesn't match.
+   */
+  @Test
+  public void testTargetFoundInOneVersionOnlyMatchesRolesInThatVersion() {
+    final EvsQuery namedSkin = new Match(bothVersions, "normName", ConceptUtils.normalize("Skin"));
+    final EvsQuery query =
+        new HasRole(bothVersions, new RoleType(PRIMARY_SITE), new RoleTarget(namedSkin));
+
+    assertEquals(
+        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"), fetchMatchingNames(query));
+  }
+
+  /** A target found in both versions matches roles in both. */
+  @Test
+  public void testTargetFoundInBothVersionsMatchesRolesInBoth() {
+    final EvsQuery skinCode = new Match(bothVersions, CODE_FIELD, SKIN);
+    final EvsQuery query =
+        new HasRole(bothVersions, new RoleType(PRIMARY_SITE), new RoleTarget(skinCode));
+
+    assertEquals(
+        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin", "Melanoma of Integument"),
+        fetchMatchingNames(query));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -331,13 +396,13 @@ public class HasRoleTest {
   }
 
   /**
-   * Runs the query against the tutorial index.
+   * Runs the query against the indexes it searches.
    *
    * @param query the query to run
    * @return the names of the matching concepts
    */
   private Set<String> fetchMatchingNames(final EvsQuery query) {
-    return fetchMatchingNames(query.fetchOpenSearchQuery(operations));
+    return fetchMatchingNames(query.fetchOpenSearchQuery(operations), query.getIndexCoordinates());
   }
 
   /**
@@ -347,12 +412,58 @@ public class HasRoleTest {
    * @return the names of the matching concepts
    */
   private Set<String> fetchMatchingNames(final QueryBuilder query) {
+    return fetchMatchingNames(query, IndexCoordinates.of(INDEX_NAME));
+  }
+
+  /**
+   * Runs the OpenSearch query against the given indexes.
+   *
+   * @param query the query to run
+   * @param indexes the indexes to search
+   * @return the names of the matching concepts
+   */
+  private Set<String> fetchMatchingNames(final QueryBuilder query, final IndexCoordinates indexes) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder().withQuery(query).withPageable(ALL_CONCEPTS).build();
-    return operations.search(search, Concept.class, IndexCoordinates.of(INDEX_NAME)).stream()
+    return operations.search(search, Concept.class, indexes).stream()
         .map(SearchHit::getContent)
         .map(Concept::getName)
         .collect(Collectors.toSet());
+  }
+
+  /**
+   * Creates an index mapped like a concept index and loads the concepts into it, as one version of
+   * the tutorial terminology.
+   *
+   * @param indexName the index name
+   * @param version the version the concepts belong to
+   * @param concepts the concepts to load
+   */
+  private void createIndex(
+      final String indexName, final String version, final List<Concept> concepts) {
+    for (final Concept concept : concepts) {
+      concept.setTerminology(TERMINOLOGY);
+      concept.setVersion(version);
+    }
+    final IndexCoordinates index = IndexCoordinates.of(indexName);
+    final IndexOperations indexOperations = operations.indexOps(index);
+    indexOperations.delete();
+    indexOperations.create();
+    indexOperations.putMapping(Concept.class);
+    operations.save(concepts, index);
+    indexOperations.refresh();
+  }
+
+  /**
+   * Builds a terminology whose concept index is the given index.
+   *
+   * @param indexName the index name
+   * @return the terminology
+   */
+  private static Terminology getTerminology(final String indexName) {
+    final Terminology terminology = new Terminology();
+    terminology.setIndexName(indexName);
+    return terminology;
   }
 
   /**
