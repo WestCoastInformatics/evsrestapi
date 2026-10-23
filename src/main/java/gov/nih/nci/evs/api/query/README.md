@@ -15,6 +15,21 @@ Because every node has the same interface, any query can be nested inside any co
          (starts-with "normName" "blood")))
 ```
 
+## Logical operators: use raw OpenSearch for now
+
+The plan is to build queries almost entirely from logical operator nodes (`And`, `Or`, `Not`,
+`Boost`, and similar), with raw OpenSearch `QueryBuilder`s only inside the atomic leaves. Those
+nodes exist on a separate branch but **aren't tested yet, so don't build on them.**
+
+Until they land, combine conditions inside your node's `fetchOpenSearchQuery` with raw OpenSearch
+(`QueryBuilders.boolQuery()`, `nestedQuery`, `constantScoreQuery`, ...). Expect that code to be
+refactored onto the logical nodes later. To keep that refactor mechanical:
+
+- Build leaf conditions with the atomic nodes (`Match`, `StartsWith`, ...) and call their
+  `fetchOpenSearchQuery`, rather than writing `termQuery`/`prefixQuery` by hand.
+- Keep the raw combining code (`bool`, `must`, `should`, `must_not`, `constant_score`) in small,
+  clearly named helpers, so each one maps onto a single logical node.
+
 ## Hierarchy
 
 ```mermaid
@@ -207,6 +222,10 @@ public class Regex extends AtomicQuery {
 ```
 
 ### Adding a composite query
+
+> Don't add `And`, `Or`, `Not`, or similar yourself: they're coming from a separate branch (see
+> [Logical operators](#logical-operators-use-raw-opensearch-for-now)). This section describes how
+> composites are meant to work.
 
 Extend `EvsQuery` directly. A composite holds child nodes and combines their builders. It never
 needs to know which concrete classes its children are. For example, `And`:
