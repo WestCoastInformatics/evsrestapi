@@ -40,6 +40,9 @@ public abstract class EvsQuery {
   /** Field that orders concepts within a terminology. */
   private static final String CODE_FIELD = "code";
 
+  /** Where a hit's code is among its sort values: the key pages sort by code first. */
+  private static final int CODE_SORT_VALUE_POSITION = 0;
+
   /**
    * Concepts fetched per page by {@link #declareDependencies}, at OpenSearch's default page limit.
    */
@@ -198,6 +201,7 @@ public abstract class EvsQuery {
       final Map<ConceptKeys.TerminologyVersion, Set<String>> codesByTerminologyVersion) {
     final Map<String, ConceptKeys.TerminologyVersion> terminologyVersionsByIndex =
         getTerminologyVersionsByIndex();
+
     // List<Object> is the shape of the page cursor that is relevant to OpenSearch
     // what is actually in it is largely irrelevant to us beyond the fact that OpenSearch
     // can use it as a pageCursor
@@ -248,17 +252,49 @@ public abstract class EvsQuery {
       final SearchHits<Concept> page) {
     for (final SearchHit<Concept> hit : page.getSearchHits()) {
       final ConceptKeys.TerminologyVersion terminologyVersion =
-          terminologyVersionsByIndex.get(hit.getIndex());
-      // The search only covers this node's indexes, so every hit should be in one of them. If not
-      // (e.g. a terminology's indexName is an alias, and hits name the real index), the hit's
-      // terminology version is unknown: fail rather than drop or mislabel its code
-      if (terminologyVersion == null) {
-        throw new IllegalStateException(
-            "Hit from index " + hit.getIndex() + ", which isn't a searched terminology's index");
-      }
-      final String code = (String) hit.getSortValues().get(0);
-      codesByTerminologyVersion.computeIfAbsent(terminologyVersion, k -> new HashSet<>()).add(code);
+          getHitTerminologyVersion(hit, terminologyVersionsByIndex);
+      final String code = getHitCode(hit);
+
+      codesByTerminologyVersion
+          .computeIfAbsent(terminologyVersion, newTerminologyVersion -> new HashSet<>())
+          .add(code);
     }
+  }
+
+  /**
+   * Returns the terminology version of the index a hit is in.
+   *
+   * @param hit the hit
+   * @param terminologyVersionsByIndex the terminology version of each searched index
+   * @return the hit's terminology version
+   * @throws IllegalStateException if the hit is in an index that isn't a searched terminology's
+   */
+  private static ConceptKeys.TerminologyVersion getHitTerminologyVersion(
+      final SearchHit<Concept> hit,
+      final Map<String, ConceptKeys.TerminologyVersion> terminologyVersionsByIndex) {
+    final ConceptKeys.TerminologyVersion terminologyVersion =
+        terminologyVersionsByIndex.get(hit.getIndex());
+
+    // The search only covers this node's indexes, so every hit should be in one of them. If not
+    // (e.g. a terminology's indexName is an alias, and hits name the real index), the hit's
+    // terminology version is unknown: fail rather than drop or mislabel its code
+    final boolean isInSearchedIndex = terminologyVersion != null;
+    if (!isInSearchedIndex) {
+      throw new IllegalStateException(
+          "Hit from index " + hit.getIndex() + ", which isn't a searched terminology's index");
+    }
+
+    return terminologyVersion;
+  }
+
+  /**
+   * Returns a hit's code, read from its sort values rather than its document.
+   *
+   * @param hit the hit
+   * @return the code
+   */
+  private static String getHitCode(final SearchHit<Concept> hit) {
+    return (String) hit.getSortValues().get(CODE_SORT_VALUE_POSITION);
   }
 
   /**

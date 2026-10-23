@@ -32,7 +32,11 @@ public final class ConceptKeys {
   static ConceptKeys of(final Map<TerminologyVersion, Set<String>> codesByTerminologyVersion) {
     return new ConceptKeys(
         codesByTerminologyVersion.entrySet().stream()
-            .collect(Collectors.toMap(Map.Entry::getKey, e -> Set.copyOf(e.getValue()))));
+            .collect(
+                Collectors.toMap(
+                    Map.Entry::getKey,
+                    codesOfTerminologyVersion ->
+                        Set.copyOf(codesOfTerminologyVersion.getValue()))));
   }
 
   /**

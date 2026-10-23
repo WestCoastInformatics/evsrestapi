@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -49,6 +50,12 @@ public class DeclareDependenciesTest {
 
   /** Hits on a page that isn't full, so it's the last page. */
   private static final int PARTIAL_PAGE_SIZE = 3;
+
+  /** The current version of the made-up terminology, for queries over two versions. */
+  private static final String CURRENT_VERSION = "25.12e";
+
+  /** The previous version of the made-up terminology, for queries over two versions. */
+  private static final String PREVIOUS_VERSION = "25.11d";
 
   /** The terminology searched. */
   private List<Terminology> terminologies;
@@ -98,13 +105,41 @@ public class DeclareDependenciesTest {
   }
 
   /**
-   * Each hit's code is its first sort value, and its terminology version is that of the index it
-   * came from. The hit's content isn't read: with no stored fields, it's empty.
+   * Each hit's code is its first sort value. The hit's content isn't read: with no stored fields,
+   * it's empty.
    */
   @Test
-  public void testKeysComeFromSortValuesAndIndex() {
-    final Terminology current = getTerminology("concept_ncit_2512e", "25.12e");
-    final Terminology previous = getTerminology("concept_ncit_2511d", "25.11d");
+  public void testCodeComesFromFirstSortValue() {
+    final ConceptKeys keys = fetchTwoVersionKeys();
+
+    final Set<String> codes =
+        keys.getCodesByTerminologyVersion().values().stream()
+            .flatMap(Set::stream)
+            .collect(Collectors.toSet());
+    assertEquals(Set.of("C1", "C2"), codes);
+  }
+
+  /** Each hit's terminology version is that of the index it came from. */
+  @Test
+  public void testTerminologyVersionComesFromHitIndex() {
+    final ConceptKeys keys = fetchTwoVersionKeys();
+
+    assertEquals(
+        Map.of(
+            new ConceptKeys.TerminologyVersion(TERMINOLOGY, CURRENT_VERSION), Set.of("C1", "C2"),
+            new ConceptKeys.TerminologyVersion(TERMINOLOGY, PREVIOUS_VERSION), Set.of("C1")),
+        keys.getCodesByTerminologyVersion());
+  }
+
+  /**
+   * Runs a dependency query over two versions of the terminology, whose search returns empty hits:
+   * C1 and C2 from the current version's index, and C1 from the previous version's.
+   *
+   * @return the keys the dependency found
+   */
+  private ConceptKeys fetchTwoVersionKeys() {
+    final Terminology current = getTerminology("concept_ncit_2512e", CURRENT_VERSION);
+    final Terminology previous = getTerminology("concept_ncit_2511d", PREVIOUS_VERSION);
     final EvsQuery twoVersionQuery = new Match(List.of(current, previous), "code", "C12470");
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(
@@ -114,13 +149,7 @@ public class DeclareDependenciesTest {
                     getEmptyHit("C1", previous.getIndexName()),
                     getEmptyHit("C2", current.getIndexName()))));
 
-    final ConceptKeys keys = EvsQuery.declareDependencies(operations, twoVersionQuery).get(0);
-
-    assertEquals(
-        Map.of(
-            new ConceptKeys.TerminologyVersion(TERMINOLOGY, "25.12e"), Set.of("C1", "C2"),
-            new ConceptKeys.TerminologyVersion(TERMINOLOGY, "25.11d"), Set.of("C1")),
-        keys.getCodesByTerminologyVersion());
+    return EvsQuery.declareDependencies(operations, twoVersionQuery).get(0);
   }
 
   /**
