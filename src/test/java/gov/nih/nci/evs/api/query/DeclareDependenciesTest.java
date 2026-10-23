@@ -37,6 +37,7 @@ import org.springframework.data.elasticsearch.core.query.Query;
  * concepts. That makes it cheap to return more than one page, which would otherwise take tens of
  * thousands of indexed documents.
  */
+@DemonstratesFieldMatch
 public class DeclareDependenciesTest {
 
   /** Index name the mocked pages claim their hits came from. */
@@ -60,8 +61,11 @@ public class DeclareDependenciesTest {
   /** The terminology searched. */
   private List<Terminology> terminologies;
 
-  /** The query whose matching concepts are fetched. The mock ignores what it matches. */
-  private EvsQuery query;
+  /**
+   * Concepts with Skin's code, whose matching concepts are fetched. The mock ignores what it
+   * matches.
+   */
+  private EvsQuery conceptsWithSkinCode;
 
   /** Mocked OpenSearch operations, stubbed per test. */
   private OpenSearchOperations operations;
@@ -71,7 +75,7 @@ public class DeclareDependenciesTest {
   public void setUp() {
     terminologies =
         List.of(QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME));
-    query = new Match(terminologies, "code", "C12470");
+    conceptsWithSkinCode = new FieldMatch(terminologies, "code", new Exact("C12470"));
     operations = mock(OpenSearchOperations.class);
   }
 
@@ -141,7 +145,8 @@ public class DeclareDependenciesTest {
         QueryTestTerminologies.getTerminology(TERMINOLOGY, CURRENT_VERSION, "concept_ncit_2512e");
     final Terminology previous =
         QueryTestTerminologies.getTerminology(TERMINOLOGY, PREVIOUS_VERSION, "concept_ncit_2511d");
-    final EvsQuery twoVersionQuery = new Match(List.of(current, previous), "code", "C12470");
+    final EvsQuery conceptsWithSkinCodeInTwoVersions =
+        new FieldMatch(List.of(current, previous), "code", new Exact("C12470"));
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(
             getPage(
@@ -150,7 +155,7 @@ public class DeclareDependenciesTest {
                     getEmptyHit("C1", previous.getIndexName()),
                     getEmptyHit("C2", current.getIndexName()))));
 
-    return EvsQuery.declareDependencies(operations, twoVersionQuery).get(0);
+    return EvsQuery.declareDependencies(operations, conceptsWithSkinCodeInTwoVersions).get(0);
   }
 
   /**
@@ -192,12 +197,12 @@ public class DeclareDependenciesTest {
   }
 
   /**
-   * Runs {@link #query} as a dependency and counts the codes it found.
+   * Runs {@link #conceptsWithSkinCode} as a dependency and counts the codes it found.
    *
    * @return the number of codes found, across terminology versions
    */
   private int fetchDependencyCodeCount() {
-    final ConceptKeys keys = EvsQuery.declareDependencies(operations, query).get(0);
+    final ConceptKeys keys = EvsQuery.declareDependencies(operations, conceptsWithSkinCode).get(0);
     return keys.getCodesByTerminologyVersion().values().stream().mapToInt(Set::size).sum();
   }
 

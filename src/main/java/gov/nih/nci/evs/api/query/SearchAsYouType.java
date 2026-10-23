@@ -1,8 +1,6 @@
 package gov.nih.nci.evs.api.query;
 
-import gov.nih.nci.evs.api.model.Terminology;
-import java.util.List;
-import org.opensearch.data.core.OpenSearchOperations;
+import java.util.Objects;
 import org.opensearch.index.query.MultiMatchQueryBuilder;
 import org.opensearch.index.query.Operator;
 import org.opensearch.index.query.QueryBuilder;
@@ -22,8 +20,10 @@ import org.opensearch.index.query.QueryBuilders;
  * <p>The field must be mapped as {@code search_as_you_type}. OpenSearch then also indexes the
  * word-pair and word-triple subfields this query searches, which rank names with the words in the
  * typed order higher.
+ *
+ * @param term the text typed so far
  */
-public class SearchAsYouType extends AtomicQuery {
+public record SearchAsYouType(String term) implements ValueMatch {
 
   /** Subfield holding adjacent word pairs, created by the search_as_you_type mapping. */
   private static final String WORD_PAIRS_SUFFIX = "._2gram";
@@ -34,18 +34,15 @@ public class SearchAsYouType extends AtomicQuery {
   /**
    * Instantiates a {@link SearchAsYouType}.
    *
-   * @param terminologies the terminologies being searched
-   * @param field the search_as_you_type field to match against
    * @param term the text typed so far
    */
-  public SearchAsYouType(
-      final List<Terminology> terminologies, final String field, final String term) {
-    super(terminologies, field, term);
+  public SearchAsYouType {
+    Objects.requireNonNull(term, "term");
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder getQueryBuilder(final String field) {
     return QueryBuilders.multiMatchQuery(
             term, field, field + WORD_PAIRS_SUFFIX, field + WORD_TRIPLES_SUFFIX)
         .type(MultiMatchQueryBuilder.Type.BOOL_PREFIX)

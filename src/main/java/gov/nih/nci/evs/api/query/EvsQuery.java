@@ -22,8 +22,8 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 
 /**
- * A node in an EVS search query tree. Atomic queries match a single field with a single strategy;
- * composite queries combine other {@link EvsQuery} nodes.
+ * A node in an EVS search query tree. A {@link FieldMatch} matches a single field with a {@link
+ * ValueMatch}; composite queries combine other {@link EvsQuery} nodes.
  *
  * <p>Building a node's query may run searches first. A node can depend on other concepts, e.g. a
  * role's target. One OpenSearch query only looks at one document, so the node runs the other query

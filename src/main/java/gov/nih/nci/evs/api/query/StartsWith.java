@@ -1,34 +1,34 @@
 package gov.nih.nci.evs.api.query;
 
-import gov.nih.nci.evs.api.model.Terminology;
-import java.util.List;
-import org.opensearch.data.core.OpenSearchOperations;
+import java.util.Objects;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
-/** Matches values that begin with the term (case sensitive). */
-public class StartsWith extends AtomicQuery implements SupportsIgnoringCase {
+/**
+ * Matches values that begin with the term (case sensitive).
+ *
+ * @param term the prefix the value must begin with
+ */
+public record StartsWith(String term) implements SupportsIgnoringCase {
 
   /**
    * Instantiates a {@link StartsWith}.
    *
-   * @param terminologies the terminologies being searched
-   * @param field the field to match against
    * @param term the prefix the value must begin with
    */
-  public StartsWith(final List<Terminology> terminologies, final String field, final String term) {
-    super(terminologies, field, term);
+  public StartsWith {
+    Objects.requireNonNull(term, "term");
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder getQueryBuilder(final String field) {
     return QueryBuilders.prefixQuery(field, term);
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchCaseInsensitiveOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder getCaseInsensitiveQueryBuilder(final String field) {
     return QueryBuilders.prefixQuery(field, term).caseInsensitive(true);
   }
 }

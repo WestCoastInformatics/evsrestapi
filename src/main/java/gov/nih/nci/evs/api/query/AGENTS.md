@@ -4,7 +4,7 @@
 
 This package models a concept search as a tree of query nodes (`EvsQuery`). Each node builds its
 OpenSearch query in `fetchOpenSearchQuery(operations)`. Read `README.md` in this package before
-adding or changing a node: it covers the atomic queries, `CaseInsensitive`, queries about other
+adding or changing a node: it covers field and value matches, `CaseInsensitive`, queries about other
 concepts (`declareDependencies`), and how to add a new node.
 
 ## Combining Conditions: Raw OpenSearch For Now
@@ -15,11 +15,14 @@ concepts (`declareDependencies`), and how to add a new node.
 - Until they land, combine conditions inside `fetchOpenSearchQuery` with raw OpenSearch
   (`QueryBuilders.boolQuery()`, `nestedQuery`, `constantScoreQuery`, ...). This code will be
   refactored onto the logical nodes later.
-- Build leaf conditions with the atomic nodes (`Match`, `StartsWith`, ...) and call their
+- Build leaf conditions with `FieldMatch` and a value match (`Exact`, `StartsWith`, ...) and call its
   `fetchOpenSearchQuery` instead of writing `termQuery`/`prefixQuery` by hand.
+- `FieldMatch` is only for building nodes. Don't make it public. In tests, use it only inside a
+  class, method, or field marked `@DemonstratesFieldMatch`; tutorials must use public nodes.
+  `FieldMatchUsageSourceCodeTest` enforces this.
 - Keep the raw combining code in small, clearly named helpers, so each maps onto one logical node.
 
 ## Tests
 
-- `AtomicQueryTest` and `SearchAsYouTypeTest` run against OpenSearch on port 9201.
+- `ValueMatchTest` runs against OpenSearch on port 9201.
 - `DeclareDependenciesTest` uses a mocked `OpenSearchOperations` and needs no services.
