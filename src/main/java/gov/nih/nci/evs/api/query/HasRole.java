@@ -167,7 +167,7 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
       // A bool query with no clauses would match everything, so match nothing explicitly
       return QueryBuilders.boolQuery().mustNot(QueryBuilders.matchAllQuery());
     }
-    return getTargetInOwnVersionQuery(roleTypeQuery, targetKeys);
+    return getTargetInOwnVersionQuery(roleTypeQuery, targetKeys, operations);
   }
 
   /**
@@ -178,10 +178,13 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
    *
    * @param roleTypeQuery the query on the role's type
    * @param targetKeys the target concepts, from any of the searched terminology versions
+   * @param operations the OpenSearch operations, for building the atomic queries
    * @return the query builder
    */
-  private static QueryBuilder getTargetInOwnVersionQuery(
-      final QueryBuilder roleTypeQuery, final ConceptKeys targetKeys) {
+  private QueryBuilder getTargetInOwnVersionQuery(
+      final QueryBuilder roleTypeQuery,
+      final ConceptKeys targetKeys,
+      final OpenSearchOperations operations) {
     final BoolQueryBuilder targetInOwnVersionQuery =
         QueryBuilders.boolQuery().minimumShouldMatch(MINIMUM_MATCHING_TERMINOLOGY_VERSIONS);
     targetKeys
@@ -189,7 +192,8 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
         .forEach(
             (terminologyVersion, targetCodes) ->
                 targetInOwnVersionQuery.should(
-                    getTerminologyVersionQuery(roleTypeQuery, terminologyVersion, targetCodes)));
+                    getTerminologyVersionQuery(
+                        roleTypeQuery, terminologyVersion, targetCodes, operations)));
     return targetInOwnVersionQuery;
   }
 
@@ -201,22 +205,28 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
    * @param roleTypeQuery the query on the role's type
    * @param terminologyVersion the terminology version
    * @param targetCodes the target codes in that terminology version
+   * @param operations the OpenSearch operations, for building the atomic queries
    * @return the query builder
    * @throws IllegalStateException if there are more target codes than one {@code terms} query
    *     accepts
    */
-  private static QueryBuilder getTerminologyVersionQuery(
+  private QueryBuilder getTerminologyVersionQuery(
       final QueryBuilder roleTypeQuery,
       final ConceptKeys.TerminologyVersion terminologyVersion,
-      final Set<String> targetCodes) {
+      final Set<String> targetCodes,
+      final OpenSearchOperations operations) {
     checkTargetCodeCount(targetCodes.size());
     final QueryBuilder roleEntryConditions =
         QueryBuilders.boolQuery()
             .must(roleTypeQuery)
             .must(QueryBuilders.termsQuery(TARGET_CODE_FIELD, targetCodes));
+    final Match terminologyMatch =
+        new Match(terminologies, TERMINOLOGY_FIELD, terminologyVersion.terminology());
+    final Match versionMatch =
+        new Match(terminologies, VERSION_FIELD, terminologyVersion.version());
     return QueryBuilders.boolQuery()
-        .filter(QueryBuilders.termQuery(TERMINOLOGY_FIELD, terminologyVersion.terminology()))
-        .filter(QueryBuilders.termQuery(VERSION_FIELD, terminologyVersion.version()))
+        .filter(terminologyMatch.fetchOpenSearchQuery(operations))
+        .filter(versionMatch.fetchOpenSearchQuery(operations))
         .filter(getRoleEntryQuery(roleEntryConditions));
   }
 

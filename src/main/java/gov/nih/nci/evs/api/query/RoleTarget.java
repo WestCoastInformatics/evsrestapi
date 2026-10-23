@@ -4,8 +4,7 @@ import java.util.Objects;
 
 /**
  * The concepts a role must point to, for {@link HasRole}. Given as a query over concepts, e.g.
- * {@code Match("code", "C12470")} for Skin, or {@code Or(Match("code", "C12470"),
- * DescendantOf(Skin))} for Skin and everything below it.
+ * {@code Match("code", "C12470")} for Skin.
  *
  * <p>A role entry only stores its target's code, so the target query describes a different concept
  * from the one being matched and can't run inside the role query. {@link HasRole} runs it first
