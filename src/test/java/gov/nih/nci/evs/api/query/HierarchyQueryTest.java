@@ -15,11 +15,11 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -28,6 +28,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
+import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -91,6 +92,51 @@ public class HierarchyQueryTest {
   /** The group tag. */
   private static final String GROUP_TAG = "anchor-group";
 
+  /** A tag no concept has. */
+  private static final String UNMATCHED_TAG = "no-such-tag";
+
+  /** Terminology name shared by both test terminologies. */
+  private static final String TERMINOLOGY_NAME = "unit";
+
+  /** Version of the indexed terminology. */
+  private static final String INDEXED_VERSION = "1";
+
+  /** Version of the legacy terminology. */
+  private static final String LEGACY_VERSION = "2";
+
+  /** Index name of the indexed terminology. */
+  private static final String INDEXED_INDEX_NAME = "evs_hierarchy_query_indexed";
+
+  /** Index name of the legacy terminology. */
+  private static final String LEGACY_INDEX_NAME = "evs_hierarchy_query_legacy";
+
+  /** Hierarchy fields flag of the indexed terminology. */
+  private static final Boolean INDEXED_HIERARCHY_FIELDS = true;
+
+  /** Hierarchy fields flag of the legacy terminology, which predates the flag. */
+  private static final Boolean LEGACY_HIERARCHY_FIELDS = null;
+
+  /** Prefix of each concept's name. */
+  private static final String CONCEPT_NAME_PREFIX = "Concept ";
+
+  /** The first page of search results. */
+  private static final int FIRST_PAGE = 0;
+
+  /** More hits than the test hierarchy has concepts. */
+  private static final int MAX_HITS = 100;
+
+  /** Depth of a code's own children. */
+  private static final int CHILD_LEVEL = 1;
+
+  /** Level of a path's first step, the code itself. */
+  private static final int PATH_START_LEVEL = 0;
+
+  /** Distance of an anchor from itself. */
+  private static final int ANCHOR_DISTANCE = 0;
+
+  /** Direction of a path to root. */
+  private static final int PATH_TO_ROOT_DIRECTION = 1;
+
   /** Terminology with ancestor fields indexed. */
   private Terminology indexed;
 
@@ -107,10 +153,11 @@ public class HierarchyQueryTest {
   @BeforeAll
   public void setUpIndexes() {
     operations = operationsService.getOpenSearchOperations();
-    indexed = terminology("1", "evs_hierarchy_query_indexed", true);
-    legacy = terminology("2", "evs_hierarchy_query_legacy", null);
-    load(indexed, true);
-    load(legacy, false);
+    indexed = getTerminology(INDEXED_VERSION, INDEXED_INDEX_NAME, INDEXED_HIERARCHY_FIELDS);
+    legacy = getTerminology(LEGACY_VERSION, LEGACY_INDEX_NAME, LEGACY_HIERARCHY_FIELDS);
+
+    indexHierarchy(indexed, true);
+    indexHierarchy(legacy, false);
   }
 
   /** Removes both indexes. */
@@ -126,7 +173,7 @@ public class HierarchyQueryTest {
 
   /** Everything below A, at any depth, and not A itself. */
   @Test
-  public void testDescendantOfMatchesEverythingBelow() {
+  public void testDescendantOfMatchesEverythingBelowAnchor() {
     assertBoth(t -> new DescendantOf(t, "A"), "C", "D", "E", "F", "G");
   }
 
@@ -142,7 +189,7 @@ public class HierarchyQueryTest {
 
   /** A and everything below A. */
   @Test
-  public void testDescendantOrSelfOfIncludesAnchor() {
+  public void testDescendantOrSelfOfIncludesAnchorAndEverythingBelow() {
     assertBoth(t -> new DescendantOrSelfOf(t, "A"), "A", "C", "D", "E", "F", "G");
   }
 
@@ -158,7 +205,7 @@ public class HierarchyQueryTest {
 
   /** maxLevel 1 is the direct children. */
   @Test
-  public void testMaxLevelOneIsChildren() {
+  public void testDescendantOfMaxLevelOneMatchesDirectChildren() {
     assertBoth(t -> new DescendantOf(t, "A", 1), "C", "D");
   }
 
@@ -167,20 +214,24 @@ public class HierarchyQueryTest {
    * must include it, and must leave out E (3 below R) and G (4).
    */
   @Test
-  public void testMaxLevelUsesShortestDistance() {
+  public void testDescendantOfMaxLevelTwoUsesShortestDistance() {
     assertBoth(t -> new DescendantOf(t, "R", 2), "A", "B", "C", "D", "F");
   }
 
   /** With the anchor included, the anchor is depth 0 and always matches. */
   @Test
-  public void testMaxLevelWithSelf() {
+  public void testDescendantOrSelfOfMaxLevelOneIncludesAnchorAndChildren() {
     assertBoth(t -> new DescendantOrSelfOf(t, "A", 1), "A", "C", "D");
   }
 
   /** maxLevel must be at least 1. */
   @Test
-  public void testMaxLevelMustBePositive() {
-    assertThrows(IllegalArgumentException.class, () -> new DescendantOf(List.of(indexed), "A", 0));
+  public void testDescendantOfMaxLevelZeroThrowsErrors() {
+    final int invalidMaxLevel = 0;
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new DescendantOf(List.of(indexed), "A", invalidMaxLevel));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -189,14 +240,14 @@ public class HierarchyQueryTest {
 
   /** An inner query matching B and C: below either of them. */
   @Test
-  public void testInnerQueryWithSeveralAnchors() {
+  public void testDescendantOfInnerQueryWithSeveralAnchorsMatchesBelowEach() {
     assertBoth(t -> new DescendantOf(t, new Match(t, GROUP_FIELD, GROUP_TAG)), "E", "F", "G");
   }
 
   /** An inner query matching nothing gives nothing. */
   @Test
-  public void testInnerQueryWithNoAnchors() {
-    assertBoth(t -> new DescendantOf(t, new Match(t, GROUP_FIELD, "no-such-tag")));
+  public void testDescendantOfInnerQueryWithNoMatchesMatchesNothing() {
+    assertBoth(t -> new DescendantOf(t, new Match(t, GROUP_FIELD, UNMATCHED_TAG)));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -205,13 +256,13 @@ public class HierarchyQueryTest {
 
   /** Below the children of R: the inner query is itself a hierarchy node. */
   @Test
-  public void testNestedDescendantOf() {
+  public void testDescendantOfNestedDescendantOfMatchesBelowChildren() {
     assertBoth(t -> new DescendantOf(t, new DescendantOf(t, "R", 1)), "C", "D", "E", "F", "G");
   }
 
   /** Two levels of nesting with depth limits at each. */
   @Test
-  public void testDoublyNestedWithDepths() {
+  public void testDescendantOrSelfOfDoublyNestedWithDepthsMatchesExpectedLevels() {
     // Children of R are A and B; their children are C, D, and F; those and one more level below
     assertBoth(
         t -> new DescendantOrSelfOf(t, new DescendantOf(t, new DescendantOf(t, "R", 1), 1), 1),
@@ -223,17 +274,15 @@ public class HierarchyQueryTest {
 
   /** Composes inside a raw bool, as other nodes will: below A but not below C. */
   @Test
-  public void testComposesInBoolQuery() {
-    for (final Terminology terminology : List.of(indexed, legacy)) {
-      final List<Terminology> t = List.of(terminology);
-      final Set<String> codes =
-          search(
-              t,
-              QueryBuilders.boolQuery()
-                  .must(new DescendantOf(t, "A").fetchOpenSearchQuery(operations))
-                  .mustNot(new DescendantOf(t, "C").fetchOpenSearchQuery(operations)));
-      assertThat(codes).as(terminology.getIndexName()).containsExactlyInAnyOrder("C", "D", "F");
-    }
+  public void testDescendantOfInBoolQueryExcludesMustNotBranch() {
+    assertRawQueryBoth(
+        t ->
+            QueryBuilders.boolQuery()
+                .must(new DescendantOf(t, "A").fetchOpenSearchQuery(operations))
+                .mustNot(new DescendantOf(t, "C").fetchOpenSearchQuery(operations)),
+        "C",
+        "D",
+        "F");
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -242,14 +291,13 @@ public class HierarchyQueryTest {
 
   /** Each terminology's anchors match only in its own index, through its own path. */
   @Test
-  public void testIndexedAndLegacyTogether() {
+  public void testDescendantOfIndexedAndLegacyTogetherMatchesInEachIndex() {
     final List<Terminology> both = List.of(indexed, legacy);
     final DescendantOf query = new DescendantOf(both, "A");
-    final Map<String, Set<String>> byIndex = new HashMap<>();
-    for (final SearchHit<Concept> hit : searchHits(both, query.fetchOpenSearchQuery(operations))) {
-      byIndex.computeIfAbsent(hit.getIndex(), k -> new TreeSet<>()).add(hit.getContent().getCode());
-    }
+    final Map<String, Set<String>> byIndex =
+        fetchCodesByIndex(both, query.fetchOpenSearchQuery(operations));
     final Set<String> expected = Set.of("C", "D", "E", "F", "G");
+
     assertThat(byIndex.get(indexed.getIndexName())).isEqualTo(expected);
     assertThat(byIndex.get(legacy.getIndexName())).isEqualTo(expected);
   }
@@ -260,13 +308,13 @@ public class HierarchyQueryTest {
 
   /** Everything above G, and not G itself. */
   @Test
-  public void testAncestorOfMatchesEverythingAbove() {
+  public void testAncestorOfMatchesEverythingAboveAnchor() {
     assertBoth(t -> new AncestorOf(t, "G"), "E", "C", "A", "R");
   }
 
   /** F has two parents, so its ancestors come from both paths. */
   @Test
-  public void testAncestorOfFollowsEveryPath() {
+  public void testAncestorOfPolyhierarchyFollowsEveryPath() {
     assertBoth(t -> new AncestorOf(t, "F"), "D", "B", "A", "R");
   }
 
@@ -276,17 +324,27 @@ public class HierarchyQueryTest {
     assertBoth(t -> new AncestorOf(t, "R"));
   }
 
-  /** AncestorOrSelfOf also matches the anchor; the root matches only itself. */
+  /** AncestorOrSelfOf also matches the anchor. */
   @Test
-  public void testAncestorOrSelfOfIncludesAnchor() {
+  public void testAncestorOrSelfOfIncludesAnchorAndEverythingAbove() {
     assertBoth(t -> new AncestorOrSelfOf(t, "G"), "G", "E", "C", "A", "R");
+  }
+
+  /** The root matches only itself. */
+  @Test
+  public void testAncestorOrSelfOfRootMatchesItself() {
     assertBoth(t -> new AncestorOrSelfOf(t, "R"), "R");
   }
 
   /** maxLevel 1 is the direct parents. */
   @Test
-  public void testAncestorMaxLevelOneIsParents() {
+  public void testAncestorOfMaxLevelOneMatchesDirectParents() {
     assertBoth(t -> new AncestorOf(t, "F", 1), "D", "B");
+  }
+
+  /** maxLevel 1 with the anchor included is the anchor and its direct parents. */
+  @Test
+  public void testAncestorOrSelfOfMaxLevelOneIncludesAnchorAndParents() {
     assertBoth(t -> new AncestorOrSelfOf(t, "F", 1), "F", "D", "B");
   }
 
@@ -295,20 +353,29 @@ public class HierarchyQueryTest {
    * distance.
    */
   @Test
-  public void testAncestorMaxLevelUsesShortestDistance() {
+  public void testAncestorOfMaxLevelTwoUsesShortestDistanceForPolyhierarchy() {
     assertBoth(t -> new AncestorOf(t, "F", 2), "D", "B", "A", "R");
+  }
+
+  /** maxLevel 2 above G, which has a single path, stops at its parent and grandparent. */
+  @Test
+  public void testAncestorOfMaxLevelTwoStopsAtGrandparent() {
     assertBoth(t -> new AncestorOf(t, "G", 2), "E", "C");
   }
 
   /** maxLevel must be at least 1. */
   @Test
-  public void testAncestorMaxLevelMustBePositive() {
-    assertThrows(IllegalArgumentException.class, () -> new AncestorOf(List.of(indexed), "G", 0));
+  public void testAncestorOfMaxLevelZeroThrowsErrors() {
+    final int invalidMaxLevel = 0;
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new AncestorOf(List.of(indexed), "G", invalidMaxLevel));
   }
 
   /** An inner query matching B and C: above either of them. */
   @Test
-  public void testAncestorOfInnerQueryWithSeveralAnchors() {
+  public void testAncestorOfInnerQueryWithSeveralAnchorsMatchesAboveEach() {
     assertBoth(t -> new AncestorOf(t, new Match(t, GROUP_FIELD, GROUP_TAG)), "A", "R");
   }
 
@@ -318,47 +385,43 @@ public class HierarchyQueryTest {
 
   /** Above the children of A (C and D): A and R. */
   @Test
-  public void testAncestorOfDescendants() {
+  public void testAncestorOfDescendantOfMatchesAboveChildren() {
     assertBoth(t -> new AncestorOf(t, new DescendantOf(t, "A", 1)), "A", "R");
   }
 
   /** Below the parent of G (E): G. */
   @Test
-  public void testDescendantOfAncestors() {
+  public void testDescendantOfAncestorOfMatchesBelowParent() {
     assertBoth(t -> new DescendantOf(t, new AncestorOf(t, "G", 1)), "G");
   }
 
   /** Siblings of C, and C: the children of C's parents. */
   @Test
-  public void testSiblingsOrSelf() {
+  public void testDescendantOfAncestorOfMaxLevelOneMatchesSiblingsAndSelf() {
     assertBoth(t -> new DescendantOf(t, new AncestorOf(t, "C", 1), 1), "C", "D");
   }
 
   /** Common ancestors of G and F, composed in a raw bool. */
   @Test
-  public void testCommonAncestorsInBoolQuery() {
-    for (final Terminology terminology : List.of(indexed, legacy)) {
-      final List<Terminology> t = List.of(terminology);
-      final Set<String> codes =
-          search(
-              t,
-              QueryBuilders.boolQuery()
-                  .must(new AncestorOf(t, "G").fetchOpenSearchQuery(operations))
-                  .must(new AncestorOf(t, "F").fetchOpenSearchQuery(operations)));
-      assertThat(codes).as(terminology.getIndexName()).containsExactlyInAnyOrder("A", "R");
-    }
+  public void testAncestorOfInBoolQueryMatchesCommonAncestors() {
+    assertRawQueryBoth(
+        t ->
+            QueryBuilders.boolQuery()
+                .must(new AncestorOf(t, "G").fetchOpenSearchQuery(operations))
+                .must(new AncestorOf(t, "F").fetchOpenSearchQuery(operations)),
+        "A",
+        "R");
   }
 
   /** Each terminology's anchors match only in its own index. */
   @Test
-  public void testAncestorOfIndexedAndLegacyTogether() {
+  public void testAncestorOfIndexedAndLegacyTogetherMatchesInEachIndex() {
     final List<Terminology> both = List.of(indexed, legacy);
-    final Map<String, Set<String>> byIndex = new HashMap<>();
-    for (final SearchHit<Concept> hit :
-        searchHits(both, new AncestorOf(both, "G").fetchOpenSearchQuery(operations))) {
-      byIndex.computeIfAbsent(hit.getIndex(), k -> new TreeSet<>()).add(hit.getContent().getCode());
-    }
+    final AncestorOf query = new AncestorOf(both, "G");
+    final Map<String, Set<String>> byIndex =
+        fetchCodesByIndex(both, query.fetchOpenSearchQuery(operations));
     final Set<String> expected = Set.of("E", "C", "A", "R");
+
     assertThat(byIndex.get(indexed.getIndexName())).isEqualTo(expected);
     assertThat(byIndex.get(legacy.getIndexName())).isEqualTo(expected);
   }
@@ -380,9 +443,22 @@ public class HierarchyQueryTest {
    * @param expected the expected codes
    */
   private void assertBoth(final QueryFactory factory, final String... expected) {
+    assertRawQueryBoth(t -> factory.build(t).fetchOpenSearchQuery(operations), expected);
+  }
+
+  /**
+   * Asserts the raw OpenSearch query matches exactly the expected codes in the indexed copy and in
+   * the legacy copy.
+   *
+   * @param factory builds the raw query for one terminology
+   * @param expected the expected codes
+   */
+  private void assertRawQueryBoth(
+      final Function<List<Terminology>, QueryBuilder> factory, final String... expected) {
     for (final Terminology terminology : List.of(indexed, legacy)) {
       final List<Terminology> t = List.of(terminology);
-      final Set<String> codes = search(t, factory.build(t).fetchOpenSearchQuery(operations));
+      final Set<String> codes = fetchMatchedCodes(t, factory.apply(t));
+
       assertThat(codes).as(terminology.getIndexName()).containsExactlyInAnyOrder(expected);
     }
   }
@@ -394,11 +470,28 @@ public class HierarchyQueryTest {
    * @param query the query
    * @return the codes
    */
-  private Set<String> search(
-      final List<Terminology> terminologies, final org.opensearch.index.query.QueryBuilder query) {
-    return searchHits(terminologies, query).stream()
+  private Set<String> fetchMatchedCodes(
+      final List<Terminology> terminologies, final QueryBuilder query) {
+    return fetchHits(terminologies, query).stream()
         .map(hit -> hit.getContent().getCode())
         .collect(Collectors.toSet());
+  }
+
+  /**
+   * Runs a query and returns the matching codes grouped by the index they were found in.
+   *
+   * @param terminologies the terminologies to search
+   * @param query the query
+   * @return the codes by index name
+   */
+  private Map<String, Set<String>> fetchCodesByIndex(
+      final List<Terminology> terminologies, final QueryBuilder query) {
+    final Map<String, Set<String>> byIndex = new HashMap<>();
+    for (final SearchHit<Concept> hit : fetchHits(terminologies, query)) {
+      byIndex.computeIfAbsent(hit.getIndex(), k -> new TreeSet<>()).add(hit.getContent().getCode());
+    }
+
+    return byIndex;
   }
 
   /**
@@ -408,16 +501,17 @@ public class HierarchyQueryTest {
    * @param query the query
    * @return the hits
    */
-  private List<SearchHit<Concept>> searchHits(
-      final List<Terminology> terminologies, final org.opensearch.index.query.QueryBuilder query) {
+  private List<SearchHit<Concept>> fetchHits(
+      final List<Terminology> terminologies, final QueryBuilder query) {
     final IndexCoordinates indexes =
         IndexCoordinates.of(
             terminologies.stream().map(Terminology::getIndexName).toArray(String[]::new));
+
     return operations
         .search(
             new NativeSearchQueryBuilder()
                 .withQuery(query)
-                .withPageable(PageRequest.of(0, 100))
+                .withPageable(PageRequest.of(FIRST_PAGE, MAX_HITS))
                 .build(),
             Concept.class,
             indexes)
@@ -432,16 +526,18 @@ public class HierarchyQueryTest {
    * @param hierarchyFields the hierarchy fields flag
    * @return the terminology
    */
-  private static Terminology terminology(
+  private static Terminology getTerminology(
       final String version, final String indexName, final Boolean hierarchyFields) {
     final Terminology terminology = new Terminology();
-    terminology.setTerminology("unit");
+    terminology.setTerminology(TERMINOLOGY_NAME);
     terminology.setVersion(version);
     terminology.setIndexName(indexName);
+
     final TerminologyMetadata metadata = new TerminologyMetadata();
     metadata.setHierarchy(true);
     metadata.setHierarchyFields(hierarchyFields);
     terminology.setMetadata(metadata);
+
     return terminology;
   }
 
@@ -451,7 +547,7 @@ public class HierarchyQueryTest {
    * @param terminology the terminology
    * @param withAncestorFields whether to set ancestors and ancestorDepths
    */
-  private void load(final Terminology terminology, final boolean withAncestorFields) {
+  private void indexHierarchy(final Terminology terminology, final boolean withAncestorFields) {
     final IndexCoordinates index = IndexCoordinates.of(terminology.getIndexName());
     final IndexOperations indexOperations = operations.indexOps(index);
     indexOperations.delete();
@@ -460,26 +556,68 @@ public class HierarchyQueryTest {
 
     final List<Concept> concepts = new ArrayList<>();
     for (final String code : CHILDREN.keySet()) {
-      final Concept concept = new Concept(terminology.getTerminology(), code, "Concept " + code);
-      concept.setVersion(terminology.getVersion());
-      concept.setNormName(GROUPED.contains(code) ? GROUP_TAG : code.toLowerCase());
-      concept.setChildren(
-          CHILDREN.get(code).stream().map(Concept::new).collect(Collectors.toList()));
-      concept.setDescendants(depthFirstDescendants(code));
-      concept.setPaths(pathsToRoot(code));
-      if (withAncestorFields) {
-        final Map<String, Integer> depths = shortestAncestorDepths(code);
-        concept.setAncestors(new ArrayList<>(new TreeSet<>(depths.keySet())));
-        concept.setAncestorDepths(
-            depths.entrySet().stream()
-                .map(e -> e.getKey() + DescendantOf.DEPTH_SEPARATOR + e.getValue())
-                .sorted()
-                .collect(Collectors.toList()));
-      }
-      concepts.add(concept);
+      concepts.add(getConcept(terminology, code, withAncestorFields));
     }
+
     operations.save(concepts, index);
     indexOperations.refresh();
+  }
+
+  /**
+   * Returns a concept as the loader stores it.
+   *
+   * @param terminology the terminology
+   * @param code the code
+   * @param withAncestorFields whether to set ancestors and ancestorDepths
+   * @return the concept
+   */
+  private static Concept getConcept(
+      final Terminology terminology, final String code, final boolean withAncestorFields) {
+    final Concept concept =
+        new Concept(terminology.getTerminology(), code, CONCEPT_NAME_PREFIX + code);
+    concept.setVersion(terminology.getVersion());
+    concept.setNormName(getNormName(code));
+    concept.setChildren(CHILDREN.get(code).stream().map(Concept::new).collect(Collectors.toList()));
+    concept.setDescendants(getDepthFirstDescendants(code));
+    concept.setPaths(getPathsToRoot(code));
+    if (!withAncestorFields) {
+      return concept;
+    }
+
+    final Map<String, Integer> depths = getShortestAncestorDepths(code);
+    concept.setAncestors(new ArrayList<>(new TreeSet<>(depths.keySet())));
+    concept.setAncestorDepths(getAncestorDepthTokens(depths));
+
+    return concept;
+  }
+
+  /**
+   * Returns a code's normalized name: the shared group tag for grouped codes, else the lowercase
+   * code.
+   *
+   * @param code the code
+   * @return the normalized name
+   */
+  private static String getNormName(final String code) {
+    final boolean isGrouped = GROUPED.contains(code);
+    if (isGrouped) {
+      return GROUP_TAG;
+    }
+
+    return code.toLowerCase();
+  }
+
+  /**
+   * Returns the sorted ancestor depth tokens for a map of ancestor to depth.
+   *
+   * @param depths the ancestors and their depths
+   * @return the tokens
+   */
+  private static List<String> getAncestorDepthTokens(final Map<String, Integer> depths) {
+    return depths.entrySet().stream()
+        .map(e -> e.getKey() + DescendantOf.DEPTH_SEPARATOR + e.getValue())
+        .sorted()
+        .collect(Collectors.toList());
   }
 
   /**
@@ -489,17 +627,27 @@ public class HierarchyQueryTest {
    * @param code the code
    * @return the descendants
    */
-  private static List<Concept> depthFirstDescendants(final String code) {
+  private static List<Concept> getDepthFirstDescendants(final String code) {
     final Map<String, Integer> levels = new LinkedHashMap<>();
-    depthFirst(code, 1, levels);
-    final List<Concept> descendants = new ArrayList<>();
-    levels.forEach(
-        (c, level) -> {
-          final Concept descendant = new Concept(c);
-          descendant.setLevel(level);
-          descendants.add(descendant);
-        });
-    return descendants;
+    walkDepthFirst(code, CHILD_LEVEL, levels);
+
+    return levels.entrySet().stream()
+        .map(e -> getDescendant(e.getKey(), e.getValue()))
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * Returns a descendant concept at a depth.
+   *
+   * @param code the code
+   * @param level the depth
+   * @return the descendant
+   */
+  private static Concept getDescendant(final String code, final int level) {
+    final Concept descendant = new Concept(code);
+    descendant.setLevel(level);
+
+    return descendant;
   }
 
   /**
@@ -509,12 +657,36 @@ public class HierarchyQueryTest {
    * @param level the depth of its children
    * @param levels the codes reached so far, with their depths
    */
-  private static void depthFirst(
+  private static void walkDepthFirst(
       final String code, final int level, final Map<String, Integer> levels) {
     for (final String child : CHILDREN.get(code)) {
       levels.putIfAbsent(child, level);
-      depthFirst(child, level + 1, levels);
+      walkDepthFirst(child, level + 1, levels);
     }
+  }
+
+  /**
+   * Returns each code's parents, the inverse of {@link #CHILDREN}.
+   *
+   * @return the parents by code
+   */
+  private static Map<String, List<String>> getParentsByCode() {
+    final Map<String, List<String>> parents = new HashMap<>();
+    CHILDREN.forEach((parent, children) -> addParent(parents, parent, children));
+
+    return parents;
+  }
+
+  /**
+   * Records a parent against each of its children.
+   *
+   * @param parents the parents by code, updated
+   * @param parent the parent
+   * @param children the parent's children
+   */
+  private static void addParent(
+      final Map<String, List<String>> parents, final String parent, final List<String> children) {
+    children.forEach(child -> parents.computeIfAbsent(child, k -> new ArrayList<>()).add(parent));
   }
 
   /**
@@ -523,26 +695,47 @@ public class HierarchyQueryTest {
    * @param code the code
    * @return the ancestors and their depths
    */
-  private static Map<String, Integer> shortestAncestorDepths(final String code) {
-    final Map<String, Set<String>> parents = new HashMap<>();
-    CHILDREN.forEach(
-        (parent, children) ->
-            children.forEach(
-                child -> parents.computeIfAbsent(child, k -> new LinkedHashSet<>()).add(parent)));
+  private static Map<String, Integer> getShortestAncestorDepths(final String code) {
+    final Map<String, List<String>> parents = getParentsByCode();
     final Map<String, Integer> depths = new LinkedHashMap<>();
     final Deque<String> queue = new ArrayDeque<>(List.of(code));
-    final Map<String, Integer> distance = new HashMap<>(Map.of(code, 0));
+    final Map<String, Integer> distance = new HashMap<>(Map.of(code, ANCHOR_DISTANCE));
+
     while (!queue.isEmpty()) {
       final String current = queue.removeFirst();
-      for (final String parent : parents.getOrDefault(current, Set.of())) {
-        if (!distance.containsKey(parent)) {
-          distance.put(parent, distance.get(current) + 1);
-          depths.put(parent, distance.get(parent));
-          queue.addLast(parent);
-        }
-      }
+      final List<String> currentParents = parents.getOrDefault(current, List.of());
+      visitParents(currentParents, distance.get(current), distance, depths, queue);
     }
+
     return depths;
+  }
+
+  /**
+   * Visits the parents of a code in the breadth-first walk, recording the first distance each is
+   * reached at.
+   *
+   * @param parents the parents of the current code
+   * @param currentDistance the distance of the current code
+   * @param distance the distances reached so far, updated
+   * @param depths the ancestors and their depths, updated
+   * @param queue the codes still to walk, updated
+   */
+  private static void visitParents(
+      final List<String> parents,
+      final int currentDistance,
+      final Map<String, Integer> distance,
+      final Map<String, Integer> depths,
+      final Deque<String> queue) {
+    for (final String parent : parents) {
+      final boolean isAlreadyVisited = distance.containsKey(parent);
+      if (isAlreadyVisited) {
+        continue;
+      }
+
+      distance.put(parent, currentDistance + 1);
+      depths.put(parent, currentDistance + 1);
+      queue.addLast(parent);
+    }
   }
 
   /**
@@ -552,27 +745,33 @@ public class HierarchyQueryTest {
    * @param code the code
    * @return the paths
    */
-  private static Paths pathsToRoot(final String code) {
-    final Map<String, List<String>> parents = new HashMap<>();
-    CHILDREN.forEach(
-        (parent, children) ->
-            children.forEach(
-                child -> parents.computeIfAbsent(child, k -> new ArrayList<>()).add(parent)));
+  private static Paths getPathsToRoot(final String code) {
     final List<List<String>> codePaths = new ArrayList<>();
-    collectPaths(code, new ArrayList<>(List.of(code)), parents, codePaths);
+    collectPaths(code, new ArrayList<>(List.of(code)), getParentsByCode(), codePaths);
+
     final Paths paths = new Paths();
-    paths.setPaths(new ArrayList<>());
-    for (final List<String> codePath : codePaths) {
-      final Path path = new Path();
-      path.setDirection(1);
-      for (int level = 0; level < codePath.size(); level++) {
-        final ConceptMinimal step = new ConceptMinimal(codePath.get(level));
-        step.setLevel(level);
-        path.getConcepts().add(step);
-      }
-      paths.getPaths().add(path);
-    }
+    paths.setPaths(
+        codePaths.stream().map(HierarchyQueryTest::getPath).collect(Collectors.toList()));
+
     return paths;
+  }
+
+  /**
+   * Returns a path whose steps are the codes in order, each at its level.
+   *
+   * @param codePath the codes, from the starting code up to a root
+   * @return the path
+   */
+  private static Path getPath(final List<String> codePath) {
+    final Path path = new Path();
+    path.setDirection(PATH_TO_ROOT_DIRECTION);
+    for (int level = PATH_START_LEVEL; level < codePath.size(); level++) {
+      final ConceptMinimal step = new ConceptMinimal(codePath.get(level));
+      step.setLevel(level);
+      path.getConcepts().add(step);
+    }
+
+    return path;
   }
 
   /**
@@ -589,10 +788,12 @@ public class HierarchyQueryTest {
       final Map<String, List<String>> parents,
       final List<List<String>> codePaths) {
     final List<String> up = parents.getOrDefault(code, List.of());
-    if (up.isEmpty()) {
+    final boolean isRoot = up.isEmpty();
+    if (isRoot) {
       codePaths.add(new ArrayList<>(soFar));
       return;
     }
+
     for (final String parent : up) {
       soFar.add(parent);
       collectPaths(parent, soFar, parents, codePaths);

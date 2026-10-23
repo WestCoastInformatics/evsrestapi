@@ -19,7 +19,7 @@ public class DescendantOrSelfOf extends DescendantOf {
    * @param ancestorQuery the query matching the anchor concepts
    */
   public DescendantOrSelfOf(final List<Terminology> terminologies, final EvsQuery ancestorQuery) {
-    super(terminologies, ancestorQuery, null, true);
+    super(terminologies, ancestorQuery, ANY_LEVEL, WITH_SELF);
   }
 
   /**
@@ -32,7 +32,7 @@ public class DescendantOrSelfOf extends DescendantOf {
    */
   public DescendantOrSelfOf(
       final List<Terminology> terminologies, final EvsQuery ancestorQuery, final int maxLevel) {
-    super(terminologies, ancestorQuery, maxLevel, true);
+    super(terminologies, ancestorQuery, maxLevel, WITH_SELF);
   }
 
   /**
@@ -42,7 +42,7 @@ public class DescendantOrSelfOf extends DescendantOf {
    * @param code the anchor concept's code
    */
   public DescendantOrSelfOf(final List<Terminology> terminologies, final String code) {
-    super(terminologies, codeQuery(terminologies, code), null, true);
+    super(terminologies, getCodeQuery(terminologies, code), ANY_LEVEL, WITH_SELF);
   }
 
   /**
@@ -55,6 +55,6 @@ public class DescendantOrSelfOf extends DescendantOf {
    */
   public DescendantOrSelfOf(
       final List<Terminology> terminologies, final String code, final int maxLevel) {
-    super(terminologies, codeQuery(terminologies, code), maxLevel, true);
+    super(terminologies, getCodeQuery(terminologies, code), maxLevel, WITH_SELF);
   }
 }

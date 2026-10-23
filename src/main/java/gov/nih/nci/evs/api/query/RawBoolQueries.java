@@ -15,44 +15,53 @@ import org.opensearch.index.query.QueryBuilders;
  */
 final class RawBoolQueries {
 
+  /** How many {@code should} clauses must match for {@link #getAnyOfQuery}: at least one. */
+  private static final int MIN_MATCHING_CLAUSES = 1;
+
   /** Not instantiated. */
   private RawBoolQueries() {
     // n/a
   }
 
   /**
-   * Combines conditions that must all match. To become the {@code And} node.
+   * Returns a query matching only documents that match all the conditions. To become the {@code
+   * And} node.
    *
    * @param conditions the conditions
-   * @return the combined condition
+   * @return the combined query
    */
-  static QueryBuilder allOf(final QueryBuilder... conditions) {
+  static QueryBuilder getAllOfQuery(final QueryBuilder... conditions) {
     final BoolQueryBuilder bool = QueryBuilders.boolQuery();
     for (final QueryBuilder condition : conditions) {
       bool.must(condition);
     }
+
     return bool;
   }
 
   /**
-   * Combines conditions of which at least one must match. To become the {@code Or} node.
+   * Returns a query matching documents that match at least one of the conditions. To become the
+   * {@code Or} node.
    *
    * @param conditions the conditions
-   * @return the combined condition
+   * @return the combined query
    */
-  static QueryBuilder anyOf(final List<QueryBuilder> conditions) {
-    final BoolQueryBuilder bool = QueryBuilders.boolQuery().minimumShouldMatch(1);
-    conditions.forEach(bool::should);
+  static QueryBuilder getAnyOfQuery(final List<QueryBuilder> conditions) {
+    final BoolQueryBuilder bool =
+        QueryBuilders.boolQuery().minimumShouldMatch(MIN_MATCHING_CLAUSES);
+    for (final QueryBuilder condition : conditions) {
+      bool.should(condition);
+    }
+
     return bool;
   }
 
   /**
-   * Returns a condition no document matches. To become a {@code Not} of match-all, or a constant
-   * node.
+   * Returns a query no document matches. To become a {@code Not} of match-all, or a constant node.
    *
-   * @return the condition
+   * @return the query
    */
-  static QueryBuilder matchNothing() {
+  static QueryBuilder getMatchNothingQuery() {
     return new MatchNoneQueryBuilder();
   }
 }

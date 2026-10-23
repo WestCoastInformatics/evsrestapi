@@ -44,7 +44,9 @@ public class MatchAnyOf extends EvsQuery {
     super(terminologies);
     this.field = Objects.requireNonNull(field, "field");
     this.values = new TreeSet<>(Objects.requireNonNull(values, "values"));
-    if (this.values.size() > MAX_VALUES) {
+
+    final boolean hasTooManyValues = this.values.size() > MAX_VALUES;
+    if (hasTooManyValues) {
       throw new IllegalArgumentException(
           "Too many values for one terms query on '"
               + field

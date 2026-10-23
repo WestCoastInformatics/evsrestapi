@@ -57,11 +57,85 @@ public class HierarchyQueryLimitsTest {
   /** Version of the made-up concepts. */
   private static final String VERSION = "1";
 
+  /** Field name used when building a {@link MatchAnyOf}. */
+  private static final String ANCESTORS_FIELD = "ancestors";
+
   /** One more than fits in a {@code terms} query. */
   private static final int TOO_MANY = MatchAnyOf.MAX_VALUES + 1;
 
+  /** A max level of one: direct children or parents. */
+  private static final int ONE_LEVEL = 1;
+
+  /** Code of the anchor in the descendant tests. */
+  private static final String DESCENDANT_ANCHOR_CODE = "R";
+
+  /** Code of the anchor in the ancestor tests. */
+  private static final String ANCESTOR_ANCHOR_CODE = "G";
+
+  /** Code of the concept the mocked inner query matches. */
+  private static final String MATCHED_ANCHOR_CODE = "anchor";
+
+  /** Code of the single anchor in the depth token tests. */
+  private static final String DEPTH_ANCHOR_CODE = "C1";
+
+  /** Max level in the one-anchor depth token test. */
+  private static final int ONE_ANCHOR_MAX_LEVEL = 2;
+
+  /** Max level whose anchors times levels exactly reach the limit. */
+  private static final int LEVELS_AT_LIMIT = 4;
+
+  /** Anchors that alone are over the limit, with a max level of one. */
+  private static final int ANCHORS_OVER_LIMIT = 70_000;
+
+  /** Anchors that are over the limit only once multiplied by {@link #LEVELS_OVER_LIMIT}. */
+  private static final int ANCHORS_UNDER_LIMIT = 10_000;
+
+  /** Max level that pushes {@link #ANCHORS_UNDER_LIMIT} anchors over the limit. */
+  private static final int LEVELS_OVER_LIMIT = 7;
+
+  /** The message fragment naming the max level of an over-limit set of depth tokens. */
+  private static final String MAX_LEVEL_MESSAGE = "maxLevel " + LEVELS_OVER_LIMIT;
+
+  /** The argument named when the anchor query is null. */
+  private static final String ANCHOR_QUERY_ARGUMENT = "anchorQuery";
+
+  /** The argument named when the code is null. */
+  private static final String CODE_ARGUMENT = "code";
+
+  /** Message fragment telling the caller to reindex. */
+  private static final String REINDEX_MESSAGE = "reindex the terminology";
+
+  /** Message fragment of the too-many-ancestors error. */
+  private static final String TOO_MANY_ANCESTORS_MESSAGE = "Too many ancestors";
+
+  /** Size of the last, partial lookup in the batching tests. */
+  private static final int PARTIAL_LOOKUP_SIZE = 500;
+
   /** Anchors in the batching tests: two full lookups and one partial. */
-  private static final int MANY_ANCESTORS = 2 * StoredHierarchyFallback.CONCEPTS_PER_LOOKUP + 500;
+  private static final int MANY_ANCHORS =
+      2 * StoredHierarchyFallback.CONCEPTS_PER_LOOKUP + PARTIAL_LOOKUP_SIZE;
+
+  /** Lookups expected for {@link #MANY_ANCHORS} anchors. */
+  private static final int EXPECTED_LOOKUP_COUNT = 3;
+
+  /** Ids per lookup expected for {@link #MANY_ANCHORS} anchors. */
+  private static final List<Integer> EXPECTED_LOOKUP_SIZES =
+      List.of(
+          StoredHierarchyFallback.CONCEPTS_PER_LOOKUP,
+          StoredHierarchyFallback.CONCEPTS_PER_LOOKUP,
+          PARTIAL_LOOKUP_SIZE);
+
+  /** Code of the first generated anchor. */
+  private static final String FIRST_ANCHOR_CODE = "C0";
+
+  /** Code of the last generated anchor. */
+  private static final String LAST_ANCHOR_CODE = "C" + (MANY_ANCHORS - 1);
+
+  /** Suffix of the made-up child of each anchor. */
+  private static final String CHILD_SUFFIX = "-child";
+
+  /** Suffix of the made-up parent of each anchor. */
+  private static final String PARENT_SUFFIX = "-parent";
 
   /** A terminology indexed without ancestor fields, so {@link DescendantOf} uses the fallback. */
   private Terminology terminology;
@@ -83,157 +157,234 @@ public class HierarchyQueryLimitsTest {
     operations = mock(OpenSearchOperations.class);
   }
 
-  /** MatchAnyOf accepts exactly the limit and rejects one more, naming the field and count. */
+  /** MatchAnyOf with exactly the limit of values is accepted. */
   @Test
-  public void testMatchAnyOfRejectsMoreThanTheLimit() {
+  public void testMatchAnyOfAtLimitIsAccepted() {
     assertDoesNotThrow(
-        () -> new MatchAnyOf(terminologies, "ancestors", codes(MatchAnyOf.MAX_VALUES)));
+        () -> new MatchAnyOf(terminologies, ANCESTORS_FIELD, getCodes(MatchAnyOf.MAX_VALUES)));
+  }
 
+  /** MatchAnyOf with one more value than the limit throws an error naming the field and count. */
+  @Test
+  public void testMatchAnyOfOverLimitThrowsErrorNamingFieldAndCount() {
     final IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new MatchAnyOf(terminologies, "ancestors", codes(TOO_MANY)));
-    assertTrue(e.getMessage().contains("'ancestors'"), e.getMessage());
+            () -> new MatchAnyOf(terminologies, ANCESTORS_FIELD, getCodes(TOO_MANY)));
+
+    assertTrue(e.getMessage().contains("'" + ANCESTORS_FIELD + "'"), e.getMessage());
     assertTrue(e.getMessage().contains(String.valueOf(TOO_MANY)), e.getMessage());
   }
 
-  /** Depth tokens are anchors times maxLevel; more than the limit is rejected. */
+  /** One anchor gives one depth token per level up to the max level. */
   @Test
-  public void testDepthTokensRejectsMoreThanTheLimit() {
-    assertEquals(List.of("C1|1", "C1|2"), DescendantOf.depthTokens(List.of("C1"), 2), "one anchor");
-    assertEquals(
-        MatchAnyOf.MAX_VALUES,
-        DescendantOf.depthTokens(codes(MatchAnyOf.MAX_VALUES / 4), 4).size(),
-        "exactly the limit");
+  public void testDepthTokensForOneAnchorGivesOneTokenPerDepth() {
+    final List<String> expectedTokens =
+        List.of(
+            DEPTH_ANCHOR_CODE + DescendantOf.DEPTH_SEPARATOR + 1,
+            DEPTH_ANCHOR_CODE + DescendantOf.DEPTH_SEPARATOR + 2);
 
-    assertThrows(IllegalArgumentException.class, () -> DescendantOf.depthTokens(codes(70_000), 1));
-    final IllegalArgumentException e =
-        assertThrows(
-            IllegalArgumentException.class, () -> DescendantOf.depthTokens(codes(10_000), 7));
-    assertTrue(e.getMessage().contains("maxLevel 7"), e.getMessage());
+    assertEquals(
+        expectedTokens,
+        DescendantOf.getDepthTokens(List.of(DEPTH_ANCHOR_CODE), ONE_ANCHOR_MAX_LEVEL));
   }
 
-  /** A missing anchor query or code fails when the node is built, naming the argument. */
+  /** Depth tokens that exactly reach the limit are accepted. */
   @Test
-  public void testNullAnchorIsRejected() {
+  public void testDepthTokensAtLimitAreAccepted() {
+    final int anchorsAtLimit = MatchAnyOf.MAX_VALUES / LEVELS_AT_LIMIT;
+
     assertEquals(
-        "anchorQuery",
+        MatchAnyOf.MAX_VALUES,
+        DescendantOf.getDepthTokens(getCodes(anchorsAtLimit), LEVELS_AT_LIMIT).size());
+  }
+
+  /** Too many anchors for the limit, even at a max level of one, throws an error. */
+  @Test
+  public void testDepthTokensWithTooManyAnchorsThrowsError() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> DescendantOf.getDepthTokens(getCodes(ANCHORS_OVER_LIMIT), ONE_LEVEL));
+  }
+
+  /** Anchors times max level over the limit throws an error naming the max level. */
+  @Test
+  public void testDepthTokensOverLimitThroughMaxLevelThrowsErrorNamingMaxLevel() {
+    final IllegalArgumentException e =
         assertThrows(
-                NullPointerException.class, () -> new DescendantOf(terminologies, (EvsQuery) null))
-            .getMessage());
-    assertEquals(
-        "anchorQuery",
+            IllegalArgumentException.class,
+            () -> DescendantOf.getDepthTokens(getCodes(ANCHORS_UNDER_LIMIT), LEVELS_OVER_LIMIT));
+
+    assertTrue(e.getMessage().contains(MAX_LEVEL_MESSAGE), e.getMessage());
+  }
+
+  /** A null anchor query on DescendantOf throws an error naming anchorQuery. */
+  @Test
+  public void testDescendantOfWithNullAnchorQueryThrowsErrorNamingAnchorQuery() {
+    final NullPointerException e =
         assertThrows(
-                NullPointerException.class,
-                () -> new AncestorOrSelfOf(terminologies, (EvsQuery) null, 1))
-            .getMessage());
-    assertEquals(
-        "code",
-        assertThrows(NullPointerException.class, () -> new AncestorOf(terminologies, (String) null))
-            .getMessage());
-    assertEquals(
-        "code",
+            NullPointerException.class, () -> new DescendantOf(terminologies, (EvsQuery) null));
+
+    assertEquals(ANCHOR_QUERY_ARGUMENT, e.getMessage());
+  }
+
+  /** A null anchor query on AncestorOrSelfOf throws an error naming anchorQuery. */
+  @Test
+  public void testAncestorOrSelfOfWithNullAnchorQueryThrowsErrorNamingAnchorQuery() {
+    final NullPointerException e =
         assertThrows(
-                NullPointerException.class,
-                () -> new DescendantOrSelfOf(terminologies, (String) null, 2))
-            .getMessage());
+            NullPointerException.class,
+            () -> new AncestorOrSelfOf(terminologies, (EvsQuery) null, ONE_LEVEL));
+
+    assertEquals(ANCHOR_QUERY_ARGUMENT, e.getMessage());
+  }
+
+  /** A null code on AncestorOf throws an error naming code. */
+  @Test
+  public void testAncestorOfWithNullCodeThrowsErrorNamingCode() {
+    final NullPointerException e =
+        assertThrows(
+            NullPointerException.class, () -> new AncestorOf(terminologies, (String) null));
+
+    assertEquals(CODE_ARGUMENT, e.getMessage());
+  }
+
+  /** A null code on DescendantOrSelfOf throws an error naming code. */
+  @Test
+  public void testDescendantOrSelfOfWithNullCodeThrowsErrorNamingCode() {
+    final NullPointerException e =
+        assertThrows(
+            NullPointerException.class,
+            () -> new DescendantOrSelfOf(terminologies, (String) null, ONE_LEVEL));
+
+    assertEquals(CODE_ARGUMENT, e.getMessage());
   }
 
   /**
-   * On an index without ancestor fields, a branch with more descendants than fit in one query is
-   * rejected, telling the caller to reindex.
+   * On an index without ancestor fields, a branch with more descendants than fit in one query
+   * throws an error telling the caller to reindex.
    */
   @Test
-  public void testFallbackRejectsTooManyDescendants() {
-    stub(
+  public void testFallbackWithTooManyDescendantsThrowsErrorAskingToReindex() {
+    stubSearch(
         anchor -> {
-          final Concept concept = concept(anchor);
-          concept.setDescendants(codes(TOO_MANY).stream().map(Concept::new).toList());
+          final Concept concept = getConcept(anchor);
+          concept.setDescendants(getCodes(TOO_MANY).stream().map(Concept::new).toList());
           return concept;
         });
 
     final IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new DescendantOf(terminologies, "R").fetchOpenSearchQuery(operations));
-    assertTrue(e.getMessage().contains("reindex the terminology"), e.getMessage());
+            () ->
+                new DescendantOf(terminologies, DESCENDANT_ANCHOR_CODE)
+                    .fetchOpenSearchQuery(operations));
+
+    assertTrue(e.getMessage().contains(REINDEX_MESSAGE), e.getMessage());
   }
 
   /** The same limit applies to the fallback's depth-limited walk over children. */
   @Test
-  public void testFallbackWithMaxLevelRejectsTooManyDescendants() {
-    stub(
+  public void testFallbackWithMaxLevelAndTooManyChildrenThrowsError() {
+    stubSearch(
         anchor -> {
-          final Concept concept = concept(anchor);
-          concept.setChildren(codes(TOO_MANY).stream().map(Concept::new).toList());
+          final Concept concept = getConcept(anchor);
+          concept.setChildren(getCodes(TOO_MANY).stream().map(Concept::new).toList());
           return concept;
         });
 
     assertThrows(
         IllegalArgumentException.class,
-        () -> new DescendantOf(terminologies, "R", 1).fetchOpenSearchQuery(operations));
+        () ->
+            new DescendantOf(terminologies, DESCENDANT_ANCHOR_CODE, ONE_LEVEL)
+                .fetchOpenSearchQuery(operations));
   }
 
-  /** An anchor with more ancestors than fit in one query is rejected. */
+  /** An anchor with more ancestors than fit in one query throws an error. */
   @Test
-  public void testAncestorOfRejectsTooManyAncestors() {
-    stub(
-        anchor -> {
-          final List<ConceptMinimal> steps = new ArrayList<>();
-          steps.add(step(anchor, 0));
-          int level = 1;
-          for (final String code : codes(TOO_MANY)) {
-            steps.add(step(code, level++));
-          }
-          final Concept concept = concept(anchor);
-          concept.setPaths(new Paths(List.of(new Path(1, steps))));
-          return concept;
-        });
+  public void testAncestorOfWithTooManyAncestorsThrowsErrorNamingTooManyAncestors() {
+    stubSearch(anchor -> getConceptWithAncestorCount(anchor, TOO_MANY));
 
     final IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new AncestorOf(terminologies, "G").fetchOpenSearchQuery(operations));
-    assertTrue(e.getMessage().contains("Too many ancestors"), e.getMessage());
+            () ->
+                new AncestorOf(terminologies, ANCESTOR_ANCHOR_CODE)
+                    .fetchOpenSearchQuery(operations));
+
+    assertTrue(e.getMessage().contains(TOO_MANY_ANCESTORS_MESSAGE), e.getMessage());
   }
 
-  /** The fallback reads many anchors' descendants in lookups of at most 1,000 concepts. */
+  /** The fallback finds the descendants of every one of many anchors. */
   @Test
-  public void testFallbackLooksUpAnchorsInBatches() {
-    stub(
-        anchor -> {
-          final Concept concept = concept(anchor);
-          concept.setDescendants(List.of(new Concept(anchor + "-child")));
-          return concept;
-        });
+  public void testFallbackWithManyAnchorsFindsEveryAnchorsDescendants() {
+    stubOneChildPerAnchor();
 
     final Set<String> found =
         StoredHierarchyFallback.fetchDescendantCodes(
-            operations, terminology, codes(MANY_ANCESTORS), null);
+            operations, terminology, getCodes(MANY_ANCHORS), null);
 
-    assertEquals(MANY_ANCESTORS, found.size());
-    assertTrue(found.contains("C0-child") && found.contains("C2499-child"));
-    assertEquals(List.of(1000, 1000, 500), lookupSizes(3));
+    assertEquals(MANY_ANCHORS, found.size());
+    assertTrue(
+        found.containsAll(
+            Set.of(FIRST_ANCHOR_CODE + CHILD_SUFFIX, LAST_ANCHOR_CODE + CHILD_SUFFIX)));
   }
 
-  /** Stored paths for many anchors are read in lookups of at most 1,000 concepts. */
+  /** The fallback reads many anchors' descendants in lookups of at most CONCEPTS_PER_LOOKUP. */
   @Test
-  public void testStoredPathsLooksUpAnchorsInBatches() {
-    stub(
-        anchor -> {
-          final Concept concept = concept(anchor);
-          concept.setPaths(
-              new Paths(
-                  List.of(new Path(1, List.of(step(anchor, 0), step(anchor + "-parent", 1))))));
-          return concept;
-        });
+  public void testFallbackWithManyAnchorsLooksUpInBatchesOfConceptsPerLookup() {
+    stubOneChildPerAnchor();
+
+    StoredHierarchyFallback.fetchDescendantCodes(
+        operations, terminology, getCodes(MANY_ANCHORS), null);
+
+    assertEquals(EXPECTED_LOOKUP_SIZES, getLookupSizes(EXPECTED_LOOKUP_COUNT));
+  }
+
+  /** Stored paths for many anchors give the ancestors of every one of them. */
+  @Test
+  public void testStoredPathsWithManyAnchorsFindsEveryAnchorsAncestors() {
+    stubOneParentPerAnchor();
 
     final Set<String> found =
-        StoredPaths.fetchAncestorCodes(operations, terminology, codes(MANY_ANCESTORS), null);
+        StoredPaths.fetchAncestorCodes(operations, terminology, getCodes(MANY_ANCHORS), null);
 
-    assertEquals(MANY_ANCESTORS, found.size());
-    assertTrue(found.contains("C0-parent") && found.contains("C2499-parent"));
-    assertEquals(List.of(1000, 1000, 500), lookupSizes(3));
+    assertEquals(MANY_ANCHORS, found.size());
+    assertTrue(
+        found.containsAll(
+            Set.of(FIRST_ANCHOR_CODE + PARENT_SUFFIX, LAST_ANCHOR_CODE + PARENT_SUFFIX)));
+  }
+
+  /** Stored paths for many anchors are read in lookups of at most CONCEPTS_PER_LOOKUP. */
+  @Test
+  public void testStoredPathsWithManyAnchorsLooksUpInBatchesOfConceptsPerLookup() {
+    stubOneParentPerAnchor();
+
+    StoredPaths.fetchAncestorCodes(operations, terminology, getCodes(MANY_ANCHORS), null);
+
+    assertEquals(EXPECTED_LOOKUP_SIZES, getLookupSizes(EXPECTED_LOOKUP_COUNT));
+  }
+
+  /** Stubs every anchor to have exactly one made-up child. */
+  private void stubOneChildPerAnchor() {
+    stubSearch(
+        anchor -> {
+          final Concept concept = getConcept(anchor);
+          concept.setDescendants(List.of(new Concept(anchor + CHILD_SUFFIX)));
+          return concept;
+        });
+  }
+
+  /** Stubs every anchor to have one stored path to a single made-up parent. */
+  private void stubOneParentPerAnchor() {
+    stubSearch(
+        anchor -> {
+          final Concept concept = getConcept(anchor);
+          final List<ConceptMinimal> steps =
+              List.of(getPathStep(anchor, 0), getPathStep(anchor + PARENT_SUFFIX, 1));
+          concept.setPaths(new Paths(List.of(new Path(1, steps))));
+          return concept;
+        });
   }
 
   /**
@@ -243,16 +394,18 @@ public class HierarchyQueryLimitsTest {
    *
    * @param byCode builds the stored concept for a code
    */
-  private void stub(final Function<String, Concept> byCode) {
+  private void stubSearch(final Function<String, Concept> byCode) {
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenAnswer(
             invocation -> {
               final NativeSearchQuery search = invocation.getArgument(0);
-              if (search.getQuery() instanceof IdsQueryBuilder ids) {
-                return page(ids.ids().stream().map(byCode).toList());
-              }
+
               // The inner query matched the anchor by code; the mock ignores which code
-              return page(List.of(concept("anchor")));
+              if (!(search.getQuery() instanceof IdsQueryBuilder ids)) {
+                return getPage(List.of(getConcept(MATCHED_ANCHOR_CODE)));
+              }
+
+              return getPage(ids.ids().stream().map(byCode).toList());
             });
   }
 
@@ -262,10 +415,11 @@ public class HierarchyQueryLimitsTest {
    * @param expectedLookups how many lookups by ids should have run
    * @return the number of ids in each
    */
-  private List<Integer> lookupSizes(final int expectedLookups) {
+  private List<Integer> getLookupSizes(final int expectedLookups) {
     final ArgumentCaptor<Query> searches = ArgumentCaptor.forClass(Query.class);
     verify(operations, times(expectedLookups))
         .search(searches.capture(), eq(Concept.class), any(IndexCoordinates.class));
+
     return searches.getAllValues().stream()
         .map(search -> ((IdsQueryBuilder) ((NativeSearchQuery) search).getQuery()).ids().size())
         .toList();
@@ -277,7 +431,7 @@ public class HierarchyQueryLimitsTest {
    * @param count how many
    * @return the codes
    */
-  private static Set<String> codes(final int count) {
+  private static Set<String> getCodes(final int count) {
     final Set<String> codes = new HashSet<>();
     for (int i = 0; i < count; i++) {
       codes.add("C" + i);
@@ -291,10 +445,30 @@ public class HierarchyQueryLimitsTest {
    * @param code the code
    * @return the concept
    */
-  private static Concept concept(final String code) {
+  private static Concept getConcept(final String code) {
     final Concept concept = new Concept(code);
     concept.setTerminology(TERMINOLOGY);
     concept.setVersion(VERSION);
+    return concept;
+  }
+
+  /**
+   * Builds a concept with one stored path to root that holds the given number of ancestors.
+   *
+   * @param code the concept's code, the first step of the path
+   * @param ancestorCount how many ancestors the path holds after the concept itself
+   * @return the concept
+   */
+  private static Concept getConceptWithAncestorCount(final String code, final int ancestorCount) {
+    final List<ConceptMinimal> steps = new ArrayList<>();
+    steps.add(getPathStep(code, 0));
+    int level = 1;
+    for (final String ancestorCode : getCodes(ancestorCount)) {
+      steps.add(getPathStep(ancestorCode, level++));
+    }
+
+    final Concept concept = getConcept(code);
+    concept.setPaths(new Paths(List.of(new Path(1, steps))));
     return concept;
   }
 
@@ -305,19 +479,20 @@ public class HierarchyQueryLimitsTest {
    * @param level its distance from the path's first concept
    * @return the step
    */
-  private static ConceptMinimal step(final String code, final int level) {
+  private static ConceptMinimal getPathStep(final String code, final int level) {
     final ConceptMinimal step = new ConceptMinimal(code);
     step.setLevel(level);
     return step;
   }
 
   /**
-   * Builds one page of hits holding the given concepts, sorted like the real concept-page search.
+   * Builds one page of hits holding the given concepts, sorted like the real concept-key page
+   * search.
    *
    * @param concepts the concepts
    * @return the page
    */
-  private static SearchHits<Concept> page(final Collection<Concept> concepts) {
+  private static SearchHits<Concept> getPage(final Collection<Concept> concepts) {
     final List<SearchHit<Concept>> hits = new ArrayList<>();
     for (final Concept concept : concepts) {
       final Object[] sortValues = {concept.getCode(), INDEX_NAME};
@@ -335,6 +510,7 @@ public class HierarchyQueryLimitsTest {
               List.of(),
               concept));
     }
+
     return new SearchHitsImpl<>(
         hits.size(),
         TotalHitsRelation.EQUAL_TO,

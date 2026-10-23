@@ -33,7 +33,7 @@ public class AncestorOf extends HierarchyQuery {
    * @param descendantQuery the query matching the anchor concepts
    */
   public AncestorOf(final List<Terminology> terminologies, final EvsQuery descendantQuery) {
-    super(terminologies, descendantQuery, null, false);
+    super(terminologies, descendantQuery, ANY_LEVEL, WITHOUT_SELF);
   }
 
   /**
@@ -46,7 +46,7 @@ public class AncestorOf extends HierarchyQuery {
    */
   public AncestorOf(
       final List<Terminology> terminologies, final EvsQuery descendantQuery, final int maxLevel) {
-    super(terminologies, descendantQuery, maxLevel, false);
+    super(terminologies, descendantQuery, maxLevel, WITHOUT_SELF);
   }
 
   /**
@@ -56,7 +56,7 @@ public class AncestorOf extends HierarchyQuery {
    * @param code the anchor concept's code
    */
   public AncestorOf(final List<Terminology> terminologies, final String code) {
-    super(terminologies, codeQuery(terminologies, code), null, false);
+    super(terminologies, getCodeQuery(terminologies, code), ANY_LEVEL, WITHOUT_SELF);
   }
 
   /**
@@ -68,7 +68,7 @@ public class AncestorOf extends HierarchyQuery {
    * @param maxLevel the maximum distance above the anchor, at least 1
    */
   public AncestorOf(final List<Terminology> terminologies, final String code, final int maxLevel) {
-    super(terminologies, codeQuery(terminologies, code), maxLevel, false);
+    super(terminologies, getCodeQuery(terminologies, code), maxLevel, WITHOUT_SELF);
   }
 
   /**
@@ -78,14 +78,14 @@ public class AncestorOf extends HierarchyQuery {
    * @param terminologies the terminologies being searched
    * @param descendantQuery the query matching the anchor concepts
    * @param maxLevel the maximum distance above the anchors, at least 1, or null for any distance
-   * @param includeSelf whether the anchors themselves match
+   * @param isSelfIncluded whether the anchors themselves match
    */
   protected AncestorOf(
       final List<Terminology> terminologies,
       final EvsQuery descendantQuery,
       final Integer maxLevel,
-      final boolean includeSelf) {
-    super(terminologies, descendantQuery, maxLevel, includeSelf);
+      final boolean isSelfIncluded) {
+    super(terminologies, descendantQuery, maxLevel, isSelfIncluded);
   }
 
   /* see superclass */
@@ -94,8 +94,9 @@ public class AncestorOf extends HierarchyQuery {
       final OpenSearchOperations operations,
       final Terminology terminology,
       final Set<String> anchorCodes) {
-    return codeIn(
-        operations,
-        StoredPaths.fetchAncestorCodes(operations, terminology, anchorCodes, getMaxLevel()));
+    final Set<String> ancestorCodes =
+        StoredPaths.fetchAncestorCodes(operations, terminology, anchorCodes, getMaxLevel());
+
+    return getCodeInQuery(operations, ancestorCodes);
   }
 }

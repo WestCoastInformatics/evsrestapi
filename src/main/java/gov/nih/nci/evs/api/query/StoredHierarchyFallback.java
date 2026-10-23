@@ -39,6 +39,18 @@ final class StoredHierarchyFallback {
   /** Field holding a concept's code. */
   private static final String CODE_FIELD = "code";
 
+  /** The first level below the anchors: their direct children. */
+  private static final int FIRST_LEVEL = 1;
+
+  /** The page every lookup asks for; each lookup is one page holding its whole batch. */
+  private static final int FIRST_PAGE = 0;
+
+  /** Position of the first code, where the first batch starts. */
+  private static final int FIRST_CODE_POSITION = 0;
+
+  /** Whether lookups fetch the stored document: yes, filtered to the code and one field. */
+  private static final boolean SHOULD_FETCH_SOURCE = true;
+
   /** Not instantiated. */
   private StoredHierarchyFallback() {
     // n/a
@@ -66,9 +78,12 @@ final class StoredHierarchyFallback {
       final Terminology terminology,
       final Collection<String> anchorCodes,
       final Integer maxLevel) {
-    return maxLevel == null
-        ? fetchAllDescendantCodes(operations, terminology, anchorCodes)
-        : fetchDescendantCodesWithinLevel(operations, terminology, anchorCodes, maxLevel);
+    final boolean hasLevelLimit = maxLevel != null;
+    if (!hasLevelLimit) {
+      return fetchAllDescendantCodes(operations, terminology, anchorCodes);
+    }
+
+    return fetchDescendantCodesWithinLevel(operations, terminology, anchorCodes, maxLevel);
   }
 
   /**
@@ -86,15 +101,17 @@ final class StoredHierarchyFallback {
     final Set<String> codes = new HashSet<>();
     for (final Concept anchor :
         fetchConcepts(operations, terminology, anchorCodes, DESCENDANTS_FIELD)) {
-      anchor.getDescendants().forEach(descendant -> codes.add(descendant.getCode()));
+      codes.addAll(getCodes(anchor.getDescendants()));
       checkSize(codes);
     }
+
     return codes;
   }
 
   /**
    * Returns the codes within {@code maxLevel} levels below the anchors, by shortest distance,
-   * walking children one level at a time from all anchors at once.
+   * walking children one level at a time from all anchors at once. A level with no concepts makes
+   * no lookups, so the walk costs nothing once it runs out of children.
    *
    * @param operations the OpenSearch operations
    * @param terminology the terminology
@@ -108,21 +125,69 @@ final class StoredHierarchyFallback {
       final Collection<String> anchorCodes,
       final int maxLevel) {
     final Set<String> codes = new HashSet<>();
-    Set<String> level = new HashSet<>(anchorCodes);
-    for (int depth = 1; depth <= maxLevel && !level.isEmpty(); depth++) {
-      final Set<String> nextLevel = new HashSet<>();
-      for (final Concept parent : fetchConcepts(operations, terminology, level, CHILDREN_FIELD)) {
-        for (final Concept child : parent.getChildren()) {
-          // First time reached is the shortest distance; skip codes already seen
-          if (codes.add(child.getCode())) {
-            nextLevel.add(child.getCode());
-          }
-        }
-      }
+
+    Set<String> levelCodes = new HashSet<>(anchorCodes);
+    for (int level = FIRST_LEVEL; level <= maxLevel; level++) {
+      levelCodes = fetchUnseenChildCodes(operations, terminology, levelCodes, codes);
       checkSize(codes);
-      level = nextLevel;
     }
+
     return codes;
+  }
+
+  /**
+   * Returns the children of the parents that haven't been seen yet, adding them to the seen codes.
+   * The first level a code is reached at is its shortest distance, so codes already seen are
+   * skipped.
+   *
+   * @param operations the OpenSearch operations
+   * @param terminology the terminology
+   * @param parentCodes the codes on the current level
+   * @param seenCodes the codes found so far, added to
+   * @return the codes on the next level
+   */
+  private static Set<String> fetchUnseenChildCodes(
+      final OpenSearchOperations operations,
+      final Terminology terminology,
+      final Set<String> parentCodes,
+      final Set<String> seenCodes) {
+    final Set<String> childCodes = new HashSet<>();
+    for (final Concept parent :
+        fetchConcepts(operations, terminology, parentCodes, CHILDREN_FIELD)) {
+      childCodes.addAll(recordUnseenCodes(parent.getChildren(), seenCodes));
+    }
+
+    return childCodes;
+  }
+
+  /**
+   * Adds the concepts' codes to the seen codes and returns the ones that weren't there yet.
+   *
+   * @param concepts the concepts
+   * @param seenCodes the codes found so far, added to
+   * @return the codes seen for the first time
+   */
+  private static Set<String> recordUnseenCodes(
+      final List<Concept> concepts, final Set<String> seenCodes) {
+    final Set<String> unseenCodes = new HashSet<>();
+    for (final Concept concept : concepts) {
+      final boolean isFirstSeen = seenCodes.add(concept.getCode());
+      if (isFirstSeen) {
+        unseenCodes.add(concept.getCode());
+      }
+    }
+
+    return unseenCodes;
+  }
+
+  /**
+   * Returns the concepts' codes.
+   *
+   * @param concepts the concepts
+   * @return the codes
+   */
+  private static List<String> getCodes(final List<Concept> concepts) {
+    return concepts.stream().map(Concept::getCode).toList();
   }
 
   /**
@@ -140,26 +205,61 @@ final class StoredHierarchyFallback {
       final Terminology terminology,
       final Collection<String> codes,
       final String hierarchyField) {
-    final List<String> remaining = new ArrayList<>(codes);
     final List<Concept> concepts = new ArrayList<>();
-    for (int start = 0; start < remaining.size(); start += CONCEPTS_PER_LOOKUP) {
-      final List<String> batch =
-          remaining.subList(start, Math.min(start + CONCEPTS_PER_LOOKUP, remaining.size()));
-      final NativeSearchQuery lookup =
-          new NativeSearchQueryBuilder()
-              .withQuery(QueryBuilders.idsQuery().addIds(batch.toArray(new String[0])))
-              .withSourceFilter(
-                  new FetchSourceFilter(true, new String[] {CODE_FIELD, hierarchyField}, null))
-              .withPageable(PageRequest.of(0, batch.size()))
-              .build();
-      operations
-          .search(lookup, Concept.class, IndexCoordinates.of(terminology.getIndexName()))
-          .getSearchHits()
-          .stream()
-          .map(SearchHit::getContent)
-          .forEach(concepts::add);
+    for (final List<String> batch : getBatches(codes)) {
+      concepts.addAll(fetchBatch(operations, terminology, batch, hierarchyField));
     }
+
     return concepts;
+  }
+
+  /**
+   * Fetches one batch of concepts by code, with only the code and one hierarchy field.
+   *
+   * @param operations the OpenSearch operations
+   * @param terminology the terminology
+   * @param batch the codes, at most {@link #CONCEPTS_PER_LOOKUP}
+   * @param hierarchyField the hierarchy field to fetch
+   * @return the concepts found
+   */
+  private static List<Concept> fetchBatch(
+      final OpenSearchOperations operations,
+      final Terminology terminology,
+      final List<String> batch,
+      final String hierarchyField) {
+    final NativeSearchQuery lookup =
+        new NativeSearchQueryBuilder()
+            .withQuery(QueryBuilders.idsQuery().addIds(batch.toArray(String[]::new)))
+            .withSourceFilter(
+                new FetchSourceFilter(
+                    SHOULD_FETCH_SOURCE, new String[] {CODE_FIELD, hierarchyField}, null))
+            .withPageable(PageRequest.of(FIRST_PAGE, batch.size()))
+            .build();
+
+    return operations
+        .search(lookup, Concept.class, IndexCoordinates.of(terminology.getIndexName()))
+        .getSearchHits()
+        .stream()
+        .map(SearchHit::getContent)
+        .toList();
+  }
+
+  /**
+   * Splits the codes into batches of at most {@link #CONCEPTS_PER_LOOKUP}.
+   *
+   * @param codes the codes
+   * @return the batches
+   */
+  private static List<List<String>> getBatches(final Collection<String> codes) {
+    final List<String> remaining = new ArrayList<>(codes);
+
+    final List<List<String>> batches = new ArrayList<>();
+    for (int start = FIRST_CODE_POSITION; start < remaining.size(); start += CONCEPTS_PER_LOOKUP) {
+      final int end = Math.min(start + CONCEPTS_PER_LOOKUP, remaining.size());
+      batches.add(remaining.subList(start, end));
+    }
+
+    return batches;
   }
 
   /**
@@ -168,7 +268,8 @@ final class StoredHierarchyFallback {
    * @param codes the codes found so far
    */
   private static void checkSize(final Set<String> codes) {
-    if (codes.size() > MatchAnyOf.MAX_VALUES) {
+    final boolean isTooLarge = codes.size() > MatchAnyOf.MAX_VALUES;
+    if (isTooLarge) {
       throw new IllegalArgumentException(
           "Branch is too large for an index without ancestor fields (more than "
               + MatchAnyOf.MAX_VALUES
