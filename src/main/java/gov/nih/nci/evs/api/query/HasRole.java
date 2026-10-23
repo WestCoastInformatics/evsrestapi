@@ -163,12 +163,15 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
     if (!hasRoleTarget) {
       return getConceptsWithAnyRoleMatching(hasRoleNameOrCodeMatchingRoleTypeQuery);
     }
+
     final ConceptKeys targetKeys = declareDependencies(operations, roleTarget.getQuery()).get(0);
+
     final boolean hasFoundTargetConcepts = !targetKeys.getCodesByTerminologyVersion().isEmpty();
     if (!hasFoundTargetConcepts) {
       // A bool query with no clauses would match everything, so match nothing explicitly
       return QueryBuilders.boolQuery().mustNot(QueryBuilders.matchAllQuery());
     }
+
     return getTargetInOwnVersionQuery(
         hasRoleNameOrCodeMatchingRoleTypeQuery, targetKeys, operations);
   }
@@ -201,6 +204,7 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
                         terminologyVersion,
                         targetCodes,
                         operations)));
+
     return targetInOwnVersionQuery;
   }
 
@@ -224,14 +228,17 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
       final Set<String> targetCodes,
       final OpenSearchOperations operations) {
     checkTargetCodeCount(targetCodes.size());
+
     final QueryBuilder roleEntryConditions =
         QueryBuilders.boolQuery()
             .must(hasRoleNameOrCodeMatchingRoleTypeQuery)
             .must(QueryBuilders.termsQuery(TARGET_CODE_FIELD, targetCodes));
+
     final Match terminologyMatch =
         new Match(terminologies, TERMINOLOGY_FIELD, terminologyVersion.terminology());
     final Match versionMatch =
         new Match(terminologies, VERSION_FIELD, terminologyVersion.version());
+
     return QueryBuilders.boolQuery()
         .filter(terminologyMatch.fetchOpenSearchQuery(operations))
         .filter(versionMatch.fetchOpenSearchQuery(operations))
