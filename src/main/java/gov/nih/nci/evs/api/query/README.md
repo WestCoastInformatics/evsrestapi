@@ -168,10 +168,12 @@ can't become one OpenSearch query.
 **How it works:** building such a node runs the inner query first. `fetchOpenSearchQuery(operations)`
 takes the OpenSearch operations so it can. The node calls `declareDependencies(operations,
 dependencies...)`, which runs each dependency and pages through every matching concept with
-`search_after` (sorted by code, then index, so pages don't overlap), fetching only each concept's
-code, terminology, and version. It returns one `ConceptKeys` per dependency: the codes found in
-each terminology version. The node then matches what it found, e.g. with a `terms` query on codes.
-The paging itself is private to `EvsQuery`. An inner query can hold its own query about another
+`search_after` (sorted by code, then index, so pages don't overlap). It reads no stored documents,
+which can be very large: each hit's code is its first sort value (read from doc values) and its
+terminology version is that of the index it came from. It returns one `ConceptKeys` per dependency:
+the codes found in each terminology version. The node then matches what it found, e.g. with a
+`terms` query on codes. The paging is done by `EvsQuery.fetchConceptKeys`, which runs the node's own
+`fetchOpenSearchQuery`, so a node is written once and works both as a search and as a dependency. An inner query can hold its own query about another
 concept, which runs first in the same way, to any depth. Nodes that don't hold a query about
 another concept ignore `operations`.
 

@@ -82,19 +82,45 @@ public class DeclareDependenciesTest {
   }
 
   /**
-   * Only the fields that identify a concept are fetched: its code, terminology, and version. The
-   * terminology and version say which version of the terminology a code belongs to.
+   * No stored fields are fetched, not even {@code _source}: concept documents can be very large,
+   * and the sort values and index identify each hit.
    */
   @Test
-  public void testFetchesCodeTerminologyAndVersion() {
+  public void testFetchesNoStoredFields() {
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(getPage(0, PARTIAL_PAGE_SIZE));
 
     fetchDependencyCodeCount();
 
     final NativeSearchQuery search = (NativeSearchQuery) captureSearches(1).get(0);
+    assertEquals(List.of(EvsQuery.NO_STORED_FIELDS), search.getStoredFields());
+    assertNull(search.getSourceFilter());
+  }
+
+  /**
+   * Each hit's code is its first sort value, and its terminology version is that of the index it
+   * came from. The hit's content isn't read: with no stored fields, it's empty.
+   */
+  @Test
+  public void testKeysComeFromSortValuesAndIndex() {
+    final Terminology current = getTerminology("concept_ncit_2512e", "25.12e");
+    final Terminology previous = getTerminology("concept_ncit_2511d", "25.11d");
+    final EvsQuery twoVersionQuery = new Match(List.of(current, previous), "code", "C12470");
+    when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
+        .thenReturn(
+            getPage(
+                List.of(
+                    getEmptyHit("C1", current.getIndexName()),
+                    getEmptyHit("C1", previous.getIndexName()),
+                    getEmptyHit("C2", current.getIndexName()))));
+
+    final ConceptKeys keys = EvsQuery.declareDependencies(operations, twoVersionQuery).get(0);
+
     assertEquals(
-        Set.of("code", "terminology", "version"), Set.of(search.getSourceFilter().getIncludes()));
+        Map.of(
+            new ConceptKeys.TerminologyVersion(TERMINOLOGY, "25.12e"), Set.of("C1", "C2"),
+            new ConceptKeys.TerminologyVersion(TERMINOLOGY, "25.11d"), Set.of("C1")),
+        keys.getCodesByTerminologyVersion());
   }
 
   /**
@@ -160,7 +186,7 @@ public class DeclareDependenciesTest {
 
   /**
    * Builds a page of made-up concepts with consecutive codes, each hit sorted by code then index
-   * like the real concept-page search.
+   * like the real concept-key page search.
    *
    * @param firstCodeNumber the number in the first concept's code
    * @param hitCount how many hits the page holds
@@ -171,6 +197,16 @@ public class DeclareDependenciesTest {
     for (int codeNumber = firstCodeNumber; codeNumber < firstCodeNumber + hitCount; codeNumber++) {
       hits.add(getHit("C" + codeNumber));
     }
+    return getPage(hits);
+  }
+
+  /**
+   * Builds a page holding the given hits.
+   *
+   * @param hits the hits
+   * @return the page
+   */
+  private static SearchHits<Concept> getPage(final List<SearchHit<Concept>> hits) {
     final float maxScore = 0f;
     return new SearchHitsImpl<>(
         hits.size(),
@@ -210,5 +246,45 @@ public class DeclareDependenciesTest {
         null,
         List.of(),
         concept);
+  }
+
+  /**
+   * Builds one hit as a search with no stored fields returns it: an empty concept, no id, and the
+   * code and index only in its sort values.
+   *
+   * @param code the concept code
+   * @param indexName the index the hit came from
+   * @return the hit
+   */
+  private static SearchHit<Concept> getEmptyHit(final String code, final String indexName) {
+    final float score = 0f;
+    final Object[] sortValues = {code, indexName};
+    return new SearchHit<>(
+        indexName,
+        null,
+        null,
+        score,
+        sortValues,
+        Map.of(),
+        Map.of(),
+        null,
+        null,
+        List.of(),
+        new Concept());
+  }
+
+  /**
+   * Builds a version of the made-up terminology with its own index.
+   *
+   * @param indexName the index name
+   * @param version the version
+   * @return the terminology
+   */
+  private static Terminology getTerminology(final String indexName, final String version) {
+    final Terminology terminology = new Terminology();
+    terminology.setTerminology(TERMINOLOGY);
+    terminology.setVersion(version);
+    terminology.setIndexName(indexName);
+    return terminology;
   }
 }
