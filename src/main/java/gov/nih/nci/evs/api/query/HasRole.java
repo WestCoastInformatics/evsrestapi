@@ -151,15 +151,17 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
    * With one, the target query runs first, and a role entry must point to one of the concepts it
    * found in the same terminology version.
    *
-   * @param roleTypeQuery the query on the role's type
+   * @param hasRoleNameOrCodeMatchingRoleTypeQuery the query matching a role entry whose name or
+   *     code is the role type
    * @param operations the OpenSearch operations, for running the target query
    * @return the query builder
    */
   private QueryBuilder getRoleQuery(
-      final QueryBuilder roleTypeQuery, final OpenSearchOperations operations) {
+      final QueryBuilder hasRoleNameOrCodeMatchingRoleTypeQuery,
+      final OpenSearchOperations operations) {
     final boolean hasRoleTarget = getHasRoleTarget();
     if (!hasRoleTarget) {
-      return getRoleEntryQuery(roleTypeQuery);
+      return getConceptsWithAnyRoleMatching(hasRoleNameOrCodeMatchingRoleTypeQuery);
     }
     final ConceptKeys targetKeys = declareDependencies(operations, roleTarget.getQuery()).get(0);
     final boolean hasFoundTargetConcepts = !targetKeys.getCodesByTerminologyVersion().isEmpty();
@@ -167,7 +169,8 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
       // A bool query with no clauses would match everything, so match nothing explicitly
       return QueryBuilders.boolQuery().mustNot(QueryBuilders.matchAllQuery());
     }
-    return getTargetInOwnVersionQuery(roleTypeQuery, targetKeys, operations);
+    return getTargetInOwnVersionQuery(
+        hasRoleNameOrCodeMatchingRoleTypeQuery, targetKeys, operations);
   }
 
   /**
@@ -176,13 +179,14 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
    * roles on concepts from another. There is one clause per version the targets came from, and a
    * concept matches when the clause for its version does.
    *
-   * @param roleTypeQuery the query on the role's type
+   * @param hasRoleNameOrCodeMatchingRoleTypeQuery the query matching a role entry whose name or
+   *     code is the role type
    * @param targetKeys the target concepts, from any of the searched terminology versions
    * @param operations the OpenSearch operations, for building the atomic queries
    * @return the query builder
    */
   private QueryBuilder getTargetInOwnVersionQuery(
-      final QueryBuilder roleTypeQuery,
+      final QueryBuilder hasRoleNameOrCodeMatchingRoleTypeQuery,
       final ConceptKeys targetKeys,
       final OpenSearchOperations operations) {
     final BoolQueryBuilder targetInOwnVersionQuery =
@@ -193,7 +197,10 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
             (terminologyVersion, targetCodes) ->
                 targetInOwnVersionQuery.should(
                     getTerminologyVersionQuery(
-                        roleTypeQuery, terminologyVersion, targetCodes, operations)));
+                        hasRoleNameOrCodeMatchingRoleTypeQuery,
+                        terminologyVersion,
+                        targetCodes,
+                        operations)));
     return targetInOwnVersionQuery;
   }
 
@@ -202,7 +209,8 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
    * version's target codes. The terminology and version are checked on the concept, outside the
    * nested query, because a nested query only sees the role entry's own fields.
    *
-   * @param roleTypeQuery the query on the role's type
+   * @param hasRoleNameOrCodeMatchingRoleTypeQuery the query matching a role entry whose name or
+   *     code is the role type
    * @param terminologyVersion the terminology version
    * @param targetCodes the target codes in that terminology version
    * @param operations the OpenSearch operations, for building the atomic queries
@@ -211,14 +219,14 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
    *     accepts
    */
   private QueryBuilder getTerminologyVersionQuery(
-      final QueryBuilder roleTypeQuery,
+      final QueryBuilder hasRoleNameOrCodeMatchingRoleTypeQuery,
       final ConceptKeys.TerminologyVersion terminologyVersion,
       final Set<String> targetCodes,
       final OpenSearchOperations operations) {
     checkTargetCodeCount(targetCodes.size());
     final QueryBuilder roleEntryConditions =
         QueryBuilders.boolQuery()
-            .must(roleTypeQuery)
+            .must(hasRoleNameOrCodeMatchingRoleTypeQuery)
             .must(QueryBuilders.termsQuery(TARGET_CODE_FIELD, targetCodes));
     final Match terminologyMatch =
         new Match(terminologies, TERMINOLOGY_FIELD, terminologyVersion.terminology());
@@ -227,7 +235,7 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
     return QueryBuilders.boolQuery()
         .filter(terminologyMatch.fetchOpenSearchQuery(operations))
         .filter(versionMatch.fetchOpenSearchQuery(operations))
-        .filter(getRoleEntryQuery(roleEntryConditions));
+        .filter(getConceptsWithAnyRoleMatching(roleEntryConditions));
   }
 
   /**
@@ -243,7 +251,8 @@ public class HasRole extends EvsQuery implements SupportsIgnoringCase {
    * @param roleEntryConditions the conditions one role entry must meet
    * @return the query builder
    */
-  private static QueryBuilder getRoleEntryQuery(final QueryBuilder roleEntryConditions) {
+  private static QueryBuilder getConceptsWithAnyRoleMatching(
+      final QueryBuilder roleEntryConditions) {
     return QueryBuilders.nestedQuery(ROLES_PATH, roleEntryConditions, ScoreMode.None);
   }
 
