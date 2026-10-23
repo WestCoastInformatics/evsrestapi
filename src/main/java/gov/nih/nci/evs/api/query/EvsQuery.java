@@ -2,9 +2,12 @@ package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Concept;
 import gov.nih.nci.evs.api.model.Terminology;
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
@@ -16,7 +19,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
-import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 
 /**
  * A node in an EVS search query tree. Atomic queries match a single field with a single strategy;
@@ -49,8 +51,12 @@ public abstract class EvsQuery {
    */
   private static final int FIRST_PAGE = 0;
 
-  /** The fields fetched for each matching concept: enough to identify it. */
-  private static final String[] IDENTIFYING_FIELDS = {CODE_FIELD, "terminology", "version"};
+  /**
+   * Stored fields value that fetches none, not even {@code _source} or {@code _id}, so hits are
+   * identified from their sort values and index without reading any stored document. For
+   * efficiency: see {@link #fetchConceptKeys}.
+   */
+  static final String NO_STORED_FIELDS = "_none_";
 
   /** The terminologies being searched. Unmodifiable. */
   protected final List<Terminology> terminologies;
@@ -134,33 +140,64 @@ public abstract class EvsQuery {
   }
 
   /**
-   * Runs this query and returns every concept it matches, a page at a time. Only each concept's
-   * code, terminology, and version are fetched: enough to identify it.
+   * Runs this node's query ({@link #fetchOpenSearchQuery}) and returns the key of every concept it
+   * matches, a page at a time. Called by {@link #declareDependencies}. The query is whatever the
+   * node's own {@link #fetchOpenSearchQuery} builds, so a node is written once and works both as a
+   * search and as a dependency.
+   *
+   * <p><b>Why the matches are returned without their documents.</b> The node's query decides which
+   * concepts match; the search request wrapped around it decides what comes back for each match.
+   * Only the request is special here: the query is used as is. A normal search returns each hit's
+   * stored document ({@code _source}), which Spring maps to a {@link Concept}. A dependency doesn't
+   * need any of that: only which codes matched, in which terminology version. Reading documents
+   * would be pure cost, and a large one. Concept documents can be very large (C3262's is about 1.4
+   * MB, with its paths and descendants), and OpenSearch loads and decompresses a whole document
+   * even to return a few of its fields, or only its {@code _id}. Filtering {@code _source} to the
+   * code, terminology, and version took about 40 seconds for the 15,233 concepts below C3262 in
+   * NCIt.
+   *
+   * <p>So this search reads no stored fields at all ({@link #NO_STORED_FIELDS}), and each hit is
+   * identified without its document. That takes under a second for the same 15,233 concepts.
+   *
+   * <ul>
+   *   <li>The <b>code</b> is the hit's first sort value. The pages are sorted by code anyway, and
+   *       OpenSearch reads sort values from the code's doc values, a per-field column, not the
+   *       document.
+   *   <li>The <b>terminology and version</b> come from the index the hit is in. Each terminology
+   *       version has its own index, and this node's {@link #terminologies} say which terminology
+   *       version each searched index holds.
+   * </ul>
+   *
+   * <p>The hits' {@link Concept} content is empty and isn't read.
    *
    * @param operations the OpenSearch operations
-   * @return the matching concepts
+   * @return the keys of the matching concepts
    */
-  private ConceptKeys fetchConceptKeys(final OpenSearchOperations operations) {
+  protected ConceptKeys fetchConceptKeys(final OpenSearchOperations operations) {
     final QueryBuilder queryBuilder = fetchOpenSearchQuery(operations);
 
-    final List<Concept> concepts = new ArrayList<>();
+    final Map<ConceptKeys.TerminologyVersion, Set<String>> codesByTerminologyVersion =
+        new HashMap<>();
 
-    fetchAndAddConceptsFromAllPagesToList(operations, queryBuilder, concepts);
+    fetchAndAddCodesFromAllPages(operations, queryBuilder, codesByTerminologyVersion);
 
-    return ConceptKeys.of(concepts);
+    return ConceptKeys.of(codesByTerminologyVersion);
   }
 
   /**
-   * Fetches every page of the query's matches, adding each page's concepts to the list.
+   * Fetches every page of the query's matches, adding each hit's code under its terminology
+   * version.
    *
    * @param operations the OpenSearch operations
    * @param queryToFetchBuilder the query to fetch the matches of
-   * @param concepts the list to add the matching concepts to
+   * @param codesByTerminologyVersion the codes found so far, added to
    */
-  private void fetchAndAddConceptsFromAllPagesToList(
+  private void fetchAndAddCodesFromAllPages(
       final OpenSearchOperations operations,
       final QueryBuilder queryToFetchBuilder,
-      final List<Concept> concepts) {
+      final Map<ConceptKeys.TerminologyVersion, Set<String>> codesByTerminologyVersion) {
+    final Map<String, ConceptKeys.TerminologyVersion> terminologyVersionsByIndex =
+        getTerminologyVersionsByIndex();
     // List<Object> is the shape of the page cursor that is relevant to OpenSearch
     // what is actually in it is largely irrelevant to us beyond the fact that OpenSearch
     // can use it as a pageCursor
@@ -168,9 +205,9 @@ public abstract class EvsQuery {
 
     boolean hasMorePages = true;
     while (hasMorePages) {
-      final SearchHits<Concept> page = fetchPage(operations, queryToFetchBuilder, pageCursor);
+      final SearchHits<Concept> page = fetchKeyPage(operations, queryToFetchBuilder, pageCursor);
 
-      addPageConceptsToList(concepts, page);
+      addPageCodes(codesByTerminologyVersion, terminologyVersionsByIndex, page);
 
       // should continue leafing through pages and recording their concepts?
       hasMorePages = page.getSearchHits().size() == CONCEPTS_PER_PAGE;
@@ -179,41 +216,79 @@ public abstract class EvsQuery {
   }
 
   /**
-   * Fetches one page of the query's matches.
+   * Fetches one page of the query's matches as keys: each hit has its index and sort values, and no
+   * document. The hits are typed {@link Concept} because Spring maps every hit to an entity class,
+   * but that content is empty.
    *
    * @param operations the OpenSearch operations
    * @param queryToFetchBuilder the query to fetch the matches of
    * @param pageCursor where the page starts, or null for the first page
    * @return the page
    */
-  private SearchHits<Concept> fetchPage(
+  private SearchHits<Concept> fetchKeyPage(
       final OpenSearchOperations operations,
       final QueryBuilder queryToFetchBuilder,
       final List<Object> pageCursor) {
     return operations.search(
-        getConceptPageQuery(queryToFetchBuilder, pageCursor), Concept.class, getIndexCoordinates());
+        getConceptKeyPageQuery(queryToFetchBuilder, pageCursor),
+        Concept.class,
+        getIndexCoordinates());
   }
 
   /**
-   * Adds a page's concepts to the list.
+   * Adds each hit's code, its first sort value, under the terminology version of the index it's in.
    *
-   * @param concepts the list to add to
+   * @param codesByTerminologyVersion the codes found so far, added to
+   * @param terminologyVersionsByIndex the terminology version of each searched index
    * @param page the page
    */
-  private static void addPageConceptsToList(
-      final List<Concept> concepts, final SearchHits<Concept> page) {
-    page.getSearchHits().stream().map(SearchHit::getContent).forEach(concepts::add);
+  private static void addPageCodes(
+      final Map<ConceptKeys.TerminologyVersion, Set<String>> codesByTerminologyVersion,
+      final Map<String, ConceptKeys.TerminologyVersion> terminologyVersionsByIndex,
+      final SearchHits<Concept> page) {
+    for (final SearchHit<Concept> hit : page.getSearchHits()) {
+      final ConceptKeys.TerminologyVersion terminologyVersion =
+          terminologyVersionsByIndex.get(hit.getIndex());
+      // The search only covers this node's indexes, so every hit should be in one of them. If not
+      // (e.g. a terminology's indexName is an alias, and hits name the real index), the hit's
+      // terminology version is unknown: fail rather than drop or mislabel its code
+      if (terminologyVersion == null) {
+        throw new IllegalStateException(
+            "Hit from index " + hit.getIndex() + ", which isn't a searched terminology's index");
+      }
+      final String code = (String) hit.getSortValues().get(0);
+      codesByTerminologyVersion.computeIfAbsent(terminologyVersion, k -> new HashSet<>()).add(code);
+    }
   }
 
   /**
-   * Builds the search for one page of matching concepts, ordered by code so pages don't overlap.
+   * Returns the terminology version of each searched index. Each terminology version has its own
+   * index.
+   *
+   * @return the terminology versions by index name
+   */
+  private Map<String, ConceptKeys.TerminologyVersion> getTerminologyVersionsByIndex() {
+    final Map<String, ConceptKeys.TerminologyVersion> terminologyVersionsByIndex = new HashMap<>();
+    for (final Terminology terminology : terminologies) {
+      terminologyVersionsByIndex.put(
+          terminology.getIndexName(),
+          new ConceptKeys.TerminologyVersion(
+              terminology.getTerminology(), terminology.getVersion()));
+    }
+    return terminologyVersionsByIndex;
+  }
+
+  /**
+   * Builds the search for one page of the keys of matching concepts, ordered by code so pages don't
+   * overlap. It returns no stored fields, only each hit's index and sort values, which identify it
+   * (see {@link #fetchConceptKeys}).
    *
    * @param queryBuilder the query
    * @param pageCursor where the page starts: the sort values of the previous page's last hit, or
    *     null for the first page
    * @return the search
    */
-  private static NativeSearchQuery getConceptPageQuery(
+  private static NativeSearchQuery getConceptKeyPageQuery(
       final QueryBuilder queryBuilder, final List<Object> pageCursor) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
@@ -221,7 +296,7 @@ public abstract class EvsQuery {
             .withSorts(
                 SortBuilders.fieldSort(CODE_FIELD).order(SortOrder.ASC),
                 SortBuilders.fieldSort(INDEX_FIELD).order(SortOrder.ASC))
-            .withSourceFilter(new FetchSourceFilter(true, IDENTIFYING_FIELDS, null))
+            .withStoredFields(NO_STORED_FIELDS)
             .withPageable(PageRequest.of(FIRST_PAGE, CONCEPTS_PER_PAGE))
             .build();
     search.setSearchAfter(pageCursor);
