@@ -72,9 +72,8 @@ public class DeclareDependenciesTest {
   /** Builds the query and a fresh mock. */
   @BeforeEach
   public void setUp() {
-    final Terminology terminology = new Terminology();
-    terminology.setIndexName(INDEX_NAME);
-    terminologies = List.of(terminology);
+    terminologies =
+        List.of(QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME));
     query = new Match(terminologies, "code", "C12470");
     operations = mock(OpenSearchOperations.class);
   }
@@ -141,8 +140,10 @@ public class DeclareDependenciesTest {
    * @return the keys the dependency found
    */
   private ConceptKeys fetchTwoVersionKeys() {
-    final Terminology current = getTerminology("concept_ncit_2512e", CURRENT_VERSION);
-    final Terminology previous = getTerminology("concept_ncit_2511d", PREVIOUS_VERSION);
+    final Terminology current =
+        QueryTestTerminologies.getTerminology(TERMINOLOGY, CURRENT_VERSION, "concept_ncit_2512e");
+    final Terminology previous =
+        QueryTestTerminologies.getTerminology(TERMINOLOGY, PREVIOUS_VERSION, "concept_ncit_2511d");
     final EvsQuery twoVersionQuery = new Match(List.of(current, previous), "code", "C12470");
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(
@@ -324,20 +325,5 @@ public class DeclareDependenciesTest {
         null,
         List.of(),
         new Concept());
-  }
-
-  /**
-   * Builds a version of the made-up terminology with its own index.
-   *
-   * @param indexName the index name
-   * @param version the version
-   * @return the terminology
-   */
-  private static Terminology getTerminology(final String indexName, final String version) {
-    final Terminology terminology = new Terminology();
-    terminology.setTerminology(TERMINOLOGY);
-    terminology.setVersion(version);
-    terminology.setIndexName(indexName);
-    return terminology;
   }
 }

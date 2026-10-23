@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -55,5 +56,17 @@ public final class ConceptKeys {
    * @param terminology the terminology
    * @param version the version
    */
-  record TerminologyVersion(String terminology, String version) {}
+  record TerminologyVersion(String terminology, String version) {
+
+    /**
+     * Instantiates a {@link TerminologyVersion}, failing if either part is missing.
+     *
+     * @param terminology the terminology
+     * @param version the version
+     */
+    TerminologyVersion {
+      Objects.requireNonNull(terminology, "terminology");
+      Objects.requireNonNull(version, "version");
+    }
+  }
 }
