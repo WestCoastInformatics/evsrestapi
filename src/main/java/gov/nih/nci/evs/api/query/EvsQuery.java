@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.opensearch.data.client.orhlc.NativeSearchQuery;
@@ -70,7 +71,51 @@ public abstract class EvsQuery {
    * @param terminologies the terminologies being searched
    */
   protected EvsQuery(final List<Terminology> terminologies) {
+    terminologies.forEach(EvsQuery::checkTerminologyIsSearchable);
     this.terminologies = List.copyOf(terminologies);
+  }
+
+  /**
+   * Fails if a terminology is missing its terminology or version, which say which terminology
+   * version each hit came from (see {@link #fetchConceptKeys}). Checked when a node is built, so a
+   * partly set up terminology fails here, naming what's missing, rather than deep inside a later
+   * search.
+   *
+   * <p>The index name isn't checked: {@link Terminology#getIndexName} is never null. Without one
+   * set, it builds and caches one from the terminology and version, so it's only read after they
+   * are known to be there.
+   *
+   * @param terminology the terminology
+   * @throws IllegalArgumentException if the terminology or version is missing
+   */
+  private static void checkTerminologyIsSearchable(final Terminology terminology) {
+    Objects.requireNonNull(terminology, "terminology");
+    checkTerminologyHasField(terminology, "terminology", terminology.getTerminology());
+    checkTerminologyHasField(terminology, "version", terminology.getVersion());
+  }
+
+  /**
+   * Fails if one of a terminology's fields is missing, naming the field and showing the terminology
+   * and version it does have.
+   *
+   * @param terminology the terminology
+   * @param fieldName the name of the field
+   * @param fieldValue the field's value
+   * @throws IllegalArgumentException if the value is missing
+   */
+  private static void checkTerminologyHasField(
+      final Terminology terminology, final String fieldName, final String fieldValue) {
+    final boolean hasFieldValue = fieldValue != null;
+    if (!hasFieldValue) {
+      throw new IllegalArgumentException(
+          "Terminology has no "
+              + fieldName
+              + " (terminology = "
+              + terminology.getTerminology()
+              + ", version = "
+              + terminology.getVersion()
+              + ")");
+    }
   }
 
   /**
