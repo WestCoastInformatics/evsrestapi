@@ -10,6 +10,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.script.Script;
 import org.opensearch.script.ScriptType;
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.opensearch.search.sort.ScriptSortBuilder;
 import org.opensearch.search.sort.SortBuilder;
 import org.opensearch.search.sort.SortBuilders;
@@ -37,6 +38,9 @@ public class Typeahead extends EvsQuery {
   /** The search_as_you_type subfield of preferred names, which typeahead matches against. */
   private static final String NAME_TYPEAHEAD_FIELD =
       "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+
+  /** The preferred name field, whose text highlights show what matched. */
+  private static final String NAME_FIELD = "name";
 
   /** Boolean field that is false for retired concepts, which typeahead leaves out. */
   private static final String ACTIVE_FIELD = "active";
@@ -208,6 +212,27 @@ public class Typeahead extends EvsQuery {
         .should(QueryBuilders.constantScoreQuery(nameQuery).boost(NAME_MATCH_SCORE))
         .should(QueryBuilders.constantScoreQuery(partialCodeQuery).boost(CODE_MATCH_SCORE))
         .minimumShouldMatch(eitherFieldMatches);
+  }
+
+  /**
+   * Highlights the matched words of the preferred name, and the code when it matched.
+   *
+   * <p>The name is highlighted on its main text field with a {@code match_bool_prefix} query: the
+   * typed words, with the last one as a prefix. Highlighting the {@code search_as_you_type}
+   * subfield the query actually matched doesn't work well: OpenSearch never marks the partial last
+   * word there (so "melan" highlights nothing), and its prefix subfield marks whole word groups.
+   * OpenSearch still marks whole words, e.g. {@code <em>Lung</em> <em>Carcinoma</em>} for "lung
+   * ca".
+   *
+   * @return the name and code highlight fields
+   */
+  @Override
+  protected List<HighlightBuilder.Field> getHighlightFields() {
+    final QueryBuilder typedWordsQuery =
+        QueryBuilders.matchBoolPrefixQuery(NAME_FIELD, incompleteTerm);
+    return List.of(
+        new HighlightBuilder.Field(NAME_FIELD).highlightQuery(typedWordsQuery),
+        new HighlightBuilder.Field(CODE_FIELD));
   }
 
   /**

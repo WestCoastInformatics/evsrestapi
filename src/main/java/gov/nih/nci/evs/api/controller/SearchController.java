@@ -69,6 +69,9 @@ public class SearchController extends BaseController {
   // at run time
   private static final String DEFAULT_TYPEAHEAD_PAGE_SIZE = "10";
 
+  /** The default typeahead fields: enough to show each suggestion, without highlights. */
+  private static final String DEFAULT_TYPEAHEAD_INCLUDE = "minimal";
+
   /** The Constant log. */
   private static final Logger logger = LoggerFactory.getLogger(SearchController.class);
 
@@ -364,10 +367,10 @@ public class SearchController extends BaseController {
               + " concepts (those with more descendants) with short names come first, with a small"
               + " preference for names that start with the typed text. Intended for autocomplete"
               + " use cases; a blank term returns an empty result. Returns only the first page, and"
-              + " the total counts matches only up to 10,000. Each concept's highlight is"
-              + " OpenSearch's highlight of its name (or of its code, if only the code matched),"
-              + " which marks whole words, e.g. \"<em>Lung</em> <em>Carcinoma</em>\" for"
-              + " \"lung ca\".")
+              + " the total counts matches only up to 10,000. Highlighting is optional: with"
+              + " include=minimal,highlights, each concept's highlight is OpenSearch's highlight of"
+              + " its name (or of its code, if only the code matched), which marks whole words,"
+              + " e.g. \"<em>Lung</em> <em>Carcinoma</em>\" for \"lung ca\".")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -410,6 +413,20 @@ public class SearchController extends BaseController {
         schema =
             @Schema(implementation = Integer.class, defaultValue = DEFAULT_TYPEAHEAD_PAGE_SIZE)),
     @Parameter(
+        name = "include",
+        description =
+            "Indicator of how much data to return, as for concept search. Comma-separated list of"
+                + " any of the following values: minimal, summary, full, associations, children,"
+                + " definitions, disjointWith, highlights, history, inverseAssociations,"
+                + " inverseRoles, maps, parents, properties, roles, synonyms. Add 'highlights' to"
+                + " mark the matched part of each suggestion. Typeahead runs on every keystroke, so"
+                + " keep it small. <a"
+                + " href='https://github.com/NCIEVS/evsrestapi-client-SDK/blob/main/doc/INCLUDE.md'"
+                + " target='_blank'>See here for detailed information</a>.",
+        required = false,
+        schema = @Schema(implementation = String.class, defaultValue = DEFAULT_TYPEAHEAD_INCLUDE),
+        example = "minimal,highlights"),
+    @Parameter(
         name = "X-EVSRESTAPI-License-Key",
         description =
             "Required license information for restricted terminologies. <a"
@@ -425,10 +442,12 @@ public class SearchController extends BaseController {
       @RequestParam(name = "terminology", required = false) final List<String> terminologies,
       @RequestParam(name = "pageSize", defaultValue = DEFAULT_TYPEAHEAD_PAGE_SIZE)
           final Integer pageSize,
+      @RequestParam(name = "include", defaultValue = DEFAULT_TYPEAHEAD_INCLUDE)
+          final String include,
       @RequestHeader(name = "X-EVSRESTAPI-License-Key", required = false) final String license)
       throws Exception {
 
-    return typeaheadService(incompleteTerm, terminologies, license, pageSize);
+    return typeaheadService(incompleteTerm, terminologies, license, pageSize, include);
   }
 
   /**
@@ -444,6 +463,8 @@ public class SearchController extends BaseController {
    * @param requestedTerminologies the names of the terminologies to search, or null for ncit
    * @param license the license key from the request header
    * @param pageSize the maximum number of suggestions to return
+   * @param include the fields to return for each suggestion, and whether to highlight matches, or
+   *     null for {@link #DEFAULT_TYPEAHEAD_INCLUDE}
    * @return the matching concepts
    * @throws Exception the exception
    */
@@ -451,7 +472,8 @@ public class SearchController extends BaseController {
       final String incompleteTerm,
       final List<String> requestedTerminologies,
       final String license,
-      final Integer pageSize)
+      final Integer pageSize,
+      final String include)
       throws Exception {
 
     // Nothing typed yet (or only punctuation), so there is nothing to complete
@@ -467,7 +489,7 @@ public class SearchController extends BaseController {
     // fields, and the echoed parameters in the response) and lets this reuse the existing
     // validation methods.
     final SearchCriteria searchCriteria =
-        getTypeaheadSearchCriteria(incompleteTerm, requestedTerminologies, pageSize);
+        getTypeaheadSearchCriteria(incompleteTerm, requestedTerminologies, pageSize, include);
 
     final long timerStartDate = System.currentTimeMillis();
 
@@ -493,16 +515,19 @@ public class SearchController extends BaseController {
    * @param requestedTerminologies the names of the terminologies to search, or null to leave the
    *     terminology unset so the ncit fallback applies
    * @param pageSize the maximum number of suggestions to return, or null for the default
+   * @param include the fields to return for each suggestion, or null for the default
    * @return the search criteria
    */
   private SearchCriteria getTypeaheadSearchCriteria(
       final String incompleteTerm,
       final List<String> requestedTerminologies,
-      final Integer pageSize) {
+      final Integer pageSize,
+      final String include) {
     final SearchCriteria searchCriteria = new SearchCriteria();
     searchCriteria.setTerm(incompleteTerm);
     searchCriteria.setType("startsWith");
-    searchCriteria.setInclude("minimal,highlights");
+    final boolean hasRequestedInclude = include != null;
+    searchCriteria.setInclude(hasRequestedInclude ? include : DEFAULT_TYPEAHEAD_INCLUDE);
     final boolean hasRequestedTerminologies = requestedTerminologies != null;
     if (hasRequestedTerminologies) {
       searchCriteria.setTerminology(requestedTerminologies);

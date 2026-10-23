@@ -42,7 +42,7 @@ public abstract class EvsQuery {
    */
   private static final String INDEX_FIELD = "_index";
 
-  /** Highlights every field the query matched, as the main concept search does. */
+  /** Highlights every top-level field the query matched, as the main concept search does. */
   private static final String EVERY_MATCHED_FIELD = "*";
 
   /** Field that orders concepts within a terminology. */
@@ -154,9 +154,23 @@ public abstract class EvsQuery {
             .withPageable(page);
     final boolean shouldHighlightMatches = include.isHighlights();
     if (shouldHighlightMatches) {
-      search.withHighlightFields(new HighlightBuilder.Field(EVERY_MATCHED_FIELD));
+      search.withHighlightFields(getHighlightFields().toArray(HighlightBuilder.Field[]::new));
     }
     return operations.search(search.build(), Concept.class, getIndexCoordinates());
+  }
+
+  /**
+   * Returns the fields OpenSearch should highlight when {@link #fetchConcepts} is asked for
+   * highlights. The default highlights every top-level field the query matched, as the main concept
+   * search does.
+   *
+   * <p>Override it when the node matches subfields, e.g. a {@code search_as_you_type} subfield: the
+   * {@code *} pattern doesn't reach multi-field subfields, so those matches would get no highlight.
+   *
+   * @return the fields to highlight
+   */
+  protected List<HighlightBuilder.Field> getHighlightFields() {
+    return List.of(new HighlightBuilder.Field(EVERY_MATCHED_FIELD));
   }
 
   /**
