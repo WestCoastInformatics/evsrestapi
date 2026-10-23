@@ -86,12 +86,18 @@ classDiagram
         +fetchOpenSearchQuery(OpenSearchOperations) TermsQueryBuilder
     }
 
-    class DescendantOf {
-        -EvsQuery ancestorQuery
+    class HierarchyQuery {
+        <<abstract>>
+        -EvsQuery anchorQuery
         -Integer maxLevel
+        -boolean includeSelf
         +fetchOpenSearchQuery(OpenSearchOperations) QueryBuilder
+        #fetchRelativesQuery(OpenSearchOperations, Terminology, Set~String~)* QueryBuilder
     }
+    class DescendantOf
     class DescendantOrSelfOf
+    class AncestorOf
+    class AncestorOrSelfOf
 
     EvsQuery <|-- AtomicQuery
     EvsQuery <|-- CompositeQuery
@@ -106,9 +112,12 @@ classDiagram
     CompositeQuery o-- EvsQuery : children
     CaseInsensitive o-- SupportsIgnoringCase : wraps
     EvsQuery <|-- MatchAnyOf
-    EvsQuery <|-- DescendantOf
+    EvsQuery <|-- HierarchyQuery
+    HierarchyQuery <|-- DescendantOf
+    HierarchyQuery <|-- AncestorOf
     DescendantOf <|-- DescendantOrSelfOf
-    DescendantOf o-- EvsQuery : ancestorQuery
+    AncestorOf <|-- AncestorOrSelfOf
+    HierarchyQuery o-- EvsQuery : anchorQuery
 ```
 
 | Class | Role |
@@ -119,8 +128,12 @@ classDiagram
 | `CaseInsensitive` | A wrapper node. It runs the wrapped query ignoring case by calling `fetchCaseInsensitiveOpenSearchQuery()`. The wrapped query is not changed. |
 | `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a term. |
 | `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `Match`. Rejects more than 65,536 values, OpenSearch's default limit. |
-| `DescendantOf` | Matches concepts strictly below the concepts an inner query matches, optionally within `maxLevel` levels (shortest distance). The inner query runs first through `declareDependencies`, so any node can supply the anchors, including another `DescendantOf`. Terminologies with `ancestors`/`ancestorDepths` match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
-| `DescendantOrSelfOf` | `DescendantOf` that also matches the anchors themselves (depth 0). |
+| `HierarchyQuery` | Base type for hierarchy nodes. Runs the inner (anchor) query first through `declareDependencies`, then, for each terminology version, matches the anchors' relatives only in that terminology's index. Handles `maxLevel` (shortest distance, at least 1) and `includeSelf`. Subclasses implement `fetchRelativesQuery`. |
+| `DescendantOf` | Matches concepts strictly below the anchors, optionally within `maxLevel` levels. Any node can supply the anchors, including another hierarchy node. Terminologies with `ancestors`/`ancestorDepths` match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
+| `DescendantOrSelfOf` | `DescendantOf` that also matches the anchors themselves (distance 0). |
+| `AncestorOf` | The upward counterpart: matches concepts strictly above the anchors, optionally within `maxLevel` levels. Reads the anchors' stored paths to root (`StoredPaths`), which every index has, so there's no fallback and nothing to remove after reindexing. Nests with `DescendantOf`, e.g. siblings-or-self is `new DescendantOf(t, new AncestorOf(t, x, 1), 1)`. |
+| `AncestorOrSelfOf` | `AncestorOf` that also matches the anchors themselves. |
+| `RawBoolQueries` | The raw `bool` combining helpers (`allOf`, `anyOf`, `matchNothing`) used until the logical operator nodes land; each maps onto `And`, `Or`, or `Not`. |
 
 ## Atomic queries
 

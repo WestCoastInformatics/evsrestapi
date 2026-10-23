@@ -1,16 +1,14 @@
 package gov.nih.nci.evs.api.query;
 
+import static gov.nih.nci.evs.api.query.RawBoolQueries.matchNothing;
+
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import org.opensearch.data.core.OpenSearchOperations;
-import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
 
 /**
  * Matches concepts strictly below any concept an inner query matches, in the same terminology
@@ -23,16 +21,14 @@ import org.opensearch.index.query.QueryBuilders;
  * shortest distance, so a concept that is a direct child of X on one path and deeper on another
  * counts as depth 1.
  *
- * <p>The inner query describes other concepts, so it runs first through {@link
- * #declareDependencies}. Terminologies indexed with ancestor fields then match with one query on
- * {@code ancestors} (or {@code ancestorDepths} for a depth limit). Older indexes fall back to
- * reading the stored hierarchy (see {@link StoredHierarchyFallback}).
+ * <p>Terminologies indexed with ancestor fields match with one query on {@code ancestors} (or
+ * {@code ancestorDepths} for a depth limit). Older indexes fall back to reading the stored
+ * hierarchy (see {@link StoredHierarchyFallback}).
  *
- * <p>Combining code is raw OpenSearch in small helpers ({@link #allOf}, {@link #anyOf}, {@link
- * #matchNothing}), to be replaced by the {@code And}, {@code Or}, and {@code Not} nodes when they
- * land.
+ * @see DescendantOrSelfOf
+ * @see AncestorOf
  */
-public class DescendantOf extends EvsQuery {
+public class DescendantOf extends HierarchyQuery {
 
   /** Field listing every ancestor code of a concept. */
   static final String ANCESTORS_FIELD = "ancestors";
@@ -43,21 +39,6 @@ public class DescendantOf extends EvsQuery {
   /** Separator between code and depth in {@link #ANCESTOR_DEPTHS_FIELD}. */
   static final String DEPTH_SEPARATOR = "|";
 
-  /** Field holding a document's identifier, which is the concept code. */
-  static final String ID_FIELD = "_id";
-
-  /** Metadata field naming the index a document is in; one index per terminology version. */
-  static final String INDEX_FIELD = "_index";
-
-  /** The query matching the anchor concepts. */
-  private final EvsQuery ancestorQuery;
-
-  /** The maximum depth below the anchors, or null for any depth. */
-  private final Integer maxLevel;
-
-  /** Whether the anchors themselves match. */
-  private final boolean includeSelf;
-
   /**
    * Instantiates a {@link DescendantOf} for everything below the concepts an inner query matches.
    *
@@ -65,7 +46,7 @@ public class DescendantOf extends EvsQuery {
    * @param ancestorQuery the query matching the anchor concepts
    */
   public DescendantOf(final List<Terminology> terminologies, final EvsQuery ancestorQuery) {
-    this(terminologies, ancestorQuery, null, false);
+    super(terminologies, ancestorQuery, null, false);
   }
 
   /**
@@ -78,7 +59,7 @@ public class DescendantOf extends EvsQuery {
    */
   public DescendantOf(
       final List<Terminology> terminologies, final EvsQuery ancestorQuery, final int maxLevel) {
-    this(terminologies, ancestorQuery, maxLevel, false);
+    super(terminologies, ancestorQuery, maxLevel, false);
   }
 
   /**
@@ -88,7 +69,7 @@ public class DescendantOf extends EvsQuery {
    * @param code the anchor concept's code
    */
   public DescendantOf(final List<Terminology> terminologies, final String code) {
-    this(terminologies, codeQuery(terminologies, code), null, false);
+    super(terminologies, codeQuery(terminologies, code), null, false);
   }
 
   /**
@@ -101,7 +82,7 @@ public class DescendantOf extends EvsQuery {
    */
   public DescendantOf(
       final List<Terminology> terminologies, final String code, final int maxLevel) {
-    this(terminologies, codeQuery(terminologies, code), maxLevel, false);
+    super(terminologies, codeQuery(terminologies, code), maxLevel, false);
   }
 
   /**
@@ -118,87 +99,19 @@ public class DescendantOf extends EvsQuery {
       final EvsQuery ancestorQuery,
       final Integer maxLevel,
       final boolean includeSelf) {
-    super(terminologies);
-    this.ancestorQuery = Objects.requireNonNull(ancestorQuery, "ancestorQuery");
-    if (maxLevel != null && maxLevel < 1) {
-      throw new IllegalArgumentException("maxLevel must be at least 1: " + maxLevel);
-    }
-    this.maxLevel = maxLevel;
-    this.includeSelf = includeSelf;
-  }
-
-  /**
-   * Returns the query matching the anchor concepts.
-   *
-   * @return the ancestor query
-   */
-  public EvsQuery getAncestorQuery() {
-    return ancestorQuery;
-  }
-
-  /**
-   * Returns the maximum depth below the anchors.
-   *
-   * @return the max level, or null for any depth
-   */
-  public Integer getMaxLevel() {
-    return maxLevel;
-  }
-
-  /**
-   * Indicates whether the anchors themselves match.
-   *
-   * @return true if the anchors match
-   */
-  public boolean isIncludeSelf() {
-    return includeSelf;
+    super(terminologies, ancestorQuery, maxLevel, includeSelf);
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
-    final ConceptKeys anchors = declareDependencies(operations, ancestorQuery).get(0);
-
-    // Codes are only unique within one terminology version, and each version has its own index,
-    // so match each terminology's anchors only inside that terminology's index
-    final List<QueryBuilder> perTerminology = new ArrayList<>();
-    for (final Terminology terminology : terminologies) {
-      final Set<String> anchorCodes =
-          anchors
-              .getCodesByTerminologyVersion()
-              .getOrDefault(
-                  new ConceptKeys.TerminologyVersion(
-                      terminology.getTerminology(), terminology.getVersion()),
-                  Set.of());
-      if (!anchorCodes.isEmpty()) {
-        perTerminology.add(
-            allOf(
-                inIndexOf(operations, terminology),
-                belowOrAtAnchors(operations, terminology, anchorCodes)));
-      }
-    }
-    return perTerminology.isEmpty() ? matchNothing() : anyOf(perTerminology);
-  }
-
-  /**
-   * Returns the condition for concepts below the anchors (and the anchors, if included) in one
-   * terminology.
-   *
-   * @param operations the OpenSearch operations, for the fallback
-   * @param terminology the terminology
-   * @param anchorCodes the anchor codes in that terminology
-   * @return the condition
-   */
-  private QueryBuilder belowOrAtAnchors(
+  protected QueryBuilder fetchRelativesQuery(
       final OpenSearchOperations operations,
       final Terminology terminology,
       final Set<String> anchorCodes) {
-    final QueryBuilder below =
-        hasAncestorFields(terminology)
-            ? belowAnchorsIndexed(operations, anchorCodes)
-            // TODO: Remove the fallback once every terminology is reindexed with ancestor fields
-            : belowAnchorsFallback(operations, terminology, anchorCodes);
-    return includeSelf ? anyOf(List.of(below, codeIn(operations, anchorCodes))) : below;
+    return hasAncestorFields(terminology)
+        ? belowAnchorsIndexed(operations, anchorCodes)
+        // TODO: Remove the fallback once every terminology is reindexed with ancestor fields
+        : belowAnchorsFallback(operations, terminology, anchorCodes);
   }
 
   /**
@@ -210,11 +123,12 @@ public class DescendantOf extends EvsQuery {
    */
   private QueryBuilder belowAnchorsIndexed(
       final OpenSearchOperations operations, final Set<String> anchorCodes) {
-    if (maxLevel == null) {
+    if (getMaxLevel() == null) {
       return new MatchAnyOf(terminologies, ANCESTORS_FIELD, anchorCodes)
           .fetchOpenSearchQuery(operations);
     }
-    return new MatchAnyOf(terminologies, ANCESTOR_DEPTHS_FIELD, depthTokens(anchorCodes, maxLevel))
+    return new MatchAnyOf(
+            terminologies, ANCESTOR_DEPTHS_FIELD, depthTokens(anchorCodes, getMaxLevel()))
         .fetchOpenSearchQuery(operations);
   }
 
@@ -235,7 +149,7 @@ public class DescendantOf extends EvsQuery {
       final Set<String> anchorCodes) {
     final Set<String> descendantCodes =
         StoredHierarchyFallback.fetchDescendantCodes(
-            operations, terminology, anchorCodes, maxLevel);
+            operations, terminology, anchorCodes, getMaxLevel());
     return descendantCodes.isEmpty() ? matchNothing() : codeIn(operations, descendantCodes);
   }
 
@@ -279,77 +193,5 @@ public class DescendantOf extends EvsQuery {
       }
     }
     return tokens;
-  }
-
-  /**
-   * Returns a query matching one concept by code.
-   *
-   * @param terminologies the terminologies being searched
-   * @param code the code
-   * @return the query
-   */
-  static EvsQuery codeQuery(final List<Terminology> terminologies, final String code) {
-    return new Match(terminologies, ID_FIELD, Objects.requireNonNull(code, "code"));
-  }
-
-  /**
-   * Returns the condition matching concepts whose code is in the set. A concept's document id is
-   * its code; the {@code code} field itself is analyzed text, so it can't be matched exactly.
-   *
-   * @param operations the OpenSearch operations
-   * @param codes the codes
-   * @return the condition
-   */
-  private QueryBuilder codeIn(final OpenSearchOperations operations, final Set<String> codes) {
-    return new MatchAnyOf(terminologies, ID_FIELD, codes).fetchOpenSearchQuery(operations);
-  }
-
-  /**
-   * Returns the condition matching documents in one terminology's index.
-   *
-   * @param operations the OpenSearch operations
-   * @param terminology the terminology
-   * @return the condition
-   */
-  private QueryBuilder inIndexOf(
-      final OpenSearchOperations operations, final Terminology terminology) {
-    return new Match(terminologies, INDEX_FIELD, terminology.getIndexName())
-        .fetchOpenSearchQuery(operations);
-  }
-
-  /**
-   * Combines conditions that must all match. To become the {@code And} node.
-   *
-   * @param conditions the conditions
-   * @return the combined condition
-   */
-  private static QueryBuilder allOf(final QueryBuilder... conditions) {
-    final BoolQueryBuilder bool = QueryBuilders.boolQuery();
-    for (final QueryBuilder condition : conditions) {
-      bool.must(condition);
-    }
-    return bool;
-  }
-
-  /**
-   * Combines conditions of which at least one must match. To become the {@code Or} node.
-   *
-   * @param conditions the conditions
-   * @return the combined condition
-   */
-  private static QueryBuilder anyOf(final List<QueryBuilder> conditions) {
-    final BoolQueryBuilder bool = QueryBuilders.boolQuery().minimumShouldMatch(1);
-    conditions.forEach(bool::should);
-    return bool;
-  }
-
-  /**
-   * Returns a condition no document matches, e.g. when the inner query found no anchors. To become
-   * a {@code Not} of match-all, or a constant node.
-   *
-   * @return the condition
-   */
-  private static QueryBuilder matchNothing() {
-    return new MatchNoneQueryBuilder();
   }
 }

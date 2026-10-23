@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.ConceptMinimal;
+import gov.nih.nci.evs.api.model.Path;
+import gov.nih.nci.evs.api.model.Paths;
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.model.TerminologyMetadata;
 import gov.nih.nci.evs.api.service.OpensearchOperationsService;
@@ -252,6 +255,115 @@ public class HierarchyQueryTest {
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Lesson 7: AncestorOf matches everything strictly above the anchor (the upward counterpart).
+  // ---------------------------------------------------------------------------------------------
+
+  /** Everything above G, and not G itself. */
+  @Test
+  public void testAncestorOfMatchesEverythingAbove() {
+    assertBoth(t -> new AncestorOf(t, "G"), "E", "C", "A", "R");
+  }
+
+  /** F has two parents, so its ancestors come from both paths. */
+  @Test
+  public void testAncestorOfFollowsEveryPath() {
+    assertBoth(t -> new AncestorOf(t, "F"), "D", "B", "A", "R");
+  }
+
+  /** The root has nothing above it. */
+  @Test
+  public void testAncestorOfRootMatchesNothing() {
+    assertBoth(t -> new AncestorOf(t, "R"));
+  }
+
+  /** AncestorOrSelfOf also matches the anchor; the root matches only itself. */
+  @Test
+  public void testAncestorOrSelfOfIncludesAnchor() {
+    assertBoth(t -> new AncestorOrSelfOf(t, "G"), "G", "E", "C", "A", "R");
+    assertBoth(t -> new AncestorOrSelfOf(t, "R"), "R");
+  }
+
+  /** maxLevel 1 is the direct parents. */
+  @Test
+  public void testAncestorMaxLevelOneIsParents() {
+    assertBoth(t -> new AncestorOf(t, "F", 1), "D", "B");
+    assertBoth(t -> new AncestorOrSelfOf(t, "F", 1), "F", "D", "B");
+  }
+
+  /**
+   * R is 2 above F through B, though 3 through D and A. maxLevel 2 must include it, by shortest
+   * distance.
+   */
+  @Test
+  public void testAncestorMaxLevelUsesShortestDistance() {
+    assertBoth(t -> new AncestorOf(t, "F", 2), "D", "B", "A", "R");
+    assertBoth(t -> new AncestorOf(t, "G", 2), "E", "C");
+  }
+
+  /** maxLevel must be at least 1. */
+  @Test
+  public void testAncestorMaxLevelMustBePositive() {
+    assertThrows(IllegalArgumentException.class, () -> new AncestorOf(List.of(indexed), "G", 0));
+  }
+
+  /** An inner query matching B and C: above either of them. */
+  @Test
+  public void testAncestorOfInnerQueryWithSeveralAnchors() {
+    assertBoth(t -> new AncestorOf(t, new Match(t, GROUP_FIELD, GROUP_TAG)), "A", "R");
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Lesson 8: upward and downward nodes nest in each other and compose.
+  // ---------------------------------------------------------------------------------------------
+
+  /** Above the children of A (C and D): A and R. */
+  @Test
+  public void testAncestorOfDescendants() {
+    assertBoth(t -> new AncestorOf(t, new DescendantOf(t, "A", 1)), "A", "R");
+  }
+
+  /** Below the parent of G (E): G. */
+  @Test
+  public void testDescendantOfAncestors() {
+    assertBoth(t -> new DescendantOf(t, new AncestorOf(t, "G", 1)), "G");
+  }
+
+  /** Siblings of C, and C: the children of C's parents. */
+  @Test
+  public void testSiblingsOrSelf() {
+    assertBoth(t -> new DescendantOf(t, new AncestorOf(t, "C", 1), 1), "C", "D");
+  }
+
+  /** Common ancestors of G and F, composed in a raw bool. */
+  @Test
+  public void testCommonAncestorsInBoolQuery() {
+    for (final Terminology terminology : List.of(indexed, legacy)) {
+      final List<Terminology> t = List.of(terminology);
+      final Set<String> codes =
+          search(
+              t,
+              QueryBuilders.boolQuery()
+                  .must(new AncestorOf(t, "G").fetchOpenSearchQuery(operations))
+                  .must(new AncestorOf(t, "F").fetchOpenSearchQuery(operations)));
+      assertThat(codes).as(terminology.getIndexName()).containsExactlyInAnyOrder("A", "R");
+    }
+  }
+
+  /** Each terminology's anchors match only in its own index. */
+  @Test
+  public void testAncestorOfIndexedAndLegacyTogether() {
+    final List<Terminology> both = List.of(indexed, legacy);
+    final Map<String, Set<String>> byIndex = new HashMap<>();
+    for (final SearchHit<Concept> hit :
+        searchHits(both, new AncestorOf(both, "G").fetchOpenSearchQuery(operations))) {
+      byIndex.computeIfAbsent(hit.getIndex(), k -> new TreeSet<>()).add(hit.getContent().getCode());
+    }
+    final Set<String> expected = Set.of("E", "C", "A", "R");
+    assertThat(byIndex.get(indexed.getIndexName())).isEqualTo(expected);
+    assertThat(byIndex.get(legacy.getIndexName())).isEqualTo(expected);
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------------------------
 
@@ -354,6 +466,7 @@ public class HierarchyQueryTest {
       concept.setChildren(
           CHILDREN.get(code).stream().map(Concept::new).collect(Collectors.toList()));
       concept.setDescendants(depthFirstDescendants(code));
+      concept.setPaths(pathsToRoot(code));
       if (withAncestorFields) {
         final Map<String, Integer> depths = shortestAncestorDepths(code);
         concept.setAncestors(new ArrayList<>(new TreeSet<>(depths.keySet())));
@@ -430,5 +543,60 @@ public class HierarchyQueryTest {
       }
     }
     return depths;
+  }
+
+  /**
+   * Returns a code's paths to root as the loader stores them: each path starts at the code (level
+   * 0) and ends at a root.
+   *
+   * @param code the code
+   * @return the paths
+   */
+  private static Paths pathsToRoot(final String code) {
+    final Map<String, List<String>> parents = new HashMap<>();
+    CHILDREN.forEach(
+        (parent, children) ->
+            children.forEach(
+                child -> parents.computeIfAbsent(child, k -> new ArrayList<>()).add(parent)));
+    final List<List<String>> codePaths = new ArrayList<>();
+    collectPaths(code, new ArrayList<>(List.of(code)), parents, codePaths);
+    final Paths paths = new Paths();
+    paths.setPaths(new ArrayList<>());
+    for (final List<String> codePath : codePaths) {
+      final Path path = new Path();
+      path.setDirection(1);
+      for (int level = 0; level < codePath.size(); level++) {
+        final ConceptMinimal step = new ConceptMinimal(codePath.get(level));
+        step.setLevel(level);
+        path.getConcepts().add(step);
+      }
+      paths.getPaths().add(path);
+    }
+    return paths;
+  }
+
+  /**
+   * Collects every path from a code up to a root.
+   *
+   * @param code the current code
+   * @param soFar the path so far, ending at the current code
+   * @param parents each code's parents
+   * @param codePaths the completed paths
+   */
+  private static void collectPaths(
+      final String code,
+      final List<String> soFar,
+      final Map<String, List<String>> parents,
+      final List<List<String>> codePaths) {
+    final List<String> up = parents.getOrDefault(code, List.of());
+    if (up.isEmpty()) {
+      codePaths.add(new ArrayList<>(soFar));
+      return;
+    }
+    for (final String parent : up) {
+      soFar.add(parent);
+      collectPaths(parent, soFar, parents, codePaths);
+      soFar.remove(soFar.size() - 1);
+    }
   }
 }
