@@ -170,13 +170,18 @@ document, and a role entry only stores its target's code. So
 `HasRole(type, Or(Match(code, Skin), DescendantOf(Skin)))` can't become one OpenSearch query.
 
 **How it works:** building such a node runs the inner query first. `fetchOpenSearchQuery(operations)`
-takes the OpenSearch operations, and `HasRole` calls `declareDependencies(operations,
-roleTarget.getQuery())`. That pages through every matching concept with `search_after` (privately,
-inside `EvsQuery`), fetching only each concept's code, terminology, and version, and returns a
-`ConceptKeys`: the codes found in each terminology version. For each terminology version, `HasRole` matches concepts from that terminology version
-with a role entry pointing to one of its codes. An inner query can hold its own role target, which
-runs first in the same way, to any depth. Nodes that don't hold a query about another concept ignore
-`operations`.
+takes the OpenSearch operations so it can. The node calls `declareDependencies(operations,
+dependencies...)`, which runs each dependency and pages through every matching concept with
+`search_after` (sorted by code, then index, so pages don't overlap). It reads no stored documents,
+which can be very large: each hit's code is its first sort value (read from doc values) and its
+terminology version is that of the index it came from. It returns one `ConceptKeys` per dependency:
+the codes found in each terminology version. The node then matches what it found, e.g. with a
+`terms` query on codes. The paging is done by `EvsQuery.fetchConceptKeys`, which runs the node's own
+`fetchOpenSearchQuery`, so a node is written once and works both as a search and as a dependency.
+`HasRole` calls `declareDependencies(operations, roleTarget.getQuery())`, and for each terminology
+version it matches concepts from that terminology version with a role entry pointing to one of its
+codes. An inner query can hold its own query about another concept, which runs first in the same
+way, to any depth. Nodes that don't hold a query about another concept ignore `operations`.
 
 **Why codes are matched per terminology version:** a code alone doesn't identify a concept. Two
 versions of a terminology share codes, and a role's target code refers to a concept in the role's
