@@ -170,8 +170,11 @@ public class HasRoleTest {
     createIndex(INDEX_NAME, VERSION, INDEXED_CONCEPTS);
     createIndex(NEXT_VERSION_INDEX_NAME, NEXT_VERSION, NEXT_VERSION_CONCEPTS);
 
-    terminologies = List.of(getTerminology(INDEX_NAME));
-    bothVersions = List.of(getTerminology(INDEX_NAME), getTerminology(NEXT_VERSION_INDEX_NAME));
+    terminologies = List.of(getTerminology(INDEX_NAME, VERSION));
+    bothVersions =
+        List.of(
+            getTerminology(INDEX_NAME, VERSION),
+            getTerminology(NEXT_VERSION_INDEX_NAME, NEXT_VERSION));
   }
 
   /** Removes both indexes. */
@@ -455,13 +458,18 @@ public class HasRoleTest {
   }
 
   /**
-   * Builds a terminology whose concept index is the given index.
+   * Builds a version of the test terminology whose concept index is the given index. The
+   * terminology and version must match the indexed concepts', because dependency queries take a
+   * hit's terminology version from the terminology its index belongs to.
    *
    * @param indexName the index name
+   * @param version the terminology version
    * @return the terminology
    */
-  private static Terminology getTerminology(final String indexName) {
+  private static Terminology getTerminology(final String indexName, final String version) {
     final Terminology terminology = new Terminology();
+    terminology.setTerminology(TERMINOLOGY);
+    terminology.setVersion(version);
     terminology.setIndexName(indexName);
     return terminology;
   }
