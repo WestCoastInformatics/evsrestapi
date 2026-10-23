@@ -74,7 +74,7 @@ public class DeclareDependenciesTest {
   public void setUp() {
     terminologies =
         List.of(QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME));
-    query = new Match(terminologies, "code", "C12470");
+    query = new FieldMatch(terminologies, "code", new Exact("C12470"));
     operations = mock(OpenSearchOperations.class);
   }
 
@@ -144,7 +144,8 @@ public class DeclareDependenciesTest {
         QueryTestTerminologies.getTerminology(TERMINOLOGY, CURRENT_VERSION, "concept_ncit_2512e");
     final Terminology previous =
         QueryTestTerminologies.getTerminology(TERMINOLOGY, PREVIOUS_VERSION, "concept_ncit_2511d");
-    final EvsQuery twoVersionQuery = new Match(List.of(current, previous), "code", "C12470");
+    final EvsQuery twoVersionQuery =
+        new FieldMatch(List.of(current, previous), "code", new Exact("C12470"));
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(
             getPage(
@@ -210,7 +211,7 @@ public class DeclareDependenciesTest {
    */
   @Test
   public void testRoleTargetWithMoreCodesThanOneTermsQueryAcceptsFails() {
-    final int pagesOverLimit = HasRole.MAX_TARGET_CODES / EvsQuery.CONCEPTS_PER_PAGE + 1;
+    final int pagesOverLimit = HasRelationship.MAX_TARGET_CODES / EvsQuery.CONCEPTS_PER_PAGE + 1;
     final AtomicInteger pagesReturned = new AtomicInteger();
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenAnswer(
@@ -220,7 +221,8 @@ public class DeclareDependenciesTest {
               final int hitCount = isLastPage ? 0 : EvsQuery.CONCEPTS_PER_PAGE;
               return getPage(pageNumber * EvsQuery.CONCEPTS_PER_PAGE, hitCount);
             });
-    final HasRole hasRole = new HasRole(terminologies, new RoleType("R101"), new RoleTarget(query));
+    final HasRole hasRole =
+        new HasRole(terminologies, new RelationshipType("R101"), new RelationshipTarget(query));
 
     assertThrows(IllegalStateException.class, () -> hasRole.fetchOpenSearchQuery(operations));
   }

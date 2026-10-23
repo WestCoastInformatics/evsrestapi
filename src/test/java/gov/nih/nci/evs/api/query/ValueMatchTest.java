@@ -30,27 +30,28 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 /**
- * A tutorial for the atomic queries: {@link Match}, {@link StartsWith}, {@link Contains}, and
- * {@link Fuzzy}, plus the {@link CaseInsensitive} wrapper.
+ * A tutorial for the value matches: {@link Exact}, {@link StartsWith}, {@link Contains}, and {@link
+ * Fuzzy}, plus the {@link CaseInsensitive} wrapper. Each lesson matches the name field with a
+ * {@link FieldMatch}.
  *
  * <p>Every lesson follows the same steps:
  *
  * <ol>
  *   <li>A small index holds the names in {@link #INDEXED_NAMES}, stored in a keyword field so each
  *       name is matched as one whole, case-preserved value.
- *   <li>The lesson builds a query, e.g. {@code new Contains(terminologies, "name", "lanoma")}.
- *   <li>The query runs against the index, and the lesson checks which names came back.
+ *   <li>The lesson builds a match, e.g. {@code new Contains("lanoma")}.
+ *   <li>The match runs against the index's name field, and the lesson checks which names came back.
  * </ol>
  *
- * <p>Atomic queries don't filter by terminology, so every lesson passes an empty list.
+ * <p>Field matches don't filter by terminology, so every lesson passes an empty list.
  */
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class AtomicQueryTest {
+public class ValueMatchTest {
 
   /** A throwaway index used only by this tutorial. */
-  private static final IndexCoordinates INDEX = IndexCoordinates.of("evs_atomic_query_tutorial");
+  private static final IndexCoordinates INDEX = IndexCoordinates.of("evs_value_match_tutorial");
 
   /** One page large enough to hold every indexed name. */
   private static final Pageable ALL_NAMES = PageRequest.of(0, 100);
@@ -58,7 +59,7 @@ public class AtomicQueryTest {
   /** The keyword field every lesson searches. */
   private static final String NAME_FIELD = "name";
 
-  /** Atomic queries don't filter by terminology. */
+  /** Field matches don't filter by terminology. */
   private static final List<Terminology> TERMINOLOGIES = List.of();
 
   /** The names in the index. Note the two spellings of melanoma that differ only by case. */
@@ -100,31 +101,31 @@ public class AtomicQueryTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 1: Match finds values that are exactly equal to the term.
+  // Lesson 1: Exact finds values that are exactly equal to the term.
   // ---------------------------------------------------------------------------------------------
 
-  /** Match returns only the value that is identical to the term. */
+  /** Exact returns only the value that is identical to the term. */
   @Test
-  public void testMatchFindsIdenticalValue() {
-    final EvsQuery query = new Match(TERMINOLOGIES, NAME_FIELD, "Melanoma");
+  public void testExactFindsIdenticalValue() {
+    final ValueMatch match = new Exact("Melanoma");
 
-    assertEquals(Set.of("Melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanoma"), fetchMatchingNames(match));
   }
 
-  /** Match is case sensitive: "melanoma" and "Melanoma" are different values. */
+  /** Exact is case sensitive: "melanoma" and "Melanoma" are different values. */
   @Test
-  public void testMatchIsCaseSensitive() {
-    final EvsQuery query = new Match(TERMINOLOGIES, NAME_FIELD, "melanoma");
+  public void testExactIsCaseSensitive() {
+    final ValueMatch match = new Exact("melanoma");
 
-    assertEquals(Set.of("melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("melanoma"), fetchMatchingNames(match));
   }
 
-  /** Match never matches part of a value. "Melan" is not equal to anything in the index. */
+  /** Exact never matches part of a value. "Melan" is not equal to anything in the index. */
   @Test
-  public void testMatchIgnoresPartialValues() {
-    final EvsQuery query = new Match(TERMINOLOGIES, NAME_FIELD, "Melan");
+  public void testExactIgnoresPartialValues() {
+    final ValueMatch match = new Exact("Melan");
 
-    assertEquals(Set.of(), fetchMatchingNames(query));
+    assertEquals(Set.of(), fetchMatchingNames(match));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -137,17 +138,17 @@ public class AtomicQueryTest {
    */
   @Test
   public void testStartsWithFindsValuesWithPrefix() {
-    final EvsQuery query = new StartsWith(TERMINOLOGIES, NAME_FIELD, "Melano");
+    final ValueMatch match = new StartsWith("Melano");
 
-    assertEquals(Set.of("Melanoma", "Melanocyte"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanoma", "Melanocyte"), fetchMatchingNames(match));
   }
 
   /** StartsWith is case sensitive. */
   @Test
   public void testStartsWithIsCaseSensitive() {
-    final EvsQuery query = new StartsWith(TERMINOLOGIES, NAME_FIELD, "melano");
+    final ValueMatch match = new StartsWith("melano");
 
-    assertEquals(Set.of("melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("melanoma"), fetchMatchingNames(match));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -157,17 +158,17 @@ public class AtomicQueryTest {
   /** Contains matches the term at the start, middle, or end of a value. */
   @Test
   public void testContainsFindsTermAnywhere() {
-    final EvsQuery query = new Contains(TERMINOLOGIES, NAME_FIELD, "lanoma");
+    final ValueMatch match = new Contains("lanoma");
 
-    assertEquals(Set.of("Melanoma", "melanoma", "Malignant Melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanoma", "melanoma", "Malignant Melanoma"), fetchMatchingNames(match));
   }
 
   /** Contains is case sensitive, so the lowercase "melanoma" is not included. */
   @Test
   public void testContainsIsCaseSensitive() {
-    final EvsQuery query = new Contains(TERMINOLOGIES, NAME_FIELD, "Melanoma");
+    final ValueMatch match = new Contains("Melanoma");
 
-    assertEquals(Set.of("Melanoma", "Malignant Melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanoma", "Malignant Melanoma"), fetchMatchingNames(match));
   }
 
   /**
@@ -176,9 +177,9 @@ public class AtomicQueryTest {
    */
   @Test
   public void testContainsTreatsWildcardCharactersLiterally() {
-    final EvsQuery query = new Contains(TERMINOLOGIES, NAME_FIELD, "*");
+    final ValueMatch match = new Contains("*");
 
-    assertEquals(Set.of("Stage 1*"), fetchMatchingNames(query));
+    assertEquals(Set.of("Stage 1*"), fetchMatchingNames(match));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -191,9 +192,9 @@ public class AtomicQueryTest {
    */
   @Test
   public void testFuzzyToleratesTypos() {
-    final EvsQuery query = new Fuzzy(TERMINOLOGIES, NAME_FIELD, "Carcinomma");
+    final ValueMatch match = new Fuzzy("Carcinomma");
 
-    assertEquals(Set.of("Carcinoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Carcinoma"), fetchMatchingNames(match));
   }
 
   /**
@@ -202,9 +203,9 @@ public class AtomicQueryTest {
    */
   @Test
   public void testFuzzyRejectsDistantValues() {
-    final EvsQuery query = new Fuzzy(TERMINOLOGIES, NAME_FIELD, "Melan");
+    final ValueMatch match = new Fuzzy("Melan");
 
-    assertEquals(Set.of(), fetchMatchingNames(query));
+    assertEquals(Set.of(), fetchMatchingNames(match));
   }
 
   /**
@@ -214,51 +215,51 @@ public class AtomicQueryTest {
    */
   @Test
   public void testFuzzyWithExplicitTypoLimit() {
-    final EvsQuery query = new Fuzzy(TERMINOLOGIES, NAME_FIELD, "Melanomma", Fuzziness.ONE);
+    final ValueMatch match = new Fuzzy("Melanomma", Fuzziness.ONE);
 
-    assertEquals(Set.of("Melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanoma"), fetchMatchingNames(match));
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 5: CaseInsensitive wraps a query so that uppercase and lowercase letters match each
-  // other. It works with Match, StartsWith, and Contains. Wrapping a Fuzzy query does not compile.
+  // Lesson 5: CaseInsensitive wraps a match so that uppercase and lowercase letters match each
+  // other. It works with Exact, StartsWith, and Contains. Wrapping a Fuzzy does not compile.
   // ---------------------------------------------------------------------------------------------
 
-  /** A case-insensitive Match finds every value equal to the term, whatever its case. */
+  /** A case-insensitive Exact finds every value equal to the term, whatever its case. */
   @Test
-  public void testCaseInsensitiveMatch() {
-    final EvsQuery query = new CaseInsensitive(new Match(TERMINOLOGIES, NAME_FIELD, "MELANOMA"));
+  public void testCaseInsensitiveExact() {
+    final ValueMatch match = new CaseInsensitive(new Exact("MELANOMA"));
 
-    assertEquals(Set.of("Melanoma", "melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanoma", "melanoma"), fetchMatchingNames(match));
   }
 
   /** A case-insensitive StartsWith finds every value beginning with the term, whatever its case. */
   @Test
   public void testCaseInsensitiveStartsWith() {
-    final EvsQuery query = new CaseInsensitive(new StartsWith(TERMINOLOGIES, NAME_FIELD, "melano"));
+    final ValueMatch match = new CaseInsensitive(new StartsWith("melano"));
 
-    assertEquals(Set.of("Melanoma", "melanoma", "Melanocyte"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanoma", "melanoma", "Melanocyte"), fetchMatchingNames(match));
   }
 
   /** A case-insensitive Contains finds every value including the term, whatever its case. */
   @Test
   public void testCaseInsensitiveContains() {
-    final EvsQuery query = new CaseInsensitive(new Contains(TERMINOLOGIES, NAME_FIELD, "MELANOMA"));
+    final ValueMatch match = new CaseInsensitive(new Contains("MELANOMA"));
 
-    assertEquals(Set.of("Melanoma", "melanoma", "Malignant Melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanoma", "melanoma", "Malignant Melanoma"), fetchMatchingNames(match));
   }
 
   /**
-   * Wrapping a query does not change it. The original query is still case sensitive and can be used
+   * Wrapping a match does not change it. The original match is still case sensitive and can be used
    * on its own.
    */
   @Test
-  public void testCaseInsensitiveLeavesWrappedQueryUnchanged() {
-    final Match caseSensitiveQuery = new Match(TERMINOLOGIES, NAME_FIELD, "melanoma");
-    final EvsQuery caseInsensitiveQuery = new CaseInsensitive(caseSensitiveQuery);
+  public void testCaseInsensitiveLeavesWrappedMatchUnchanged() {
+    final Exact caseSensitiveMatch = new Exact("melanoma");
+    final ValueMatch caseInsensitiveMatch = new CaseInsensitive(caseSensitiveMatch);
 
-    assertEquals(Set.of("melanoma", "Melanoma"), fetchMatchingNames(caseInsensitiveQuery));
-    assertEquals(Set.of("melanoma"), fetchMatchingNames(caseSensitiveQuery));
+    assertEquals(Set.of("melanoma", "Melanoma"), fetchMatchingNames(caseInsensitiveMatch));
+    assertEquals(Set.of("melanoma"), fetchMatchingNames(caseSensitiveMatch));
   }
 
   /**
@@ -269,9 +270,9 @@ public class AtomicQueryTest {
   public void testIgnoringCaseKeepsLowercaseMatches() {
     final String lowercaseValue = "melanoma";
 
-    assertIgnoringCaseKeepsMatches(new Match(TERMINOLOGIES, NAME_FIELD, lowercaseValue));
-    assertIgnoringCaseKeepsMatches(new StartsWith(TERMINOLOGIES, NAME_FIELD, lowercaseValue));
-    assertIgnoringCaseKeepsMatches(new Contains(TERMINOLOGIES, NAME_FIELD, lowercaseValue));
+    assertIgnoringCaseKeepsMatches(new Exact(lowercaseValue), lowercaseValue);
+    assertIgnoringCaseKeepsMatches(new StartsWith(lowercaseValue), lowercaseValue);
+    assertIgnoringCaseKeepsMatches(new Contains(lowercaseValue), lowercaseValue);
   }
 
   /**
@@ -282,34 +283,35 @@ public class AtomicQueryTest {
   public void testIgnoringCaseKeepsUppercaseMatches() {
     final String uppercaseValue = "NEVUS";
 
-    assertIgnoringCaseKeepsMatches(new Match(TERMINOLOGIES, NAME_FIELD, uppercaseValue));
-    assertIgnoringCaseKeepsMatches(new StartsWith(TERMINOLOGIES, NAME_FIELD, uppercaseValue));
-    assertIgnoringCaseKeepsMatches(new Contains(TERMINOLOGIES, NAME_FIELD, uppercaseValue));
+    assertIgnoringCaseKeepsMatches(new Exact(uppercaseValue), uppercaseValue);
+    assertIgnoringCaseKeepsMatches(new StartsWith(uppercaseValue), uppercaseValue);
+    assertIgnoringCaseKeepsMatches(new Contains(uppercaseValue), uppercaseValue);
   }
 
   /**
-   * Asserts that the query finds the value equal to its term, and that wrapping it in {@link
-   * CaseInsensitive} still finds everything the query finds on its own.
+   * Asserts that the match finds the indexed value, and that wrapping it in {@link CaseInsensitive}
+   * still finds everything the match finds on its own.
    *
-   * @param <Q> the query type
-   * @param query a query whose term is also an indexed value
+   * @param match a match whose term is the indexed value
+   * @param indexedValue the indexed value
    */
-  private <Q extends AtomicQuery & SupportsIgnoringCase> void assertIgnoringCaseKeepsMatches(
-      final Q query) {
-    final Set<String> caseSensitiveNames = fetchMatchingNames(query);
-    final Set<String> caseInsensitiveNames = fetchMatchingNames(new CaseInsensitive(query));
+  private void assertIgnoringCaseKeepsMatches(
+      final SupportsIgnoringCase match, final String indexedValue) {
+    final Set<String> caseSensitiveNames = fetchMatchingNames(match);
+    final Set<String> caseInsensitiveNames = fetchMatchingNames(new CaseInsensitive(match));
 
-    assertTrue(caseSensitiveNames.contains(query.getTerm()));
+    assertTrue(caseSensitiveNames.contains(indexedValue));
     assertTrue(caseInsensitiveNames.containsAll(caseSensitiveNames));
   }
 
   /**
-   * Runs the query against the tutorial index.
+   * Runs the match against the name field of the tutorial index.
    *
-   * @param query the query to run
+   * @param match how the name must match
    * @return the names that matched
    */
-  private Set<String> fetchMatchingNames(final EvsQuery query) {
+  private Set<String> fetchMatchingNames(final ValueMatch match) {
+    final EvsQuery query = new FieldMatch(TERMINOLOGIES, NAME_FIELD, match);
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
             .withQuery(query.fetchOpenSearchQuery(operations))

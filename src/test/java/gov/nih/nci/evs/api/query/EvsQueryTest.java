@@ -28,7 +28,7 @@ public class EvsQueryTest {
     final Terminology terminology =
         QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME);
 
-    new Match(List.of(terminology), "code", "C12470");
+    new FieldMatch(List.of(terminology), "code", new Exact("C12470"));
   }
 
   /** A terminology without its terminology name fails when the node is built, naming the field. */
@@ -61,7 +61,7 @@ public class EvsQueryTest {
     final IllegalArgumentException error =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new Match(List.of(terminology), "code", "C12470"));
+            () -> new FieldMatch(List.of(terminology), "code", new Exact("C12470")));
 
     assertTrue(
         error.getMessage().startsWith("Terminology has no " + missingFieldName + " "),

@@ -1,34 +1,31 @@
 package gov.nih.nci.evs.api.query;
 
-import org.opensearch.data.core.OpenSearchOperations;
+import java.util.Objects;
 import org.opensearch.index.query.QueryBuilder;
 
 /**
- * Runs the wrapped query ignoring case, so "MELANOMA" matches both "Melanoma" and "melanoma". The
- * wrapped query is not changed and remains case sensitive on its own.
+ * Runs the wrapped match ignoring case, so "MELANOMA" matches both "Melanoma" and "melanoma". The
+ * wrapped match is not changed and remains case sensitive on its own.
  *
- * <p>Only queries that implement {@link SupportsIgnoringCase} can be wrapped. {@link Fuzzy} cannot,
+ * <p>Only matches that implement {@link SupportsIgnoringCase} can be wrapped. {@link Fuzzy} cannot,
  * because OpenSearch has no case-insensitive fuzzy query.
+ *
+ * @param match the match to run ignoring case
  */
-public class CaseInsensitive extends EvsQuery {
-
-  /** The wrapped query. */
-  private final SupportsIgnoringCase query;
+public record CaseInsensitive(SupportsIgnoringCase match) implements ValueMatch {
 
   /**
    * Instantiates a {@link CaseInsensitive}.
    *
-   * @param <Q> the wrapped query type
-   * @param query the query to run ignoring case
+   * @param match the match to run ignoring case
    */
-  public <Q extends EvsQuery & SupportsIgnoringCase> CaseInsensitive(final Q query) {
-    super(query.getTerminologies());
-    this.query = query;
+  public CaseInsensitive {
+    Objects.requireNonNull(match, "match");
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
-    return query.fetchCaseInsensitiveOpenSearchQuery(operations);
+  public QueryBuilder getQueryBuilder(final String field) {
+    return match.getCaseInsensitiveQueryBuilder(field);
   }
 }

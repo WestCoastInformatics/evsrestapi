@@ -1,18 +1,15 @@
 package gov.nih.nci.evs.api.query;
 
-import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 
-/**
- * A query that can also be run ignoring case. Required to be wrapped by {@link CaseInsensitive}.
- */
-public interface SupportsIgnoringCase {
+/** A match that can also ignore case. Required to be wrapped by {@link CaseInsensitive}. */
+public interface SupportsIgnoringCase extends ValueMatch {
 
   /**
-   * Returns the OpenSearch query for this node with case ignored.
+   * Returns {@link #getQueryBuilder} with case ignored.
    *
-   * @param operations the OpenSearch operations, for any searches the node needs to run first
+   * @param field the field holding the value
    * @return the case-insensitive query builder
    */
-  QueryBuilder fetchCaseInsensitiveOpenSearchQuery(OpenSearchOperations operations);
+  QueryBuilder getCaseInsensitiveQueryBuilder(String field);
 }

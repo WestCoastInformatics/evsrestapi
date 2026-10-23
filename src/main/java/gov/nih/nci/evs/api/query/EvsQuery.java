@@ -22,8 +22,8 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 
 /**
- * A node in an EVS search query tree. Atomic queries match a single field with a single strategy;
- * composite queries combine other {@link EvsQuery} nodes.
+ * A node in an EVS search query tree. A {@link FieldMatch} matches a single field with a {@link
+ * ValueMatch}; composite queries combine other {@link EvsQuery} nodes.
  *
  * <p>Building a node's query may run searches first. A node can depend on other concepts, e.g. a
  * role's target. One OpenSearch query only looks at one document, so the node runs the other query
@@ -151,7 +151,7 @@ public abstract class EvsQuery {
    * when(operations.search(any(), eq(Concept.class), any())).thenReturn(skinAndLungHits);
    *
    * final HasRole query =
-   *     new HasRole(terminologies, new RoleType("R101"), new RoleTarget(skinOrLungQuery));
+   *     new HasRole(terminologies, new RelationshipType("R101"), new RelationshipTarget(skinOrLungQuery));
    * final QueryBuilder builder = query.fetchOpenSearchQuery(operations);
    * // builder now matches role entries whose target is Skin or Lung
    * }</pre>
