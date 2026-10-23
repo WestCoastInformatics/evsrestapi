@@ -80,6 +80,19 @@ classDiagram
         #List~EvsQuery~ children
     }
 
+    class MatchAnyOf {
+        -String field
+        -Set~String~ values
+        +fetchOpenSearchQuery(OpenSearchOperations) TermsQueryBuilder
+    }
+
+    class DescendantOf {
+        -EvsQuery ancestorQuery
+        -Integer maxLevel
+        +fetchOpenSearchQuery(OpenSearchOperations) QueryBuilder
+    }
+    class DescendantOrSelfOf
+
     EvsQuery <|-- AtomicQuery
     EvsQuery <|-- CompositeQuery
     EvsQuery <|-- CaseInsensitive
@@ -92,6 +105,10 @@ classDiagram
     SupportsIgnoringCase <|.. StartsWith
     CompositeQuery o-- EvsQuery : children
     CaseInsensitive o-- SupportsIgnoringCase : wraps
+    EvsQuery <|-- MatchAnyOf
+    EvsQuery <|-- DescendantOf
+    DescendantOf <|-- DescendantOrSelfOf
+    DescendantOf o-- EvsQuery : ancestorQuery
 ```
 
 | Class | Role |
@@ -101,6 +118,9 @@ classDiagram
 | `SupportsIgnoringCase` | Implemented by queries that can also run ignoring case: `Match`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper node. It runs the wrapped query ignoring case by calling `fetchCaseInsensitiveOpenSearchQuery()`. The wrapped query is not changed. |
 | `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a term. |
+| `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `Match`. Rejects more than 65,536 values, OpenSearch's default limit. |
+| `DescendantOf` | Matches concepts strictly below the concepts an inner query matches, optionally within `maxLevel` levels (shortest distance). The inner query runs first through `declareDependencies`, so any node can supply the anchors, including another `DescendantOf`. Terminologies with `ancestors`/`ancestorDepths` match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
+| `DescendantOrSelfOf` | `DescendantOf` that also matches the anchors themselves (depth 0). |
 
 ## Atomic queries
 
