@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import gov.nih.nci.evs.api.model.Concept;
 import gov.nih.nci.evs.api.model.Property;
+import gov.nih.nci.evs.api.model.Qualifier;
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.service.OpensearchOperationsService;
 import gov.nih.nci.evs.api.util.ConceptUtils;
@@ -84,9 +85,47 @@ public class HasPropertyTest {
   /** A neoplastic status value. */
   private static final String BENIGN = "Benign";
 
+  /** Property linking a gene to a Gene Ontology term. Its qualifiers say which term and why. */
+  private static final String GO_ANNOTATION = "GO_Annotation";
+
+  /** Code of {@link #GO_ANNOTATION}. */
+  private static final String GO_ANNOTATION_CODE = "P211";
+
+  /** Qualifier holding a GO annotation's Gene Ontology id. */
+  private static final String GO_ID = "go-id";
+
+  /** Code of {@link #GO_ID}. */
+  private static final String GO_ID_CODE = "P387";
+
+  /** Qualifier holding a GO annotation's evidence code. */
+  private static final String GO_EVIDENCE = "go-evi";
+
+  /** Code of {@link #GO_EVIDENCE}. */
+  private static final String GO_EVIDENCE_CODE = "P389";
+
+  /** A GO annotation value. */
+  private static final String CELL_CYCLE_ARREST = "cell cycle arrest";
+
+  /** Gene Ontology id of {@link #CELL_CYCLE_ARREST}. */
+  private static final String CELL_CYCLE_ARREST_GO_ID = "GO:0007050";
+
+  /** A GO annotation value. */
+  private static final String ACTIVIN_INHIBITOR_ACTIVITY = "activin inhibitor activity";
+
+  /** Gene Ontology id of {@link #ACTIVIN_INHIBITOR_ACTIVITY}. */
+  private static final String ACTIVIN_INHIBITOR_ACTIVITY_GO_ID = "GO:0017106";
+
+  /** Evidence code: traceable author statement. */
+  private static final String TRACEABLE_AUTHOR_STATEMENT = "TAS";
+
+  /** Evidence code: inferred from direct assay. */
+  private static final String DIRECT_ASSAY = "IDA";
+
   /**
    * The concepts in the index. "Nevus" is Benign, but has a different property whose value is
-   * "Malignant", which lesson 1 relies on. "Skin" has no properties.
+   * "Malignant", which lesson 1 relies on. "Skin" has no properties. The two genes have GO
+   * annotations: "INHBA Gene" has cell cycle arrest only from a direct assay, and an author
+   * statement only on its other annotation, which lesson 5 relies on.
    */
   private static final List<Concept> INDEXED_CONCEPTS =
       List.of(
@@ -105,7 +144,20 @@ public class HasPropertyTest {
               "Basal Cell Carcinoma",
               getProperty(NEOPLASTIC_STATUS, NEOPLASTIC_STATUS_CODE, MALIGNANT),
               getProperty(ICD_O_3_CODE, ICD_O_3_CODE_CODE, "8090/3")),
-          getConcept("C04", "Skin"));
+          getConcept("C04", "Skin"),
+          getConcept(
+              "C05",
+              "INHBA Gene",
+              getGoAnnotation(
+                  ACTIVIN_INHIBITOR_ACTIVITY,
+                  ACTIVIN_INHIBITOR_ACTIVITY_GO_ID,
+                  TRACEABLE_AUTHOR_STATEMENT),
+              getGoAnnotation(CELL_CYCLE_ARREST, CELL_CYCLE_ARREST_GO_ID, DIRECT_ASSAY)),
+          getConcept(
+              "C06",
+              "TP53 Gene",
+              getGoAnnotation(
+                  CELL_CYCLE_ARREST, CELL_CYCLE_ARREST_GO_ID, TRACEABLE_AUTHOR_STATEMENT)));
 
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
   @Autowired private OpensearchOperationsService operationsService;
@@ -232,13 +284,121 @@ public class HasPropertyTest {
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(conceptsWithMelanomaMorphology));
   }
 
-  /** A property type and, when given, a value are required. */
+  // ---------------------------------------------------------------------------------------------
+  // Lesson 5: qualifiers must be on the same property.
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Only "TP53 Gene" has cell cycle arrest from an author statement. "INHBA Gene" has cell cycle
+   * arrest and an author statement, but on two different GO annotations, so it doesn't match.
+   */
+  @Test
+  public void testQualifierMatchesOnSamePropertyEntry() {
+    final EvsQuery genesWithAuthorStatedCellCycleArrest =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new Exact(CELL_CYCLE_ARREST),
+            List.of(
+                new PropertyQualifier(
+                    new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT))));
+
+    assertEquals(Set.of("TP53 Gene"), fetchMatchingNames(genesWithAuthorStatedCellCycleArrest));
+  }
+
+  /**
+   * Every qualifier must be on the same property, each on any of its qualifier entries. Both genes
+   * have cell cycle arrest's GO id, but only "TP53 Gene" has it with an author statement.
+   */
+  @Test
+  public void testAllQualifiersMatchOnSamePropertyEntry() {
+    final EvsQuery genesWithAuthorStatedCellCycleArrestId =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            List.of(
+                new PropertyQualifier(new Exact(GO_ID), new Exact(CELL_CYCLE_ARREST_GO_ID)),
+                new PropertyQualifier(
+                    new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT))));
+
+    assertEquals(Set.of("TP53 Gene"), fetchMatchingNames(genesWithAuthorStatedCellCycleArrestId));
+  }
+
+  /** Without a property value, the qualifier alone picks the annotation. */
+  @Test
+  public void testQualifierWithoutPropertyValueFindsAnyValue() {
+    final EvsQuery genesWithActivinInhibitorId =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            List.of(
+                new PropertyQualifier(
+                    new Exact(GO_ID), new Exact(ACTIVIN_INHIBITOR_ACTIVITY_GO_ID))));
+
+    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithActivinInhibitorId));
+  }
+
+  /** Without a qualifier value, any property with that qualifier type matches. */
+  @Test
+  public void testQualifierTypeWithoutValueFindsAnyValue() {
+    final EvsQuery genesWithAnyEvidence =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            List.of(new PropertyQualifier(new Exact(GO_EVIDENCE))));
+
+    assertEquals(Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithAnyEvidence));
+  }
+
+  /**
+   * A qualifier's type and value match on the same qualifier entry. Both genes have a go-id and a
+   * "TAS" value, but no go-id is "TAS".
+   */
+  @Test
+  public void testQualifierTypeAndValueMatchOnSameQualifierEntry() {
+    final EvsQuery genesWithGoIdTas =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            List.of(
+                new PropertyQualifier(new Exact(GO_ID), new Exact(TRACEABLE_AUTHOR_STATEMENT))));
+
+    assertEquals(Set.of(), fetchMatchingNames(genesWithGoIdTas));
+  }
+
+  /** The qualifier's code finds the same concepts as its name. */
+  @Test
+  public void testQualifierCodeMatchesLikeName() {
+    final EvsQuery byName =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            List.of(new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY))));
+    final EvsQuery byCode =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION_CODE),
+            List.of(new PropertyQualifier(new Exact(GO_EVIDENCE_CODE), new Exact(DIRECT_ASSAY))));
+
+    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(byName));
+    assertEquals(fetchMatchingNames(byName), fetchMatchingNames(byCode));
+  }
+
+  /** A property type, and a value or qualifiers when given, are required. */
   @Test
   public void testRejectsMissingValues() {
-    assertThrows(NullPointerException.class, () -> new HasProperty(terminologies, null));
+    final ValueMatch missingMatch = null;
+    final List<PropertyQualifier> missingQualifiers = null;
+    assertThrows(NullPointerException.class, () -> new HasProperty(terminologies, missingMatch));
     assertThrows(
         NullPointerException.class,
-        () -> new HasProperty(terminologies, new Exact(NEOPLASTIC_STATUS), null));
+        () -> new HasProperty(terminologies, new Exact(NEOPLASTIC_STATUS), missingMatch));
+    assertThrows(
+        NullPointerException.class,
+        () -> new HasProperty(terminologies, new Exact(NEOPLASTIC_STATUS), missingQualifiers));
+    assertThrows(NullPointerException.class, () -> new PropertyQualifier(missingMatch));
+    assertThrows(
+        NullPointerException.class, () -> new PropertyQualifier(new Exact(GO_ID), missingMatch));
   }
 
   /**
@@ -303,6 +463,24 @@ public class HasPropertyTest {
   private static Property getProperty(final String type, final String code, final String value) {
     final Property property = new Property(type, value);
     property.setCode(code);
+    return property;
+  }
+
+  /**
+   * Builds a GO annotation property with its go-id and go-evi qualifiers.
+   *
+   * @param goTerm the Gene Ontology term's name, the property's value
+   * @param goId the Gene Ontology term's id
+   * @param evidenceCode how the annotation is supported
+   * @return the property
+   */
+  private static Property getGoAnnotation(
+      final String goTerm, final String goId, final String evidenceCode) {
+    final Property property = getProperty(GO_ANNOTATION, GO_ANNOTATION_CODE, goTerm);
+    property.setQualifiers(
+        List.of(
+            new Qualifier(GO_ID, goId, GO_ID_CODE),
+            new Qualifier(GO_EVIDENCE, evidenceCode, GO_EVIDENCE_CODE)));
     return property;
   }
 }

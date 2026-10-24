@@ -19,7 +19,18 @@ import org.opensearch.index.query.QueryBuilders;
  * such as synonyms (FULL_SYN, P90) and definitions (DEFINITION, P97), aren't there, so they can't
  * be found with this query.
  *
- * <p>Qualifiers can't be matched: a property's qualifiers are stored but not indexed.
+ * <p>Qualifiers ({@link PropertyQualifier}) must all be on that same property entry, e.g. a
+ * GO_Annotation whose go-id is "GO:0007050" and whose go-evi is "TAS". Each qualifier can be a
+ * different qualifier entry of the property. Qualifiers remodeled into their own fields, such as a
+ * synonym's source, aren't property qualifiers, so they can't be matched here.
+ *
+ * <p><b>Exploratory design: the qualifier list is an implicit AND.</b> The concept-level {@code
+ * And}/{@code Or}/{@code Not} nodes can't combine qualifiers, because combining two {@link
+ * HasProperty} nodes only requires each qualifier on some property, not on the same one. So the
+ * list is, for now, the only way to require several qualifiers together. It can't express "either
+ * qualifier" or "no such qualifier". The likely replacement is a single qualifier condition with
+ * its own logical operators, each {@link PropertyQualifier} keeping its own nested query so {@code
+ * Not} means "has no qualifier matching". That's undecided, so don't build on the list.
  */
 public final class HasProperty extends EvsQuery {
 
@@ -35,10 +46,19 @@ public final class HasProperty extends EvsQuery {
   /** A property entry's value, e.g. "Malignant". */
   private static final String VALUE_FIELD = PROPERTIES_FIELD + ".value";
 
+  /** A property entry's list of qualifiers, mapped as nested so qualifiers can be searched. */
+  private static final String QUALIFIERS_FIELD = PROPERTIES_FIELD + ".qualifiers";
+
   private final ValueMatch typeNameOrCodeMatch;
 
   /** The match for the property's value, or null to match any value. */
   private final ValueMatch valueMatch;
+
+  /**
+   * The qualifiers the property must all have: an implicit AND (see the class Javadoc).
+   * Unmodifiable, and empty to require none.
+   */
+  private final List<PropertyQualifier> qualifiers;
 
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type, with any value.
@@ -47,9 +67,7 @@ public final class HasProperty extends EvsQuery {
    * @param typeNameOrCodeMatch the match for the property's type name or code
    */
   public HasProperty(final List<Terminology> terminologies, final ValueMatch typeNameOrCodeMatch) {
-    super(terminologies);
-    this.typeNameOrCodeMatch = Objects.requireNonNull(typeNameOrCodeMatch, "typeNameOrCodeMatch");
-    this.valueMatch = null;
+    this(terminologies, typeNameOrCodeMatch, null, List.of());
   }
 
   /**
@@ -64,9 +82,46 @@ public final class HasProperty extends EvsQuery {
       final List<Terminology> terminologies,
       final ValueMatch typeNameOrCodeMatch,
       final ValueMatch valueMatch) {
+    this(
+        terminologies,
+        typeNameOrCodeMatch,
+        Objects.requireNonNull(valueMatch, "valueMatch"),
+        List.of());
+  }
+
+  /**
+   * Instantiates a {@link HasProperty} that matches a property of the given type, with any value,
+   * that has all the given qualifiers.
+   *
+   * @param terminologies the terminologies being searched
+   * @param typeNameOrCodeMatch the match for the property's type name or code
+   * @param qualifiers the qualifiers the property must all have
+   */
+  public HasProperty(
+      final List<Terminology> terminologies,
+      final ValueMatch typeNameOrCodeMatch,
+      final List<PropertyQualifier> qualifiers) {
+    this(terminologies, typeNameOrCodeMatch, null, qualifiers);
+  }
+
+  /**
+   * Instantiates a {@link HasProperty} that matches a property of the given type with a matching
+   * value, that has all the given qualifiers.
+   *
+   * @param terminologies the terminologies being searched
+   * @param typeNameOrCodeMatch the match for the property's type name or code
+   * @param valueMatch the match for the property's value
+   * @param qualifiers the qualifiers the property must all have
+   */
+  public HasProperty(
+      final List<Terminology> terminologies,
+      final ValueMatch typeNameOrCodeMatch,
+      final ValueMatch valueMatch,
+      final List<PropertyQualifier> qualifiers) {
     super(terminologies);
     this.typeNameOrCodeMatch = Objects.requireNonNull(typeNameOrCodeMatch, "typeNameOrCodeMatch");
-    this.valueMatch = Objects.requireNonNull(valueMatch, "valueMatch");
+    this.valueMatch = valueMatch;
+    this.qualifiers = List.copyOf(Objects.requireNonNull(qualifiers, "qualifiers"));
   }
 
   /* see superclass */
@@ -83,7 +138,24 @@ public final class HasProperty extends EvsQuery {
       entryConditions.must(propertyValueMatch.fetchOpenSearchQuery(operations));
     }
 
+    addQualifierConditions(entryConditions, operations);
+
     return getConceptsWithAnyPropertyMatching(entryConditions);
+  }
+
+  /**
+   * Requires the property entry to have every qualifier, each on any of its qualifier entries.
+   *
+   * @param entryConditions the conditions one property entry must meet, added to
+   * @param operations the OpenSearch operations
+   */
+  private void addQualifierConditions(
+      final BoolQueryBuilder entryConditions, final OpenSearchOperations operations) {
+    for (final PropertyQualifier qualifier : qualifiers) {
+      entryConditions.must(
+          qualifier.getPropertiesWithAnyQualifierMatching(
+              terminologies, QUALIFIERS_FIELD, operations));
+    }
   }
 
   /**

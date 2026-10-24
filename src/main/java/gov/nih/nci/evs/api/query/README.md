@@ -77,6 +77,12 @@ classDiagram
     class HasProperty {
         -ValueMatch typeNameOrCodeMatch
         -ValueMatch valueMatch
+        -List~PropertyQualifier~ qualifiers
+    }
+
+    class PropertyQualifier {
+        -ValueMatch typeNameOrCodeMatch
+        -ValueMatch valueMatch
     }
 
     class CompositeQuery {
@@ -134,6 +140,8 @@ classDiagram
     HasRelationship o-- RelationshipType
     HasRelationship o-- RelationshipTarget
     HasProperty o-- ValueMatch : type, value
+    HasProperty o-- PropertyQualifier : qualifiers
+    PropertyQualifier o-- ValueMatch : type, value
     RelationshipType o-- ValueMatch : match
     RelationshipTarget o-- ValueMatch : or
     RelationshipTarget o-- EvsQuery : or
@@ -157,7 +165,8 @@ classDiagram
 | `SupportsIgnoringCase` | A `ValueMatch` that can also ignore case: `Exact`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper match. It runs the wrapped match ignoring case by calling `getCaseInsensitiveQueryBuilder(field)`. The wrapped match is not changed. |
 | `HasRelationship` | Matches concepts by a relationship's type and target (see [Queries about other concepts](#queries-about-other-concepts-joins)). |
-| `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions, and can't match qualifiers, which aren't indexed. |
+| `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions. |
+| `PropertyQualifier` | A qualifier a `HasProperty` property must have: a type name or code, optionally with a matching value, on one qualifier entry of that same property. `HasProperty` takes a list of them as an implicit AND. That's exploratory, not a settled design: see `HasProperty`'s Javadoc. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
 | `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a match. |
 
 ## Value matches
