@@ -59,6 +59,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@DemonstratesFieldMatch
 public class HasRoleTest {
 
   /** A throwaway index used only by this tutorial. */

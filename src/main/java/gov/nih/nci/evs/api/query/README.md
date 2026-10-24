@@ -8,6 +8,10 @@ There are two layers:
 
 - **Queries** (`EvsQuery`) say which concepts match. `FieldMatch` is the leaf: it matches one
   concept field. Composite queries (planned) combine other queries with `and`, `or`, and so on.
+  `FieldMatch` is for building nodes, not part of the API: it's package-private, and tests may
+  only use it inside a class, method, or field marked `@DemonstratesFieldMatch` (enforced by
+  `FieldMatchUsageSourceCodeTest`). Tutorials showing how to use the API must stick to the
+  public nodes.
 - **Value matches** (`ValueMatch`) say how one value is compared (exactly, by prefix, within a
   few edits, ...) without naming a field. A `FieldMatch` applies one to a concept field. A node
   that owns its own fields applies one to those, e.g. a relationship's type to the entry's type

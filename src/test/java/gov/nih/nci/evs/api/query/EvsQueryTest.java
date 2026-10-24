@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
  * Unit tests for {@link EvsQuery}'s check that every terminology it searches has a terminology and
  * version. No OpenSearch or Spring: the check runs when a node is built.
  */
+@DemonstratesFieldMatch
 public class EvsQueryTest {
 
   /** Terminology of the made-up terminologies. */

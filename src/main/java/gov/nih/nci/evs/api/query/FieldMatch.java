@@ -10,8 +10,14 @@ import org.opensearch.index.query.QueryBuilder;
  * A leaf query: matches concepts whose field matches the value match, e.g. concepts whose {@code
  * code} is exactly "C12470". The {@link ValueMatch} says how the value is compared; this node only
  * says which field it's compared against.
+ *
+ * <p>For developers building new query nodes only: a node uses it inside {@code
+ * fetchOpenSearchQuery} to match the fields it owns. It is not part of the API. API users can't
+ * name it outside this package, and tests may only use it inside a class, method, or field marked
+ * {@code @DemonstratesFieldMatch} (enforced by {@code FieldMatchUsageSourceCodeTest}), so tests
+ * that show how to use the API stick to the public nodes.
  */
-public final class FieldMatch extends EvsQuery {
+final class FieldMatch extends EvsQuery {
 
   /** The field to match against. */
   private final String field;

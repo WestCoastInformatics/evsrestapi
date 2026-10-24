@@ -17,6 +17,9 @@ concepts (`declareDependencies`), and how to add a new node.
   refactored onto the logical nodes later.
 - Build leaf conditions with `FieldMatch` and a value match (`Exact`, `StartsWith`, ...) and call its
   `fetchOpenSearchQuery` instead of writing `termQuery`/`prefixQuery` by hand.
+- `FieldMatch` is only for building nodes. Don't make it public. In tests, use it only inside a
+  class, method, or field marked `@DemonstratesFieldMatch`; tutorials must use public nodes.
+  `FieldMatchUsageSourceCodeTest` enforces this.
 - Keep the raw combining code in small, clearly named helpers, so each maps onto one logical node.
 
 ## Tests
