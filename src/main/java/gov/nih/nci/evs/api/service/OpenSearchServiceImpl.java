@@ -1239,6 +1239,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     List<String> subsets = searchCriteria.getSubset();
     BoolQueryBuilder subsetListQuery = QueryBuilders.boolQuery();
+    // Conditions on the concept itself, outside the nested association query
+    BoolQueryBuilder conceptQuery = QueryBuilders.boolQuery();
 
     if (subsets.size() == 1) {
       subsetListQuery =
@@ -1252,7 +1254,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
                 subsets.get(0), terminologies.get(0), new IncludeParam("synonyms"));
         // For CDISC groupers, only keep members matching CDISC in name
         if (concept.isPresent() && ConceptUtils.isCdiscGrouper(concept.get())) {
-          subsetListQuery.must(
+          conceptQuery.must(
               QueryBuilders.queryStringQuery("CDISC*").field("name").analyzeWildcard(true));
         }
       }
@@ -1271,7 +1273,9 @@ public class OpenSearchServiceImpl implements OpenSearchService {
         && searchCriteria.getSubset().get(0).contentEquals("*"))) {
       subsetQuery.must(subsetListQuery);
     }
-    return subsetQuery;
+
+    // Associations are nested, so the type and subset code must match on the same association
+    return conceptQuery.must(QueryBuilders.nestedQuery("associations", subsetQuery, ScoreMode.Max));
   }
 
   /**

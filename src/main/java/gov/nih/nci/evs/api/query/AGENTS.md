@@ -24,5 +24,5 @@ concepts (`declareDependencies`), and how to add a new node.
 
 ## Tests
 
-- `ValueMatchTest` and `HasRoleTest` run against OpenSearch on port 9201.
+- `ValueMatchTest`, `HasRoleTest`, and `HasAssociationTest` run against OpenSearch on port 9201.
 - `DeclareDependenciesTest` uses a mocked `OpenSearchOperations` and needs no services.
