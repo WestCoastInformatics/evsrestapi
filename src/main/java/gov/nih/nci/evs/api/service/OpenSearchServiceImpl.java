@@ -1,19 +1,27 @@
 package gov.nih.nci.evs.api.service;
 
+import gov.nih.nci.evs.api.model.Audit;
 import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.ConceptMinimal;
 import gov.nih.nci.evs.api.model.ConceptResultList;
 import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.Mapping;
 import gov.nih.nci.evs.api.model.MappingResultList;
+import gov.nih.nci.evs.api.model.Path;
+import gov.nih.nci.evs.api.model.Paths;
 import gov.nih.nci.evs.api.model.SearchCriteria;
 import gov.nih.nci.evs.api.model.Terminology;
+import gov.nih.nci.evs.api.properties.ApplicationProperties;
 import gov.nih.nci.evs.api.support.es.EVSPageable;
 import gov.nih.nci.evs.api.util.ConceptUtils;
 import gov.nih.nci.evs.api.util.TerminologyUtils;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
@@ -39,8 +47,10 @@ import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Reference implementation of {@link OpenSearchService}. Includes hibernate tags for MEME database.
@@ -65,6 +75,21 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
   /** The Opensearch query service *. */
   @Autowired OpensearchQueryService osQueryService;
+
+  /** The application properties. */
+  @Autowired ApplicationProperties applicationProperties;
+
+  /** Default max codes expanded by the hierarchy search fallback. */
+  private static final int DEFAULT_HIERARCHY_FALLBACK_MAX_CODES = 65536;
+
+  /** Number of ids per ids query clause in the hierarchy search fallback. */
+  private static final int IDS_CHUNK_SIZE = 10000;
+
+  /** Number of concepts per children lookup in the hierarchy search fallback. */
+  private static final int CHILDREN_BATCH_SIZE = 1000;
+
+  /** Terminology versions for which hierarchy fallback use was already logged. */
+  private final Set<String> hierarchyFallbackNoted = ConcurrentHashMap.newKeySet();
 
   /** The term utils. */
   /* The terminology utils */
@@ -125,6 +150,11 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       for (final QueryBuilder criteriaQuery : criteriaQueries) {
         boolQuery.must(criteriaQuery);
       }
+    }
+
+    // append hierarchy filters (validation limits these to a single terminology)
+    if (searchCriteria.hasHierarchyConstraints()) {
+      applyHierarchyFilters(boolQuery, terminologies.get(0), searchCriteria);
     }
 
     // Get include param
@@ -1276,6 +1306,287 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     // Associations are nested, so the type and subset code must match on the same association
     return conceptQuery.must(QueryBuilders.nestedQuery("associations", subsetQuery, ScoreMode.Max));
+  }
+
+  /**
+   * Applies hierarchy constraints (descendantOf, notDescendantOf, ancestorOf) as filter clauses, so
+   * they do not affect scoring and can be cached.
+   *
+   * @param boolQuery the bool query
+   * @param terminology the terminology
+   * @param searchCriteria the search criteria
+   * @throws Exception the exception
+   */
+  private void applyHierarchyFilters(
+      final BoolQueryBuilder boolQuery,
+      final Terminology terminology,
+      final SearchCriteria searchCriteria)
+      throws Exception {
+    final boolean includeSelf =
+        searchCriteria.getIncludeSelf() == null || searchCriteria.getIncludeSelf();
+    final List<String> descendantOf = searchCriteria.getDescendantOf();
+    final List<String> notDescendantOf = searchCriteria.getNotDescendantOf();
+    final String ancestorOf = searchCriteria.getAncestorOf();
+
+    checkHierarchyCodesExist(terminology, "descendantOf", descendantOf);
+    checkHierarchyCodesExist(terminology, "notDescendantOf", notDescendantOf);
+    if (ancestorOf != null) {
+      checkHierarchyCodesExist(terminology, "ancestorOf", List.of(ancestorOf));
+    }
+
+    // Indexes loaded before the ancestor fields existed use the query-time fallback
+    final boolean indexed = Boolean.TRUE.equals(terminology.getMetadata().getHierarchyFields());
+    if (!indexed && (!descendantOf.isEmpty() || !notDescendantOf.isEmpty())) {
+      noteHierarchyFallback(terminology);
+    }
+
+    // descendantOf: descendant of any anchor (optionally within maxLevel), or an anchor itself
+    if (!descendantOf.isEmpty()) {
+      final BoolQueryBuilder branch = QueryBuilders.boolQuery().minimumShouldMatch(1);
+      if (!indexed) {
+        addIdsClauses(
+            branch,
+            expandDescendants(
+                terminology, "descendantOf", descendantOf, searchCriteria.getMaxLevel()),
+            false);
+      } else if (searchCriteria.getMaxLevel() == null) {
+        branch.should(QueryBuilders.termsQuery("ancestors", descendantOf));
+      } else {
+        branch.should(
+            QueryBuilders.termsQuery(
+                "ancestorDepths", getDepthTokens(descendantOf, searchCriteria.getMaxLevel())));
+      }
+      if (includeSelf) {
+        branch.should(QueryBuilders.idsQuery().addIds(descendantOf.toArray(new String[0])));
+      }
+      // An anchor with no descendants and includeSelf=false has no clauses: match nothing
+      if (branch.should().isEmpty()) {
+        branch.should(QueryBuilders.idsQuery());
+      }
+      boolQuery.filter(branch);
+    }
+
+    // notDescendantOf: exclude descendants of every anchor, and the anchors themselves
+    if (!notDescendantOf.isEmpty()) {
+      if (indexed) {
+        boolQuery.mustNot(QueryBuilders.termsQuery("ancestors", notDescendantOf));
+      } else {
+        addIdsClauses(
+            boolQuery,
+            expandDescendants(terminology, "notDescendantOf", notDescendantOf, null),
+            true);
+      }
+      if (includeSelf) {
+        boolQuery.mustNot(QueryBuilders.idsQuery().addIds(notDescendantOf.toArray(new String[0])));
+      }
+    }
+
+    // ancestorOf: the anchor's ancestors come from its stored paths (small, no new fields needed)
+    if (ancestorOf != null) {
+      final Set<String> ancestors = new HashSet<>();
+      final Paths paths = osQueryService.getPathsToRoot(ancestorOf, terminology);
+      if (paths != null && paths.getPaths() != null) {
+        for (final Path path : paths.getPaths()) {
+          for (final ConceptMinimal concept : path.getConcepts()) {
+            if (!concept.getCode().equals(ancestorOf)) {
+              ancestors.add(concept.getCode());
+            }
+          }
+        }
+      }
+      if (includeSelf) {
+        ancestors.add(ancestorOf);
+      }
+      // An empty ids query matches nothing, e.g. ancestors of a root without self
+      boolQuery.filter(QueryBuilders.idsQuery().addIds(ancestors.toArray(new String[0])));
+    }
+  }
+
+  /**
+   * Fallback for indexes without ancestor fields: expands anchor codes to their descendants.
+   * Without maxLevel, the precomputed descendant lists are used. With maxLevel, children are walked
+   * breadth-first from all anchors, which gives the exact shortest depth under polyhierarchy (the
+   * stored descendant level comes from a depth-first walk and can be larger).
+   *
+   * @param terminology the terminology
+   * @param name the parameter name
+   * @param codes the anchor codes
+   * @param maxLevel the max level, or null for all descendants
+   * @return the descendant codes
+   */
+  private Set<String> expandDescendants(
+      final Terminology terminology,
+      final String name,
+      final List<String> codes,
+      final Integer maxLevel) {
+    final Set<String> result = new HashSet<>();
+    if (maxLevel == null) {
+      for (final String code : codes) {
+        for (final Concept descendant : osQueryService.getDescendants(code, terminology)) {
+          result.add(descendant.getCode());
+        }
+        checkHierarchyFallbackSize(name, result);
+      }
+      return result;
+    }
+
+    Set<String> frontier = new HashSet<>(codes);
+    for (int level = 1; level <= maxLevel && !frontier.isEmpty(); level++) {
+      final Set<String> next = new HashSet<>();
+      final List<String> parents = new ArrayList<>(frontier);
+      for (int i = 0; i < parents.size(); i += CHILDREN_BATCH_SIZE) {
+        for (final Concept parent :
+            osQueryService.getConcepts(
+                parents.subList(i, Math.min(i + CHILDREN_BATCH_SIZE, parents.size())),
+                terminology,
+                new IncludeParam("children"))) {
+          for (final Concept child : parent.getChildren()) {
+            if (result.add(child.getCode())) {
+              next.add(child.getCode());
+            }
+          }
+        }
+      }
+      checkHierarchyFallbackSize(name, result);
+      frontier = next;
+    }
+    return result;
+  }
+
+  /**
+   * Checks that a fallback expansion is within the configured limit.
+   *
+   * @param name the parameter name
+   * @param codes the expanded codes
+   */
+  private void checkHierarchyFallbackSize(final String name, final Set<String> codes) {
+    final int maxCodes = getHierarchyFallbackMaxCodes();
+    if (codes.size() > maxCodes) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "Parameter '"
+              + name
+              + "' branch is too large for this index version (more than "
+              + maxCodes
+              + " concepts). The terminology must be reindexed to support it.");
+    }
+  }
+
+  /**
+   * Adds ids clauses in chunks to keep each clause a reasonable size.
+   *
+   * @param query the bool query
+   * @param codes the codes
+   * @param mustNot true to add as must_not clauses, false to add as should clauses
+   */
+  private void addIdsClauses(
+      final BoolQueryBuilder query, final Set<String> codes, final boolean mustNot) {
+    final List<String> list = new ArrayList<>(codes);
+    for (int i = 0; i < list.size(); i += IDS_CHUNK_SIZE) {
+      final String[] chunk =
+          list.subList(i, Math.min(i + IDS_CHUNK_SIZE, list.size())).toArray(new String[0]);
+      if (mustNot) {
+        query.mustNot(QueryBuilders.idsQuery().addIds(chunk));
+      } else {
+        query.should(QueryBuilders.idsQuery().addIds(chunk));
+      }
+    }
+  }
+
+  /**
+   * Returns the configured fallback limit, or the default when not configured.
+   *
+   * @return the max codes
+   */
+  private int getHierarchyFallbackMaxCodes() {
+    final Integer configured =
+        applicationProperties == null ? null : applicationProperties.getHierarchyFallbackMaxCodes();
+    return configured == null ? DEFAULT_HIERARCHY_FALLBACK_MAX_CODES : configured;
+  }
+
+  /**
+   * Logs a warning and records an audit entry the first time the fallback is used for a terminology
+   * version in this run, so un-reindexed terminologies are easy to find without flooding the logs.
+   *
+   * @param terminology the terminology
+   */
+  private void noteHierarchyFallback(final Terminology terminology) {
+    if (!hierarchyFallbackNoted.add(terminology.getTerminologyVersion())) {
+      return;
+    }
+    final String message =
+        "Hierarchy search fallback used for "
+            + terminology.getTerminologyVersion()
+            + " (no ancestor fields); reindex to enable indexed hierarchy filters";
+    logger.warn(message);
+    try {
+      Audit.addAudit(
+          esOperationsService,
+          "HierarchySearchFallback",
+          OpenSearchServiceImpl.class.getName(),
+          terminology.getTerminology(),
+          message,
+          "WARN");
+    } catch (final Exception e) {
+      logger.warn("  unable to record hierarchy fallback audit", e);
+    }
+  }
+
+  /**
+   * Checks that hierarchy anchor codes exist in the terminology.
+   *
+   * @param terminology the terminology
+   * @param name the parameter name
+   * @param codes the codes
+   */
+  private void checkHierarchyCodesExist(
+      final Terminology terminology, final String name, final List<String> codes) {
+    if (codes.isEmpty()) {
+      return;
+    }
+    // Count first: it never loads documents, which matters because large anchors (e.g. C3262)
+    // store their whole descendant list in _source and are slow to fetch even when filtered
+    final Set<String> unique = new HashSet<>(codes);
+    final long count =
+        operations.count(
+            new NativeSearchQueryBuilder()
+                .withQuery(QueryBuilders.idsQuery().addIds(unique.toArray(new String[0])))
+                .build(),
+            Concept.class,
+            IndexCoordinates.of(terminology.getIndexName()));
+    if (count == unique.size()) {
+      return;
+    }
+
+    // Something is missing: look the codes up to report which one
+    final Set<String> found =
+        osQueryService.getConcepts(codes, terminology, new IncludeParam("minimal")).stream()
+            .map(Concept::getCode)
+            .collect(Collectors.toSet());
+    for (final String code : codes) {
+      if (!found.contains(code)) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "Parameter '" + name + "' has an invalid code = " + code);
+      }
+    }
+  }
+
+  /**
+   * Returns "code|depth" tokens for each code and depth from 1 to maxLevel, matching the indexed
+   * ancestorDepths field, e.g. C3262 and 2 gives C3262|1 and C3262|2.
+   *
+   * @param codes the codes
+   * @param maxLevel the max level
+   * @return the depth tokens
+   */
+  private List<String> getDepthTokens(final List<String> codes, final int maxLevel) {
+    final List<String> tokens = new ArrayList<>();
+    for (final String code : codes) {
+      for (int i = 1; i <= maxLevel; i++) {
+        tokens.add(code + "|" + i);
+      }
+    }
+    return tokens;
   }
 
   /**

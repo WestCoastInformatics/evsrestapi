@@ -133,6 +133,25 @@ classDiagram
     EvsQuery <|-- FieldMatch
     EvsQuery <|-- HasRelationship
     EvsQuery <|-- HasProperty
+    class MatchAnyOf {
+        -String field
+        -Set~String~ values
+        +fetchOpenSearchQuery(OpenSearchOperations) TermsQueryBuilder
+    }
+
+    class HierarchyQuery {
+        <<abstract>>
+        -EvsQuery anchorQuery
+        -Integer maxLevel
+        -boolean isSelfIncluded
+        +fetchOpenSearchQuery(OpenSearchOperations) QueryBuilder
+        #fetchRelativesQuery(OpenSearchOperations, Terminology, Set~String~)* QueryBuilder
+    }
+    class DescendantOf
+    class DescendantOrSelfOf
+    class AncestorOf
+    class AncestorOrSelfOf
+
     EvsQuery <|-- CompositeQuery
     HasRelationship <|-- HasRole
     HasRelationship <|-- HasAssociation
@@ -156,6 +175,13 @@ classDiagram
     SupportsIgnoringCase <|.. Contains
     SupportsIgnoringCase <|.. StartsWith
     CaseInsensitive o-- SupportsIgnoringCase : wraps
+    EvsQuery <|-- MatchAnyOf
+    EvsQuery <|-- HierarchyQuery
+    HierarchyQuery <|-- DescendantOf
+    HierarchyQuery <|-- AncestorOf
+    DescendantOf <|-- DescendantOrSelfOf
+    AncestorOf <|-- AncestorOrSelfOf
+    HierarchyQuery o-- EvsQuery : anchorQuery
 ```
 
 | Class | Role |
@@ -169,6 +195,13 @@ classDiagram
 | `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions. |
 | `PropertyQualifier` | A qualifier a `HasProperty` property must have: a type name or code, optionally with a matching value, on one qualifier entry of that same property. `HasProperty` takes a list of them as an implicit AND. That's exploratory, not a settled design: see `HasProperty`'s Javadoc. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
 | `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a match. |
+| `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `FieldMatch` with `Exact`. Overlaps `OneOf`; kept as is from the hierarchy branch. Rejects more than 65,536 values, OpenSearch's default limit. |
+| `HierarchyQuery` | Base type for hierarchy nodes. Runs the inner (anchor) query first through `declareDependencies`, then, for each terminology version, matches the anchors' relatives only in that terminology's index. Handles `maxLevel` (shortest distance, at least 1) and `isSelfIncluded`. Subclasses implement `fetchRelativesQuery`. |
+| `DescendantOf` | Matches concepts strictly below the anchors, optionally within `maxLevel` levels. Any node can supply the anchors, including another hierarchy node. Terminologies with `ancestors`/`ancestorDepths` match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
+| `DescendantOrSelfOf` | `DescendantOf` that also matches the anchors themselves (distance 0). |
+| `AncestorOf` | The upward counterpart: matches concepts strictly above the anchors, optionally within `maxLevel` levels. Reads the anchors' stored paths to root (`StoredPaths`), which every index has, so there's no fallback and nothing to remove after reindexing. Nests with `DescendantOf`, e.g. siblings-or-self is `new DescendantOf(t, new AncestorOf(t, x, 1), 1)`. |
+| `AncestorOrSelfOf` | `AncestorOf` that also matches the anchors themselves. |
+| `RawBoolQueries` | The raw `bool` combining helpers (`getAllOfQuery`, `getAnyOfQuery`, `getMatchNothingQuery`) used until the logical operator nodes land; each maps onto `And`, `Or`, or `Not`. |
 
 ## Value matches
 

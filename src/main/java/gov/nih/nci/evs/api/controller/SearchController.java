@@ -297,6 +297,44 @@ public class SearchController extends BaseController {
         required = false,
         schema = @Schema(implementation = String.class)),
     @Parameter(
+        name = "descendantOf",
+        description =
+            "Comma-separated list of concept codes to restrict search results to their"
+                + " descendants (and the codes themselves unless <i>includeSelf=false</i>), e.g."
+                + " 'C3262'. Multiple codes match descendants of any of them. Hierarchy parameters"
+                + " require a single terminology that has a hierarchy",
+        required = false,
+        schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "notDescendantOf",
+        description =
+            "Comma-separated list of concept codes whose descendants (and the codes themselves"
+                + " unless <i>includeSelf=false</i>) are excluded from search results, e.g."
+                + " 'C4872'",
+        required = false,
+        schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "ancestorOf",
+        description =
+            "Concept code to restrict search results to its ancestors (and the code itself unless"
+                + " <i>includeSelf=false</i>), e.g. 'C4872'",
+        required = false,
+        schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "maxLevel",
+        description =
+            "Used with <i>descendantOf</i>, the maximum depth below the descendantOf codes,"
+                + " using the shortest path, e.g. 1 for direct children",
+        required = false,
+        schema = @Schema(implementation = Integer.class)),
+    @Parameter(
+        name = "includeSelf",
+        description =
+            "Whether the descendantOf, notDescendantOf, and ancestorOf codes themselves are"
+                + " part of their branch",
+        required = false,
+        schema = @Schema(implementation = Boolean.class, defaultValue = "true")),
+    @Parameter(
         name = "X-EVSRESTAPI-License-Key",
         description =
             "Required license information for restricted terminologies. <a"
@@ -527,6 +565,44 @@ public class SearchController extends BaseController {
                 + " subset. This parameter is only meaningful for <i>terminology=ncit</i>",
         required = false,
         schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "descendantOf",
+        description =
+            "Comma-separated list of concept codes to restrict search results to their"
+                + " descendants (and the codes themselves unless <i>includeSelf=false</i>), e.g."
+                + " 'C3262'. Multiple codes match descendants of any of them. Hierarchy parameters"
+                + " require a single terminology that has a hierarchy",
+        required = false,
+        schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "notDescendantOf",
+        description =
+            "Comma-separated list of concept codes whose descendants (and the codes themselves"
+                + " unless <i>includeSelf=false</i>) are excluded from search results, e.g."
+                + " 'C4872'",
+        required = false,
+        schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "ancestorOf",
+        description =
+            "Concept code to restrict search results to its ancestors (and the code itself unless"
+                + " <i>includeSelf=false</i>), e.g. 'C4872'",
+        required = false,
+        schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "maxLevel",
+        description =
+            "Used with <i>descendantOf</i>, the maximum depth below the descendantOf codes,"
+                + " using the shortest path, e.g. 1 for direct children",
+        required = false,
+        schema = @Schema(implementation = Integer.class)),
+    @Parameter(
+        name = "includeSelf",
+        description =
+            "Whether the descendantOf, notDescendantOf, and ancestorOf codes themselves are"
+                + " part of their branch",
+        required = false,
+        schema = @Schema(implementation = Boolean.class, defaultValue = "true")),
     @Parameter(
         name = "X-EVSRESTAPI-License-Key",
         description =
@@ -830,6 +906,44 @@ public class SearchController extends BaseController {
                 + " subset. This parameter is only meaningful for <i>terminology=ncit</i>",
         required = false,
         schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "descendantOf",
+        description =
+            "Comma-separated list of concept codes to restrict search results to their"
+                + " descendants (and the codes themselves unless <i>includeSelf=false</i>), e.g."
+                + " 'C3262'. Multiple codes match descendants of any of them. Hierarchy parameters"
+                + " require a single terminology that has a hierarchy",
+        required = false,
+        schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "notDescendantOf",
+        description =
+            "Comma-separated list of concept codes whose descendants (and the codes themselves"
+                + " unless <i>includeSelf=false</i>) are excluded from search results, e.g."
+                + " 'C4872'",
+        required = false,
+        schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "ancestorOf",
+        description =
+            "Concept code to restrict search results to its ancestors (and the code itself unless"
+                + " <i>includeSelf=false</i>), e.g. 'C4872'",
+        required = false,
+        schema = @Schema(implementation = String.class)),
+    @Parameter(
+        name = "maxLevel",
+        description =
+            "Used with <i>descendantOf</i>, the maximum depth below the descendantOf codes,"
+                + " using the shortest path, e.g. 1 for direct children",
+        required = false,
+        schema = @Schema(implementation = Integer.class)),
+    @Parameter(
+        name = "includeSelf",
+        description =
+            "Whether the descendantOf, notDescendantOf, and ancestorOf codes themselves are"
+                + " part of their branch",
+        required = false,
+        schema = @Schema(implementation = Boolean.class, defaultValue = "true")),
     @Parameter(
         name = "X-EVSRESTAPI-License-Key",
         description =

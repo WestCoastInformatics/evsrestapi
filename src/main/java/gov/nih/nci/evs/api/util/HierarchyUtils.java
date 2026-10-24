@@ -777,6 +777,39 @@ public class HierarchyUtils {
   }
 
   /**
+   * Sets the ancestors and ancestor depths of a concept from its paths to root. Each ancestor is
+   * kept once with its shortest distance across all paths, so polyhierarchy is handled. The concept
+   * itself is not included. Concepts without paths are left unchanged.
+   *
+   * @param concept the concept, with paths already set
+   */
+  public static void applyAncestors(final Concept concept) {
+    if (concept.getPaths() == null || concept.getPaths().getPaths() == null) {
+      return;
+    }
+
+    final Map<String, Integer> minDepth = new HashMap<>();
+    for (final Path path : concept.getPaths().getPaths()) {
+      final List<ConceptMinimal> pathConcepts = path.getConcepts();
+      for (int i = 0; i < pathConcepts.size(); i++) {
+        final ConceptMinimal ancestor = pathConcepts.get(i);
+        final int depth = ancestor.getLevel() != null ? ancestor.getLevel() : i;
+        if (depth == 0 || ancestor.getCode().equals(concept.getCode())) {
+          continue;
+        }
+        minDepth.merge(ancestor.getCode(), depth, Math::min);
+      }
+    }
+
+    concept.setAncestors(minDepth.keySet().stream().sorted().collect(Collectors.toList()));
+    concept.setAncestorDepths(
+        minDepth.entrySet().stream()
+            .map(e -> e.getKey() + "|" + e.getValue())
+            .sorted()
+            .collect(Collectors.toList()));
+  }
+
+  /**
    * Returns the terminology.
    *
    * @return the terminology
