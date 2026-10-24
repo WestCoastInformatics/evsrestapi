@@ -10,8 +10,8 @@ There are two layers:
   concept field. Composite queries (planned) combine other queries with `and`, `or`, and so on.
   `FieldMatch` is for building nodes, not part of the API: it's package-private, and tests may
   only use it inside a class, method, or field marked `@DemonstratesFieldMatch` (enforced by
-  `FieldMatchUsageSourceCodeTest`). Tutorials showing how to use the API must stick to the
-  public nodes.
+  `FieldMatchUsageSourceCodeTest`). Tests showing how to use the API, like `HasRoleTest`, must
+  stick to the public nodes.
 - **Value matches** (`ValueMatch`) say how one value is compared (exactly, by prefix, within a
   few edits, ...) without naming a field. A `FieldMatch` applies one to a concept field. A node
   that owns its own fields applies one to those, e.g. a relationship's type to the entry's type
@@ -70,7 +70,8 @@ classDiagram
     }
 
     class RelationshipTarget {
-        -EvsQuery query
+        +RelationshipTarget(ValueMatch nameOrCodeMatch)
+        +RelationshipTarget(EvsQuery query)
     }
 
     class CompositeQuery {
@@ -109,6 +110,10 @@ classDiagram
         String term
         Fuzziness fuzziness
     }
+    class OneOf {
+        <<record>>
+        Set~String~ terms
+    }
     class SearchAsYouType {
         <<record>>
         String term
@@ -123,12 +128,14 @@ classDiagram
     HasRelationship o-- RelationshipType
     HasRelationship o-- RelationshipTarget
     RelationshipType o-- ValueMatch : match
-    RelationshipTarget o-- EvsQuery : query
+    RelationshipTarget o-- ValueMatch : or
+    RelationshipTarget o-- EvsQuery : or
 
     ValueMatch <|-- SupportsIgnoringCase
     ValueMatch <|.. CaseInsensitive
     ValueMatch <|.. Fuzzy
     ValueMatch <|.. SearchAsYouType
+    ValueMatch <|.. OneOf
     SupportsIgnoringCase <|.. Exact
     SupportsIgnoringCase <|.. Contains
     SupportsIgnoringCase <|.. StartsWith
@@ -157,6 +164,7 @@ Apart from `SearchAsYouType`, the value matches are **case sensitive** and compa
 | `Contains` | includes the term anywhere | `wildcard` on `*term*`, with `*`, `?`, and `\` in the term escaped |
 | `StartsWith` | begins with the term | `prefix` |
 | `Fuzzy` | is within a small edit distance of the term (`Fuzziness.AUTO` by default, or pass one) | `fuzzy` |
+| `OneOf` | equals any one of a set of terms exactly, e.g. the codes a relationship target query found. At most 65,536 terms by default | `terms` |
 | `SearchAsYouType` | contains every typed word in any order, with only the last word allowed to be partial. Ignores case. Needs a field mapped as `search_as_you_type` | `multi_match` of type `bool_prefix` over the field and its `._2gram` / `._3gram` subfields |
 
 ### Choosing a field
@@ -214,18 +222,22 @@ Some nodes hold a query that describes a *different* concept from the one being 
 - Planned: association targets (1.5), and `Reachable`'s seeds and hops (1.11)
 
 **Roles and associations share one node.** A concept's `roles` and `associations` are both lists of
-entries pairing a type (name and code) with a related concept's code, so `HasRelationship` searches
+entries pairing a type (name and code) with a related concept's code and name, so `HasRelationship` searches
 either. It's abstract: each subclass says which list it searches by overriding
-`getRelationshipListFieldName()`, and every field it checks is that list's name plus the field
-(`roles.type`, `roles.relatedCode`, ...). `HasRole` returns `roles`. Only
+`getRelationshipListFieldName()`; `HasRole` returns `roles`. `HasRelationship` owns the list: the
+nested query on it and the terminology version filter. `RelationshipType` and `RelationshipTarget`
+own which entry fields they compare (`type` and `code`; `relatedName` and `relatedCode`) and build
+their `FieldMatch`es on them, with the list's name in front (`roles.type`, ...). Only
 `roles` is mapped as nested today; searching `associations` (1.5), `inverseRoles`, or
 `inverseAssociations` first needs that mapping and a reindex.
 
-**The type is a value match, the target is a query.** A `RelationshipType` takes a `ValueMatch`
+**The type is a value match; the target is a value match or a query.** A `RelationshipType` takes a `ValueMatch`
 and applies it to both the entry's type name and its type code, so the caller picks how the type
 is matched without naming the entry's fields: `new RelationshipType(new StartsWith("Disease_Has"))`.
-`new RelationshipType("R101")` is short for `new RelationshipType(new Exact("R101"))`. A
-`RelationshipTarget` takes a query, because the target is another concept.
+There's no default: an exact type is `new RelationshipType(new Exact("R101"))`. A
+`RelationshipTarget` takes either a `ValueMatch`, compared directly against the entry's target name
+or target code the same way (the name is analyzed text, so the match compares its words), or a
+query over concepts, which runs first and whose codes are then matched exactly.
 
 OpenSearch can't join across documents. A nested query only reaches inside the same concept
 document, and a role entry only stores its target's code. So
@@ -239,11 +251,11 @@ dependencies...)`, which runs each dependency and pages through every matching c
 which can be very large: each hit's code is its first sort value (read from doc values) and its
 terminology version is that of the index it came from. It returns one `ConceptKeys` per dependency:
 the codes found in each terminology version. The node then matches what it found, e.g. with a
-`terms` query on codes. The paging is done by `EvsQuery.fetchConceptKeys`, which runs the node's own
+`FieldMatch` with `OneOf` the codes. The paging is done by `EvsQuery.fetchConceptKeys`, which runs the node's own
 `fetchOpenSearchQuery`, so a node is written once and works both as a search and as a dependency.
-`HasRelationship` calls `declareDependencies(operations, relationshipTarget.getQuery())`, and for
-each terminology version it matches concepts from that terminology version with an entry pointing
-to one of its codes. An inner query can hold its own query about another concept, which runs first in the same
+A `RelationshipTarget` given as a query calls `declareDependencies(operations, targetQuery)`, and for
+each terminology version it matches concepts from that terminology version with an entry whose
+`relatedCode` is `OneOf` its codes. An inner query can hold its own query about another concept, which runs first in the same
 way, to any depth. Nodes that don't hold a query about another concept ignore `operations`.
 
 **Why codes are matched per terminology version:** a code alone doesn't identify a concept. Two

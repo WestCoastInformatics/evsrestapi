@@ -215,7 +215,7 @@ public class DeclareDependenciesTest {
    */
   @Test
   public void testRoleTargetWithMoreCodesThanOneTermsQueryAcceptsFails() {
-    final int pagesOverLimit = HasRelationship.MAX_TARGET_CODES / EvsQuery.CONCEPTS_PER_PAGE + 1;
+    final int pagesOverLimit = RelationshipTarget.MAX_TARGET_CODES / EvsQuery.CONCEPTS_PER_PAGE + 1;
     final AtomicInteger pagesReturned = new AtomicInteger();
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenAnswer(
@@ -228,7 +228,7 @@ public class DeclareDependenciesTest {
     final HasRole hasRole =
         new HasRole(
             terminologies,
-            new RelationshipType("R101"),
+            new RelationshipType(new Exact("R101")),
             new RelationshipTarget(conceptsWithSkinCode));
 
     assertThrows(IllegalStateException.class, () -> hasRole.fetchOpenSearchQuery(operations));

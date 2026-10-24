@@ -42,8 +42,10 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  *   <li>The query runs against the index, and the lesson checks which concept names came back.
  * </ol>
  *
- * <p>A role target is a query over other concepts. Building a {@link HasRole} runs its target query
- * first, so the target concepts (Skin, Lung, Liver) are in the index too.
+ * <p>A role target is either a value match, compared against the role's target name or code, or a
+ * query over other concepts, which runs before the role query. The query targets here are other
+ * {@link HasRole}s, e.g. "concepts that are a complication of a disease whose primary site is
+ * Skin".
  *
  * <p>The role names and codes are made up for the tutorial. They look like NCIt's but don't need to
  * match it.
@@ -59,7 +61,6 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DemonstratesFieldMatch
 public class HasRoleTest {
 
   /** A throwaway index used only by this tutorial. */
@@ -80,9 +81,6 @@ public class HasRoleTest {
   /** Version of the concepts in {@link #NEXT_VERSION_INDEX_NAME}. */
   private static final String NEXT_VERSION = "26.01a";
 
-  /** A code no indexed concept has. */
-  private static final String UNUSED_CODE = "C00000";
-
   /** One page large enough to hold every indexed concept. */
   private static final Pageable ALL_CONCEPTS = PageRequest.of(0, 100);
 
@@ -97,9 +95,6 @@ public class HasRoleTest {
 
   /** Code of {@link #ASSOCIATED_SITE}. */
   private static final String ASSOCIATED_SITE_CODE = "R100";
-
-  /** Field holding a concept's code, which target queries match on. */
-  private static final String CODE_FIELD = "code";
 
   /** Target concept: Skin. */
   private static final String SKIN = "C12470";
@@ -119,38 +114,61 @@ public class HasRoleTest {
   /** Code of {@link #COMPLICATION_OF}. */
   private static final String COMPLICATION_OF_CODE = "R999";
 
+  /** Made-up role linking an anatomic structure to the structure it is part of. */
+  private static final String PART_OF = "Anatomic_Structure_Is_Physical_Part_Of";
+
+  /** Code of {@link #PART_OF}. */
+  private static final String PART_OF_CODE = "R998";
+
+  /** Made-up structure that Skin is part of. Not indexed: only Skin's role points to it. */
+  private static final String BODY_SURFACE = "C99001";
+
   /**
    * The concepts in the index. "Lung Carcinoma" has both sites, but Skin only through the
-   * associated-site role, which lesson 1 relies on. Skin, Lung, and Liver are role targets. "Skin
-   * Ulcer" is a complication of a disease, which lesson 2b's nested target relies on.
+   * associated-site role, which lesson 1 relies on. "Lung Adenocarcinoma" has only a Lung site.
+   * Skin, Lung, and Liver are role targets. "Skin Ulcer" is a complication of a disease, and Skin
+   * is part of Body Surface, which lesson 2b's nested targets rely on.
    */
   private static final List<Concept> INDEXED_CONCEPTS =
       List.of(
-          getConcept("C01", "Cutaneous Melanoma", getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, SKIN)),
+          getConcept(
+              "C01", "Cutaneous Melanoma", getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, SKIN, "Skin")),
           getConcept(
               "C02",
               "Lung Carcinoma",
-              getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, LUNG),
-              getRole(ASSOCIATED_SITE, ASSOCIATED_SITE_CODE, SKIN)),
+              getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, LUNG, "Lung"),
+              getRole(ASSOCIATED_SITE, ASSOCIATED_SITE_CODE, SKIN, "Skin")),
           getConcept(
               "C03",
               "Basal Cell Carcinoma of Skin",
-              getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, SKIN)),
+              getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, SKIN, "Skin")),
           getConcept("C04", "Melanoma"),
-          getConcept("C05", "Skin Ulcer", getRole(COMPLICATION_OF, COMPLICATION_OF_CODE, "C01")),
-          getConcept(SKIN, "Skin"),
+          getConcept(
+              "C07", "Lung Adenocarcinoma", getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, LUNG, "Lung")),
+          getConcept(
+              "C05",
+              "Skin Ulcer",
+              getRole(COMPLICATION_OF, COMPLICATION_OF_CODE, "C01", "Cutaneous Melanoma")),
+          getConcept(SKIN, "Skin", getRole(PART_OF, PART_OF_CODE, BODY_SURFACE, "Body Surface")),
           getConcept(LUNG, "Lung"),
           getConcept(LIVER, "Liver"));
 
   /**
-   * The concepts in {@link #NEXT_VERSION_INDEX_NAME}. Skin's code now names "Integument", and a
-   * melanoma points to it as its primary site.
+   * The concepts in {@link #NEXT_VERSION_INDEX_NAME}. Skin's code now names "Integument", and
+   * Cutaneous Melanoma's code C01 now names "Melanoma of Integument", whose primary site is
+   * Integument. "Integument Ulcer" is a complication of it, reusing Skin Ulcer's code C05.
    */
   private static final List<Concept> NEXT_VERSION_CONCEPTS =
       List.of(
           getConcept(SKIN, "Integument"),
           getConcept(
-              "C06", "Melanoma of Integument", getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, SKIN)));
+              "C01",
+              "Melanoma of Integument",
+              getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, SKIN, "Integument")),
+          getConcept(
+              "C05",
+              "Integument Ulcer",
+              getRole(COMPLICATION_OF, COMPLICATION_OF_CODE, "C01", "Melanoma of Integument")));
 
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
   @Autowired private OpensearchOperationsService operationsService;
@@ -196,26 +214,27 @@ public class HasRoleTest {
    */
   @Test
   public void testRoleTypeAndTargetMatchOnSameRoleEntry() {
-    final EvsQuery query = getHasRole(PRIMARY_SITE, SKIN);
+    final EvsQuery diseasesWithPrimarySiteSkin = getHasRole(PRIMARY_SITE, SKIN);
 
     assertEquals(
-        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"), fetchMatchingNames(query));
+        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
+        fetchMatchingNames(diseasesWithPrimarySiteSkin));
   }
 
   /** Nothing has a primary site of Liver. */
   @Test
   public void testUnmatchedTargetFindsNothing() {
-    final EvsQuery query = getHasRole(PRIMARY_SITE, LIVER);
+    final EvsQuery diseasesWithPrimarySiteLiver = getHasRole(PRIMARY_SITE, LIVER);
 
-    assertEquals(Set.of(), fetchMatchingNames(query));
+    assertEquals(Set.of(), fetchMatchingNames(diseasesWithPrimarySiteLiver));
   }
 
   /** The associated-site role reaches Skin only from "Lung Carcinoma". */
   @Test
   public void testOtherRoleTypeFindsItsOwnTargets() {
-    final EvsQuery query = getHasRole(ASSOCIATED_SITE, SKIN);
+    final EvsQuery diseasesWithAssociatedSiteSkin = getHasRole(ASSOCIATED_SITE, SKIN);
 
-    assertEquals(Set.of("Lung Carcinoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Lung Carcinoma"), fetchMatchingNames(diseasesWithAssociatedSiteSkin));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -225,11 +244,16 @@ public class HasRoleTest {
   /** Without a target, every concept with a primary site is found, whatever it points to. */
   @Test
   public void testRoleTypeWithoutTargetFindsAnyTarget() {
-    final EvsQuery query = new HasRole(terminologies, new RelationshipType(PRIMARY_SITE));
+    final EvsQuery diseasesWithAnyPrimarySite =
+        new HasRole(terminologies, new RelationshipType(new Exact(PRIMARY_SITE)));
 
     assertEquals(
-        Set.of("Cutaneous Melanoma", "Lung Carcinoma", "Basal Cell Carcinoma of Skin"),
-        fetchMatchingNames(query));
+        Set.of(
+            "Cutaneous Melanoma",
+            "Lung Carcinoma",
+            "Basal Cell Carcinoma of Skin",
+            "Lung Adenocarcinoma"),
+        fetchMatchingNames(diseasesWithAnyPrimarySite));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -237,46 +261,59 @@ public class HasRoleTest {
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * A target query can match several concepts, e.g. Skin and everything below it. Here the target
-   * is every code starting with {@link #SKIN_AND_LUNG_CODE_PREFIX}, which finds Skin and Lung, so
-   * every concept whose primary site is either one is found.
-   */
-  @Test
-  public void testTargetMatchingSeveralConceptsFindsAnyOfThem() {
-    final EvsQuery skinOrLung =
-        new FieldMatch(terminologies, CODE_FIELD, new StartsWith(SKIN_AND_LUNG_CODE_PREFIX));
-    final EvsQuery query =
-        new HasRole(
-            terminologies, new RelationshipType(PRIMARY_SITE), new RelationshipTarget(skinOrLung));
-
-    assertEquals(
-        Set.of("Cutaneous Melanoma", "Lung Carcinoma", "Basal Cell Carcinoma of Skin"),
-        fetchMatchingNames(query));
-  }
-
-  /**
-   * A target can have a role target of its own, to any depth. The inner target runs first: diseases
-   * whose primary site is Skin (Cutaneous Melanoma, Basal Cell Carcinoma of Skin). Then the outer:
-   * concepts that are a complication of one of them (Skin Ulcer).
+   * A target query can match several concepts, and a role pointing to any of them matches. The
+   * target query runs first: diseases whose primary site is Skin (Cutaneous Melanoma, Basal Cell
+   * Carcinoma of Skin). Then the outer query: concepts that are a complication of one of them (Skin
+   * Ulcer). A target query can have a query target of its own, to any depth.
    */
   @Test
   public void testTargetCanHaveItsOwnRoleTarget() {
-    final EvsQuery skinDiseases = getHasRole(PRIMARY_SITE, SKIN);
-    final EvsQuery query =
+    final EvsQuery diseasesWithPrimarySiteSkin = getHasRole(PRIMARY_SITE, SKIN);
+    final EvsQuery complicationsOfDiseasesWithPrimarySiteSkin =
         new HasRole(
             terminologies,
-            new RelationshipType(COMPLICATION_OF),
-            new RelationshipTarget(skinDiseases));
+            new RelationshipType(new Exact(COMPLICATION_OF)),
+            new RelationshipTarget(diseasesWithPrimarySiteSkin));
 
-    assertEquals(Set.of("Skin Ulcer"), fetchMatchingNames(query));
+    assertEquals(
+        Set.of("Skin Ulcer"), fetchMatchingNames(complicationsOfDiseasesWithPrimarySiteSkin));
   }
 
-  /** A target matching no concepts finds nothing, rather than matching any target. */
+  /**
+   * A target query matching no concepts finds nothing, rather than matching any target. Nothing has
+   * a primary site of Liver, so nothing is a complication of such a disease.
+   */
   @Test
   public void testTargetMatchingNothingFindsNothing() {
-    final EvsQuery query = getHasRole(PRIMARY_SITE, UNUSED_CODE);
+    final EvsQuery diseasesWithPrimarySiteLiver = getHasRole(PRIMARY_SITE, LIVER);
+    final EvsQuery complicationsOfDiseasesWithPrimarySiteLiver =
+        new HasRole(
+            terminologies,
+            new RelationshipType(new Exact(COMPLICATION_OF)),
+            new RelationshipTarget(diseasesWithPrimarySiteLiver));
 
-    assertEquals(Set.of(), fetchMatchingNames(query));
+    assertEquals(Set.of(), fetchMatchingNames(complicationsOfDiseasesWithPrimarySiteLiver));
+  }
+
+  /**
+   * A type matching several role types works with a query target too. The target query runs once
+   * and finds Skin, the only part of Body Surface. Then any role whose type contains "site",
+   * primary or associated, matches if that same role points to Skin. "Lung Carcinoma" matches
+   * through its associated site Skin. "Lung Adenocarcinoma" has a site, but only Lung, which isn't
+   * part of Body Surface, so it doesn't match.
+   */
+  @Test
+  public void testContainsTypeWithQueryTargetMatchesAnyRoleTypePointingToTarget() {
+    final EvsQuery partsOfBodySurface = getHasRole(PART_OF, BODY_SURFACE);
+    final EvsQuery diseasesWithAnySiteOnBodySurface =
+        new HasRole(
+            terminologies,
+            new RelationshipType(new CaseInsensitive(new Contains("site"))),
+            new RelationshipTarget(partsOfBodySurface));
+
+    assertEquals(
+        Set.of("Cutaneous Melanoma", "Lung Carcinoma", "Basal Cell Carcinoma of Skin"),
+        fetchMatchingNames(diseasesWithAnySiteOnBodySurface));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -284,33 +321,47 @@ public class HasRoleTest {
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Searching both versions, the target "concepts named Skin" is only found in the first version.
-   * The next version's melanoma points to the same code, but there that code names "Integument", so
-   * it doesn't match.
+   * Searching both versions, the target "diseases whose primary site is named Skin" is only found
+   * in the first version: Cutaneous Melanoma (C01). The next version's Integument Ulcer is a
+   * complication of the same code C01, but there that code names a melanoma of Integument, so it
+   * doesn't match.
    */
   @Test
   public void testTargetFoundInOneVersionOnlyMatchesRolesInThatVersion() {
-    final EvsQuery namedSkin =
-        new FieldMatch(bothVersions, "normName", new Exact(ConceptUtils.normalize("Skin")));
-    final EvsQuery query =
+    final EvsQuery diseasesOfSiteNamedSkin =
         new HasRole(
-            bothVersions, new RelationshipType(PRIMARY_SITE), new RelationshipTarget(namedSkin));
+            bothVersions,
+            new RelationshipType(new Exact(PRIMARY_SITE)),
+            new RelationshipTarget(new CaseInsensitive(new Exact("Skin"))));
+    final EvsQuery complicationsOfDiseasesOfSiteNamedSkin =
+        new HasRole(
+            bothVersions,
+            new RelationshipType(new Exact(COMPLICATION_OF)),
+            new RelationshipTarget(diseasesOfSiteNamedSkin));
 
-    assertEquals(
-        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"), fetchMatchingNames(query));
+    assertEquals(Set.of("Skin Ulcer"), fetchMatchingNames(complicationsOfDiseasesOfSiteNamedSkin));
   }
 
-  /** A target found in both versions matches roles in both. */
+  /**
+   * The target "diseases whose primary site is Skin's code" is found in both versions, C01 in each,
+   * so it matches the complication in both.
+   */
   @Test
   public void testTargetFoundInBothVersionsMatchesRolesInBoth() {
-    final EvsQuery skinCode = new FieldMatch(bothVersions, CODE_FIELD, new Exact(SKIN));
-    final EvsQuery query =
+    final EvsQuery diseasesOfSkinCode =
         new HasRole(
-            bothVersions, new RelationshipType(PRIMARY_SITE), new RelationshipTarget(skinCode));
+            bothVersions,
+            new RelationshipType(new Exact(PRIMARY_SITE)),
+            new RelationshipTarget(new Exact(SKIN)));
+    final EvsQuery complicationsOfDiseasesOfSkinCode =
+        new HasRole(
+            bothVersions,
+            new RelationshipType(new Exact(COMPLICATION_OF)),
+            new RelationshipTarget(diseasesOfSkinCode));
 
     assertEquals(
-        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin", "Melanoma of Integument"),
-        fetchMatchingNames(query));
+        Set.of("Skin Ulcer", "Integument Ulcer"),
+        fetchMatchingNames(complicationsOfDiseasesOfSkinCode));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -329,17 +380,19 @@ public class HasRoleTest {
   /** Part of a role name is not a role name. */
   @Test
   public void testPartialRoleNameFindsNothing() {
-    final EvsQuery query = new HasRole(terminologies, new RelationshipType("Anatomic_Site"));
+    final EvsQuery conceptsWithRoleNamedAnatomicSite =
+        new HasRole(terminologies, new RelationshipType(new Exact("Anatomic_Site")));
 
-    assertEquals(Set.of(), fetchMatchingNames(query));
+    assertEquals(Set.of(), fetchMatchingNames(conceptsWithRoleNamedAnatomicSite));
   }
 
   /** Role types are case sensitive by default. */
   @Test
   public void testRoleTypeIsCaseSensitive() {
-    final EvsQuery query = getHasRole(PRIMARY_SITE.toLowerCase(), SKIN);
+    final EvsQuery diseasesWithLowercasePrimarySiteSkin =
+        getHasRole(PRIMARY_SITE.toLowerCase(), SKIN);
 
-    assertEquals(Set.of(), fetchMatchingNames(query));
+    assertEquals(Set.of(), fetchMatchingNames(diseasesWithLowercasePrimarySiteSkin));
   }
 
   /** With its match wrapped in CaseInsensitive, the role type matches whatever its case. */
@@ -347,10 +400,11 @@ public class HasRoleTest {
   public void testCaseInsensitiveRoleTypeMatchesAnyCase() {
     final RelationshipType roleType =
         new RelationshipType(new CaseInsensitive(new Exact(PRIMARY_SITE.toLowerCase())));
-    final EvsQuery query = getHasRole(roleType, SKIN);
+    final EvsQuery diseasesWithAnyCasePrimarySiteSkin = getHasRole(roleType, SKIN);
 
     assertEquals(
-        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"), fetchMatchingNames(query));
+        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
+        fetchMatchingNames(diseasesWithAnyCasePrimarySiteSkin));
   }
 
   /** CaseInsensitive also works on a role code. */
@@ -358,10 +412,11 @@ public class HasRoleTest {
   public void testCaseInsensitiveRoleCode() {
     final RelationshipType roleType =
         new RelationshipType(new CaseInsensitive(new Exact(PRIMARY_SITE_CODE.toLowerCase())));
-    final EvsQuery query = getHasRole(roleType, SKIN);
+    final EvsQuery diseasesWithAnyCasePrimarySiteCodeSkin = getHasRole(roleType, SKIN);
 
     assertEquals(
-        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"), fetchMatchingNames(query));
+        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
+        fetchMatchingNames(diseasesWithAnyCasePrimarySiteCodeSkin));
   }
 
   /**
@@ -372,11 +427,90 @@ public class HasRoleTest {
   @Test
   public void testRoleTypeMatchedByContains() {
     final RelationshipType roleType = new RelationshipType(new Contains("Anatomic_Site"));
-    final EvsQuery query = getHasRole(roleType, SKIN);
+    final EvsQuery diseasesWithAnyAnatomicSiteSkin = getHasRole(roleType, SKIN);
 
     assertEquals(
         Set.of("Cutaneous Melanoma", "Lung Carcinoma", "Basal Cell Carcinoma of Skin"),
-        fetchMatchingNames(query));
+        fetchMatchingNames(diseasesWithAnyAnatomicSiteSkin));
+  }
+
+  /**
+   * A target given as a match is compared against the role's target name, with no search for the
+   * target first. "skinnn" is two edits from Skin. "Lung Carcinoma" points to Skin only through its
+   * associated site, so it doesn't match a primary site.
+   */
+  @Test
+  public void testTargetMatchedByFuzzyName() {
+    final RelationshipType roleType = new RelationshipType(new Exact(PRIMARY_SITE));
+    final EvsQuery diseasesWithPrimarySiteNamedLikeSkinnn =
+        new HasRole(terminologies, roleType, new RelationshipTarget(new Fuzzy("skinnn")));
+
+    assertEquals(
+        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
+        fetchMatchingNames(diseasesWithPrimarySiteNamedLikeSkinnn));
+  }
+
+  /** A target given as a match is also compared against the role's target code. */
+  @Test
+  public void testTargetMatchedByCode() {
+    final RelationshipType roleType = new RelationshipType(new Exact(PRIMARY_SITE));
+    final EvsQuery diseasesWithPrimarySiteCodeSkin =
+        new HasRole(terminologies, roleType, new RelationshipTarget(new Exact(SKIN)));
+
+    assertEquals(
+        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
+        fetchMatchingNames(diseasesWithPrimarySiteCodeSkin));
+  }
+
+  /**
+   * A target match can match several targets. Every code starting with {@link
+   * #SKIN_AND_LUNG_CODE_PREFIX} is Skin's or Lung's, so every concept whose primary site is either
+   * one is found.
+   */
+  @Test
+  public void testTargetMatchedByCodePrefixFindsAnyOfThem() {
+    final RelationshipType roleType = new RelationshipType(new Exact(PRIMARY_SITE));
+    final EvsQuery diseasesWithPrimarySiteSkinOrLung =
+        new HasRole(
+            terminologies,
+            roleType,
+            new RelationshipTarget(new StartsWith(SKIN_AND_LUNG_CODE_PREFIX)));
+
+    assertEquals(
+        Set.of(
+            "Cutaneous Melanoma",
+            "Lung Carcinoma",
+            "Basal Cell Carcinoma of Skin",
+            "Lung Adenocarcinoma"),
+        fetchMatchingNames(diseasesWithPrimarySiteSkinOrLung));
+  }
+
+  /**
+   * The type and the target can each be matched in any fashion: any role with "site" in its name,
+   * whatever the case, pointing to a target with "skin" in its name. Both must hold on the same
+   * role, so "Lung Carcinoma" matches through its associated site Skin, not its primary site Lung.
+   */
+  @Test
+  public void testTypeAndTargetMatchedByCaseInsensitiveContains() {
+    final EvsQuery conceptsWithSiteRoleTargetingSkin =
+        new HasRole(
+            terminologies,
+            new RelationshipType(new CaseInsensitive(new Contains("site"))),
+            new RelationshipTarget(new CaseInsensitive(new Contains("skin"))));
+
+    assertEquals(
+        Set.of("Cutaneous Melanoma", "Lung Carcinoma", "Basal Cell Carcinoma of Skin"),
+        fetchMatchingNames(conceptsWithSiteRoleTargetingSkin));
+  }
+
+  /** A target given as a match that matches neither a target name nor a code finds nothing. */
+  @Test
+  public void testUnmatchedTargetNameOrCodeFindsNothing() {
+    final RelationshipType roleType = new RelationshipType(new Exact(PRIMARY_SITE));
+    final EvsQuery diseasesWithPrimarySiteNamedExactlyLiver =
+        new HasRole(terminologies, roleType, new RelationshipTarget(new Exact("Liver")));
+
+    assertEquals(Set.of(), fetchMatchingNames(diseasesWithPrimarySiteNamedExactlyLiver));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -384,55 +518,53 @@ public class HasRoleTest {
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Primary site Skin, and a name starting with "cutaneous". Combined with a plain bool query until
-   * the And node exists.
+   * Primary site Lung, and associated site Skin. Unlike lesson 1, the two conditions are on
+   * different roles of the same concept. Combined with a plain bool query until the And node
+   * exists.
    */
   @Test
-  public void testCombinesWithFieldMatch() {
-    final EvsQuery hasSkinSite = getHasRole(PRIMARY_SITE, SKIN);
-    final EvsQuery cutaneous =
-        new FieldMatch(
-            terminologies, "normName", new StartsWith(ConceptUtils.normalize("Cutaneous")));
-    final QueryBuilder query =
+  public void testCombinesWithAnotherHasRole() {
+    final EvsQuery hasLungPrimarySite = getHasRole(PRIMARY_SITE, LUNG);
+    final EvsQuery hasSkinAssociatedSite = getHasRole(ASSOCIATED_SITE, SKIN);
+    final QueryBuilder lungDiseasesWithSkinAssociatedSite =
         QueryBuilders.boolQuery()
-            .must(hasSkinSite.fetchOpenSearchQuery(operations))
-            .must(cutaneous.fetchOpenSearchQuery(operations));
+            .must(hasLungPrimarySite.fetchOpenSearchQuery(operations))
+            .must(hasSkinAssociatedSite.fetchOpenSearchQuery(operations));
 
-    assertEquals(Set.of("Cutaneous Melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Lung Carcinoma"), fetchMatchingNames(lungDiseasesWithSkinAssociatedSite));
   }
 
   /** A role type and a target are required. */
   @Test
   public void testRejectsMissingValues() {
-    final String missingNameOrCode = null;
+    assertThrows(NullPointerException.class, () -> new RelationshipType(null));
+    final EvsQuery missingQuery = null;
     final ValueMatch missingMatch = null;
-    assertThrows(NullPointerException.class, () -> new RelationshipType(missingNameOrCode));
-    assertThrows(NullPointerException.class, () -> new RelationshipType(missingMatch));
-    assertThrows(NullPointerException.class, () -> new RelationshipTarget(null));
+    assertThrows(NullPointerException.class, () -> new RelationshipTarget(missingQuery));
+    assertThrows(NullPointerException.class, () -> new RelationshipTarget(missingMatch));
     assertThrows(NullPointerException.class, () -> new HasRole(terminologies, null));
   }
 
   /**
-   * Builds a {@link HasRole} whose target is one concept, given by code.
+   * Builds a {@link HasRole} whose target is one concept, given by its exact code.
    *
    * @param roleNameOrCode the role's exact name or code
    * @param targetCode the code of the concept the role must point to
    * @return the query
    */
   private HasRole getHasRole(final String roleNameOrCode, final String targetCode) {
-    return getHasRole(new RelationshipType(roleNameOrCode), targetCode);
+    return getHasRole(new RelationshipType(new Exact(roleNameOrCode)), targetCode);
   }
 
   /**
-   * Builds a {@link HasRole} whose target is one concept, given by code.
+   * Builds a {@link HasRole} whose target is one concept, given by its exact code.
    *
    * @param roleType the role's type
    * @param targetCode the code of the concept the role must point to
    * @return the query
    */
   private HasRole getHasRole(final RelationshipType roleType, final String targetCode) {
-    final EvsQuery targetQuery = new FieldMatch(terminologies, CODE_FIELD, new Exact(targetCode));
-    return new HasRole(terminologies, roleType, new RelationshipTarget(targetQuery));
+    return new HasRole(terminologies, roleType, new RelationshipTarget(new Exact(targetCode)));
   }
 
   /**
@@ -517,13 +649,16 @@ public class HasRoleTest {
    * @param type the role's name
    * @param code the role's code
    * @param relatedCode the code of the concept the role points to
+   * @param relatedName the name of the concept the role points to
    * @return the role
    */
-  private static Role getRole(final String type, final String code, final String relatedCode) {
+  private static Role getRole(
+      final String type, final String code, final String relatedCode, final String relatedName) {
     final Role role = new Role();
     role.setType(type);
     role.setCode(code);
     role.setRelatedCode(relatedCode);
+    role.setRelatedName(relatedName);
     return role;
   }
 }

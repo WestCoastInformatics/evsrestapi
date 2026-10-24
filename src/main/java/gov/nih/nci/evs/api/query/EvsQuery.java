@@ -151,7 +151,7 @@ public abstract class EvsQuery {
    * when(operations.search(any(), eq(Concept.class), any())).thenReturn(skinAndLungHits);
    *
    * final HasRole query =
-   *     new HasRole(terminologies, new RelationshipType("R101"), new RelationshipTarget(skinOrLungQuery));
+   *     new HasRole(terminologies, new RelationshipType(new Exact("R101")), new RelationshipTarget(skinOrLungQuery));
    * final QueryBuilder builder = query.fetchOpenSearchQuery(operations);
    * // builder now matches role entries whose target is Skin or Lung
    * }</pre>

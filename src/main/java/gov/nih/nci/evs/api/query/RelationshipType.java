@@ -1,8 +1,8 @@
 package gov.nih.nci.evs.api.query;
 
 import java.util.Objects;
+import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
 
 /**
  * The type of relationship a {@link HasRelationship} looks for, e.g.
@@ -13,52 +13,49 @@ import org.opensearch.index.query.QueryBuilders;
  */
 public final class RelationshipType {
 
-  /** An entry matches when either its type name or its type code matches. */
-  private static final int MINIMUM_MATCHING_FIELDS = 1;
+  /** The entry field holding the type's name, e.g. "Disease_Has_Primary_Anatomic_Site". */
+  private static final String TYPE_NAME_FIELD = "type";
+
+  /** The entry field holding the type's code, e.g. "R101". */
+  private static final String TYPE_CODE_FIELD = "code";
 
   /** How the entry's type name or code must match. */
-  private final ValueMatch match;
-
-  /**
-   * Instantiates a {@link RelationshipType} matching the type's exact name or code.
-   *
-   * @param nameOrCode the type's exact name or code
-   */
-  public RelationshipType(final String nameOrCode) {
-    this(new Exact(nameOrCode));
-  }
+  private final ValueMatch nameOrCodeMatch;
 
   /**
    * Instantiates a {@link RelationshipType}.
    *
-   * @param match how the entry's type name or code must match
+   * @param nameOrCodeMatch how the entry's type name or code must match
    */
-  public RelationshipType(final ValueMatch match) {
-    this.match = Objects.requireNonNull(match, "match");
+  public RelationshipType(final ValueMatch nameOrCodeMatch) {
+    this.nameOrCodeMatch = Objects.requireNonNull(nameOrCodeMatch, "nameOrCodeMatch");
   }
 
   /**
    * Returns how the entry's type name or code must match.
    *
-   * @return the match
+   * @return the name or code match
    */
-  public ValueMatch getMatch() {
-    return match;
+  public ValueMatch getNameOrCodeMatch() {
+    return nameOrCodeMatch;
   }
 
   /**
-   * Returns the query matching one relationship entry whose type name or code matches. Only
-   * meaningful inside the nested query on the entry's list built by {@link HasRelationship}, which
-   * says which fields hold the entry's type.
+   * Returns the query matching one entry of the relationship's list whose type name or code
+   * matches. Only meaningful inside the nested query on that list.
    *
-   * @param typeNameField the field holding the entry's type name, e.g. {@code roles.type}
-   * @param typeCodeField the field holding the entry's type code, e.g. {@code roles.code}
+   * @param relationship the node searching the list
+   * @param operations the OpenSearch operations, for building the field matches
    * @return the query builder
    */
-  QueryBuilder getQueryBuilder(final String typeNameField, final String typeCodeField) {
-    return QueryBuilders.boolQuery()
-        .should(match.getQueryBuilder(typeNameField))
-        .should(match.getQueryBuilder(typeCodeField))
-        .minimumShouldMatch(MINIMUM_MATCHING_FIELDS);
+  QueryBuilder getEntriesOfType(
+      final HasRelationship relationship, final OpenSearchOperations operations) {
+    final NameOrCodeMatch typeNameOrCodeMatch =
+        new NameOrCodeMatch(
+            relationship.getTerminologies(),
+            relationship.getEntryFieldName(TYPE_NAME_FIELD),
+            relationship.getEntryFieldName(TYPE_CODE_FIELD),
+            nameOrCodeMatch);
+    return typeNameOrCodeMatch.fetchOpenSearchQuery(operations);
   }
 }
