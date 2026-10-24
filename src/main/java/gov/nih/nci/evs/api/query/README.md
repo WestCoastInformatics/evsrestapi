@@ -74,6 +74,11 @@ classDiagram
         +RelationshipTarget(EvsQuery query)
     }
 
+    class HasProperty {
+        -ValueMatch typeNameOrCodeMatch
+        -ValueMatch valueMatch
+    }
+
     class CompositeQuery {
         <<planned>>
         #List~EvsQuery~ children
@@ -121,12 +126,14 @@ classDiagram
 
     EvsQuery <|-- FieldMatch
     EvsQuery <|-- HasRelationship
+    EvsQuery <|-- HasProperty
     EvsQuery <|-- CompositeQuery
     HasRelationship <|-- HasRole
     CompositeQuery o-- EvsQuery : children
     FieldMatch o-- ValueMatch : match
     HasRelationship o-- RelationshipType
     HasRelationship o-- RelationshipTarget
+    HasProperty o-- ValueMatch : type, value
     RelationshipType o-- ValueMatch : match
     RelationshipTarget o-- ValueMatch : or
     RelationshipTarget o-- EvsQuery : or
@@ -150,6 +157,7 @@ classDiagram
 | `SupportsIgnoringCase` | A `ValueMatch` that can also ignore case: `Exact`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper match. It runs the wrapped match ignoring case by calling `getCaseInsensitiveQueryBuilder(field)`. The wrapped match is not changed. |
 | `HasRelationship` | Matches concepts by a relationship's type and target (see [Queries about other concepts](#queries-about-other-concepts-joins)). |
+| `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions, and can't match qualifiers, which aren't indexed. |
 | `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a match. |
 
 ## Value matches
