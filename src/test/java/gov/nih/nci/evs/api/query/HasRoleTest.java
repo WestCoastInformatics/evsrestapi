@@ -20,7 +20,6 @@ import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
@@ -519,17 +518,14 @@ public class HasRoleTest {
 
   /**
    * Primary site Lung, and associated site Skin. Unlike lesson 1, the two conditions are on
-   * different roles of the same concept. Combined with a plain bool query until the And node
-   * exists.
+   * different roles of the same concept, combined with And.
    */
   @Test
   public void testCombinesWithAnotherHasRole() {
     final EvsQuery hasLungPrimarySite = getHasRole(PRIMARY_SITE, LUNG);
     final EvsQuery hasSkinAssociatedSite = getHasRole(ASSOCIATED_SITE, SKIN);
-    final QueryBuilder lungDiseasesWithSkinAssociatedSite =
-        QueryBuilders.boolQuery()
-            .must(hasLungPrimarySite.fetchOpenSearchQuery(operations))
-            .must(hasSkinAssociatedSite.fetchOpenSearchQuery(operations));
+    final EvsQuery lungDiseasesWithSkinAssociatedSite =
+        new And(terminologies, List.of(hasLungPrimarySite, hasSkinAssociatedSite));
 
     assertEquals(Set.of("Lung Carcinoma"), fetchMatchingNames(lungDiseasesWithSkinAssociatedSite));
   }
@@ -575,16 +571,6 @@ public class HasRoleTest {
    */
   private Set<String> fetchMatchingNames(final EvsQuery query) {
     return fetchMatchingNames(query.fetchOpenSearchQuery(operations), query.getIndexCoordinates());
-  }
-
-  /**
-   * Runs the OpenSearch query against the tutorial index.
-   *
-   * @param query the query to run
-   * @return the names of the matching concepts
-   */
-  private Set<String> fetchMatchingNames(final QueryBuilder query) {
-    return fetchMatchingNames(query, IndexCoordinates.of(INDEX_NAME));
   }
 
   /**

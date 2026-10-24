@@ -27,8 +27,8 @@ import org.opensearch.index.query.QueryBuilder;
  * </ul>
  *
  * <p><b>Exploratory.</b> Combinations other than "any of" (in all of several subsets, in one but
- * not another) use the concept-level logical nodes, or raw bool queries until those land: each
- * membership is its own association entry, so combining {@link InSubset}s per concept is correct.
+ * not another) combine {@link InSubset}s with {@link And} and {@link Not}: each membership is its
+ * own association entry, so combining per concept is correct.
  *
  * <p>Unlike the current search's {@code subset} parameter, this doesn't narrow a CDISC grouper
  * subset to members named "CDISC ...". That special case is business logic in {@code

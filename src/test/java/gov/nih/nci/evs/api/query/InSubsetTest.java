@@ -21,7 +21,6 @@ import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
@@ -208,33 +207,60 @@ public class InSubsetTest {
         Set.of("Melanoma", "Body Weight", "Nevus"), fetchMatchingNames(sdtmOrCellosaurusMembers));
   }
 
+  /** In any of several subsets, with Or: finds the same members as one InSubset with OneOf. */
+  @Test
+  public void testInAnyOfSubsetsWithOrMatchesOneOf() {
+    final EvsQuery sdtmOrCellosaurusMembers =
+        new Or(
+            terminologies,
+            List.of(new InSubset(terminologies, SDTM), new InSubset(terminologies, CELLOSAURUS)));
+
+    assertEquals(
+        Set.of("Melanoma", "Body Weight", "Nevus"), fetchMatchingNames(sdtmOrCellosaurusMembers));
+  }
+
   /**
-   * In every one of several subsets: an InSubset per subset, all required. Each membership is its
-   * own association, so combining per concept is correct here. Combined with a plain bool query
-   * until the And node exists.
+   * In every one of several subsets: an InSubset per subset, combined with And. Each membership is
+   * its own association, so combining per concept is correct here.
    */
   @Test
   public void testInAllOfSubsets() {
-    final QueryBuilder sdtmAndCellosaurusMembers =
-        QueryBuilders.boolQuery()
-            .must(new InSubset(terminologies, SDTM).fetchOpenSearchQuery(operations))
-            .must(new InSubset(terminologies, CELLOSAURUS).fetchOpenSearchQuery(operations));
+    final EvsQuery sdtmAndCellosaurusMembers =
+        new And(
+            terminologies,
+            List.of(new InSubset(terminologies, SDTM), new InSubset(terminologies, CELLOSAURUS)));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(sdtmAndCellosaurusMembers));
   }
 
-  /**
-   * In one subset but not another. Combined with a plain bool query until the And and Not nodes
-   * exist.
-   */
+  /** In one subset but not another: And with a Not. */
   @Test
   public void testInOneSubsetButNotAnother() {
-    final QueryBuilder sdtmMembersOutsideSend =
-        QueryBuilders.boolQuery()
-            .must(new InSubset(terminologies, SDTM).fetchOpenSearchQuery(operations))
-            .mustNot(new InSubset(terminologies, SEND).fetchOpenSearchQuery(operations));
+    final EvsQuery sdtmMembersOutsideSend =
+        new And(
+            terminologies,
+            List.of(
+                new InSubset(terminologies, SDTM),
+                new Not(terminologies, new InSubset(terminologies, SEND))));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(sdtmMembersOutsideSend));
+  }
+
+  /**
+   * Members of any CDISC subset except SEND. The subsets are picked by a hierarchy query, then one
+   * is excluded, all as nodes. Body Weight is in SDTM too, but also in SEND, so it's excluded.
+   */
+  @Test
+  public void testInSubsetTreeExceptOneSubset() {
+    final EvsQuery cdiscMembers =
+        new InSubset(
+            terminologies, new RelationshipTarget(new DescendantOrSelfOf(terminologies, CDISC)));
+    final EvsQuery cdiscMembersOutsideSend =
+        new And(
+            terminologies,
+            List.of(cdiscMembers, new Not(terminologies, new InSubset(terminologies, SEND))));
+
+    assertEquals(Set.of("Melanoma"), fetchMatchingNames(cdiscMembersOutsideSend));
   }
 
   // ---------------------------------------------------------------------------------------------

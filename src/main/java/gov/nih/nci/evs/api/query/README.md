@@ -7,7 +7,8 @@ dispatch), not by switching on a `type` string as `OpenSearchServiceImpl.getTerm
 There are two layers:
 
 - **Queries** (`EvsQuery`) say which concepts match. `FieldMatch` is the leaf: it matches one
-  concept field. Composite queries (planned) combine other queries with `and`, `or`, and so on.
+  concept field. The logical queries (`And`, `Or`, `Not`, and the `Boost` wrapper) combine
+  other queries.
   `FieldMatch` is for building nodes, not part of the API: it's package-private, and tests may
   only use it inside a class, method, or field marked `@DemonstratesFieldMatch` (enforced by
   `FieldMatchUsageSourceCodeTest`). Tests showing how to use the API, like `HasRoleTest`, must
@@ -25,15 +26,18 @@ Because every query has the same interface, any query can be nested inside any c
          (field "normName" (starts-with "blood"))))
 ```
 
-## Logical operators: use raw OpenSearch for now
+## Logical operators: exploratory on this branch
 
 The plan is to build queries almost entirely from logical operator nodes (`And`, `Or`, `Not`,
-`Boost`, and similar), with raw OpenSearch `QueryBuilder`s only inside the value matches. Those
-nodes exist on a separate branch but **aren't tested yet, so don't build on them.**
+`Boost`, and similar), with raw OpenSearch `QueryBuilder`s only inside the value matches. On the
+exploratory branch `eas/explore-filters` they're merged in from `eas/logical-operators` and can be
+used to combine nodes (see [Logical queries](#logical-queries)). They're still only tested by
+`LogicalQueryTest` and the lessons that use them, so on other branches don't build on them yet.
 
-Until they land, combine conditions inside your node's `fetchOpenSearchQuery` with raw OpenSearch
-(`QueryBuilders.boolQuery()`, `nestedQuery`, `constantScoreQuery`, ...). Expect that code to be
-refactored onto the logical nodes later. To keep that refactor mechanical:
+Inside a node's own `fetchOpenSearchQuery`, existing nodes still combine conditions with raw
+OpenSearch (`QueryBuilders.boolQuery()`, `nestedQuery`, `constantScoreQuery`, ...), e.g. a
+property's type and value on one nested entry, which the concept-level logical nodes can't
+express. Expect the rest to be refactored onto the logical nodes later. To keep that mechanical:
 
 - Build leaf conditions with `FieldMatch` and a value match (`Exact`, `StartsWith`, ...) and call
   its `fetchOpenSearchQuery`, rather than writing `termQuery`/`prefixQuery` by hand.
@@ -85,9 +89,18 @@ classDiagram
         -ValueMatch valueMatch
     }
 
-    class CompositeQuery {
-        <<planned>>
-        #List~EvsQuery~ children
+    class And {
+        -List~EvsQuery~ children
+    }
+    class Or {
+        -List~EvsQuery~ children
+    }
+    class Not {
+        -EvsQuery child
+    }
+    class Boost {
+        -EvsQuery child
+        -float score
     }
 
     class ValueMatch {
@@ -152,13 +165,19 @@ classDiagram
     class AncestorOf
     class AncestorOrSelfOf
 
-    EvsQuery <|-- CompositeQuery
+    EvsQuery <|-- And
+    EvsQuery <|-- Or
+    EvsQuery <|-- Not
+    EvsQuery <|-- Boost
     HasRelationship <|-- HasRole
     HasRelationship <|-- HasAssociation
     EvsQuery <|-- InSubset
     InSubset ..> HasAssociation : builds
     InSubset o-- RelationshipTarget : subsets
-    CompositeQuery o-- EvsQuery : children
+    And o-- EvsQuery : children
+    Or o-- EvsQuery : children
+    Not o-- EvsQuery : child
+    Boost o-- EvsQuery : child
     FieldMatch o-- ValueMatch : match
     HasRelationship o-- RelationshipType
     HasRelationship o-- RelationshipTarget
@@ -198,7 +217,6 @@ classDiagram
 | `InSubset` | Matches members of subsets. A subset is a concept, and membership is an association to it (NCIt's Concept_In_Subset, A8, read from the terminology's `subsetMember` metadata), so it builds a `HasAssociation`. The subsets are a `RelationshipTarget`: a code, `OneOf` codes for any of several, or a query such as `DescendantOrSelfOf` a subset root. All-of and but-not combine `InSubset`s per concept. Exploratory: drops the current search's CDISC grouper special case. |
 | `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions. |
 | `PropertyQualifier` | A qualifier a `HasProperty` property must have: a type name or code, optionally with a matching value, on one qualifier entry of that same property. `HasProperty` takes a list of them as an implicit AND. That's exploratory, not a settled design: see `HasProperty`'s Javadoc. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
-| `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a match. |
 | `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `FieldMatch` with `Exact`. Overlaps `OneOf`; kept as is from the hierarchy branch. Rejects more than 65,536 values, OpenSearch's default limit. |
 | `HierarchyQuery` | Base type for hierarchy nodes. Runs the inner (anchor) query first through `declareDependencies`, then, for each terminology version, matches the anchors' relatives only in that terminology's index. Handles `maxLevel` (shortest distance, at least 1) and `isSelfIncluded`. Subclasses implement `fetchRelativesQuery`. |
 | `DescendantOf` | Matches concepts strictly below the anchors, optionally within `maxLevel` levels. Any node can supply the anchors, including another hierarchy node. Terminologies with `ancestors`/`ancestorDepths` match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
@@ -206,6 +224,7 @@ classDiagram
 | `AncestorOf` | The upward counterpart: matches concepts strictly above the anchors, optionally within `maxLevel` levels. Reads the anchors' stored paths to root (`StoredPaths`), which every index has, so there's no fallback and nothing to remove after reindexing. Nests with `DescendantOf`, e.g. siblings-or-self is `new DescendantOf(t, new AncestorOf(t, x, 1), 1)`. |
 | `AncestorOrSelfOf` | `AncestorOf` that also matches the anchors themselves. |
 | `RawBoolQueries` | The raw `bool` combining helpers (`getAllOfQuery`, `getAnyOfQuery`, `getMatchNothingQuery`) used until the logical operator nodes land; each maps onto `And`, `Or`, or `Not`. |
+| `And`, `Or`, `Not`, `Boost` | Logical queries. They hold child `EvsQuery` nodes instead of a field and a match. See [Logical queries](#logical-queries). Exploratory on this branch: merged from `eas/logical-operators`, tested only by `LogicalQueryTest` and the subset lessons. |
 
 ## Value matches
 
@@ -250,6 +269,17 @@ an entry.
 final EvsQuery query = new FieldMatch(terminologies, "normName", new StartsWith("melan"));
 boolQuery.must(query.fetchOpenSearchQuery(operations));
 ```
+
+## Logical queries
+
+| Class | Matches when… | OpenSearch query |
+|---|---|---|
+| `And` | every child matches. No children matches everything. | `bool` with each child in `must` |
+| `Or` | at least one child matches. No children matches **nothing**, so an empty list of alternatives (e.g. a dependency that found no concepts) doesn't widen a search to everything. | `bool` with each child in `should`, `minimum_should_match: 1`; `must_not: match_all` when empty |
+| `Not` | the child doesn't match, including when the child's field is missing. Adds nothing to the score. | `bool` with `filter: match_all` and the child in `must_not` |
+| `Boost` | the child matches. Every match gets the same fixed score, however well it matched, so boosted alternatives inside an `Or` rank in tiers. | `constant_score` with `boost` |
+
+`LogicalQueryTest` runs each against a test index.
 
 ## Ignoring case
 
@@ -384,9 +414,9 @@ Regex("C12[0-9]+"))`, or a relationship's type.
 
 ### Adding a composite query
 
-> Don't add `And`, `Or`, `Not`, or similar yourself: they're coming from a separate branch (see
-> [Logical operators](#logical-operators-use-raw-opensearch-for-now)). This section describes how
-> composites are meant to work.
+> `And`, `Or`, `Not`, and `Boost` already exist on this branch (see
+> [Logical operators](#logical-operators-exploratory-on-this-branch)). This section describes how
+> composites work.
 
 Extend `EvsQuery` directly. A composite holds child nodes and combines their builders. It never
 needs to know which concrete classes its children are. For example, `And`:

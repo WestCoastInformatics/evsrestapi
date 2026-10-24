@@ -10,8 +10,9 @@ concepts (`declareDependencies`), and how to add a new node.
 ## Combining Conditions: Raw OpenSearch For Now
 
 - Queries will eventually be built almost entirely from logical operator nodes (`And`, `Or`, `Not`,
-  `Boost`). Those live on a separate branch and are not tested yet. Do not add them here and do not
-  depend on that branch.
+  `Boost`). On the exploratory branch `eas/explore-filters` they're merged in and may be used to
+  combine nodes, e.g. in tests. They're still only lightly tested: on other branches, don't add them
+  and don't depend on `eas/logical-operators`.
 - Until they land, combine conditions inside `fetchOpenSearchQuery` with raw OpenSearch
   (`QueryBuilders.boolQuery()`, `nestedQuery`, `constantScoreQuery`, ...). This code will be
   refactored onto the logical nodes later.
