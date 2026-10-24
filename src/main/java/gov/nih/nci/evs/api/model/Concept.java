@@ -207,10 +207,10 @@ public class Concept extends ConceptMinimal {
   private List<Qualifier> qualifiers;
 
   /**
-   * The associations. enabled = false will set the index = false, to avoid indexing the fields in
-   * this Concept model
+   * The associations. Nested so an association's type and target can be searched together (see
+   * HasAssociation).
    */
-  @Field(type = FieldType.Object, enabled = false)
+  @Field(type = FieldType.Nested)
   private List<Association> associations;
 
   /**
