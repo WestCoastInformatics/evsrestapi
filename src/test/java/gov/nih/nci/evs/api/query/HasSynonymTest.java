@@ -233,6 +233,40 @@ public class HasSynonymTest {
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithMalignantMelanomaPt));
   }
 
+  /**
+   * Name, source, and term type together: "MELANOMA, MALIGNANT" is a CDISC PT. Typed with different
+   * case and punctuation, it still finds that synonym.
+   */
+  @Test
+  public void testNameSourceAndTermTypeMatchOnSameSynonymEntry() {
+    final EvsQuery conceptsWithCdiscPtMelanomaMalignant =
+        new HasSynonym(
+            terminologies,
+            new Exact("Melanoma Malignant"),
+            new Exact(CDISC),
+            new Exact(PREFERRED_TERM));
+
+    assertEquals(Set.of("Melanoma"), fetchMatchingNames(conceptsWithCdiscPtMelanomaMalignant));
+  }
+
+  /** With no conditions, every concept with any synonym matches; "Skin" has none. */
+  @Test
+  public void testNoConditionsFindsEveryConceptWithSynonym() {
+    final EvsQuery conceptsWithAnySynonym = new HasSynonym(terminologies, null, null, null);
+
+    assertEquals(
+        Set.of("Melanoma", "Nevus", "Lung Carcinoma"), fetchMatchingNames(conceptsWithAnySynonym));
+  }
+
+  /** Unlike the name, the source is compared as given: "cdisc" isn't "CDISC". */
+  @Test
+  public void testSourceIsComparedAsGiven() {
+    final EvsQuery conceptsWithLowercaseCdiscSynonym =
+        new HasSynonym(terminologies, null, new Exact("cdisc"), null);
+
+    assertEquals(Set.of(), fetchMatchingNames(conceptsWithLowercaseCdiscSynonym));
+  }
+
   /** A name is required when it's the only condition. */
   @Test
   public void testRejectsMissingName() {
