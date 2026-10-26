@@ -1,5 +1,6 @@
 package gov.nih.nci.evs.api.query;
 
+import java.util.function.UnaryOperator;
 import org.opensearch.index.query.QueryBuilder;
 
 /**
@@ -19,4 +20,13 @@ public interface ValueMatch {
    * @return the query builder
    */
   QueryBuilder getQueryBuilder(String field);
+
+  /**
+   * Returns this match with each term it compares passed through the mapper, e.g. normalized the
+   * way a field's values were when they were indexed. The kind of match doesn't change.
+   *
+   * @param termMapper the function applied to each term
+   * @return the match with mapped terms
+   */
+  ValueMatch getWithTermsMapped(UnaryOperator<String> termMapper);
 }

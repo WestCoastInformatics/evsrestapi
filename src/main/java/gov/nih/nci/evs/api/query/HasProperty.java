@@ -17,7 +17,7 @@ import org.opensearch.index.query.QueryBuilders;
  *
  * <p>Only searches the concept's {@code properties}. Properties remodeled into their own lists,
  * such as synonyms (FULL_SYN, P90) and definitions (DEFINITION, P97), aren't there, so they can't
- * be found with this query.
+ * be found with this query. Use {@link HasSynonym} for synonyms.
  *
  * <p>The qualifier condition ({@link QualifierCondition}) must hold on that same property entry,
  * e.g. a GO_Annotation whose go-id is "GO:0007050" and whose go-evi is "TAS". Combine qualifiers

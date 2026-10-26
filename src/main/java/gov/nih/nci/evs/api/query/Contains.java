@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
@@ -21,6 +22,12 @@ public record Contains(String term) implements SupportsIgnoringCase {
    */
   public Contains {
     Objects.requireNonNull(term, "term");
+  }
+
+  /* see superclass */
+  @Override
+  public Contains getWithTermsMapped(final UnaryOperator<String> termMapper) {
+    return new Contains(termMapper.apply(term));
   }
 
   /* see superclass */

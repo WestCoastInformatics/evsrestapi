@@ -2,6 +2,8 @@ package gov.nih.nci.evs.api.query;
 
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
@@ -21,6 +23,12 @@ public record OneOf(Set<String> terms) implements ValueMatch {
    */
   public OneOf {
     terms = Set.copyOf(Objects.requireNonNull(terms, "terms"));
+  }
+
+  /* see superclass */
+  @Override
+  public OneOf getWithTermsMapped(final UnaryOperator<String> termMapper) {
+    return new OneOf(terms.stream().map(termMapper).collect(Collectors.toSet()));
   }
 
   /* see superclass */
