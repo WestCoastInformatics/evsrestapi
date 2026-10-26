@@ -77,9 +77,22 @@ classDiagram
     class HasProperty {
         -ValueMatch typeNameOrCodeMatch
         -ValueMatch valueMatch
-        -List~PropertyQualifier~ qualifiers
+        -QualifierCondition qualifierCondition
     }
 
+    class QualifierCondition {
+        <<interface>>
+        +getPropertiesMatching(List~Terminology~, String, OpenSearchOperations) QueryBuilder
+    }
+    class AllQualifiers {
+        -List~QualifierCondition~ conditions
+    }
+    class AnyQualifier {
+        -List~QualifierCondition~ conditions
+    }
+    class NoQualifier {
+        -QualifierCondition condition
+    }
     class PropertyQualifier {
         -ValueMatch typeNameOrCodeMatch
         -ValueMatch valueMatch
@@ -140,7 +153,14 @@ classDiagram
     HasRelationship o-- RelationshipType
     HasRelationship o-- RelationshipTarget
     HasProperty o-- ValueMatch : type, value
-    HasProperty o-- PropertyQualifier : qualifiers
+    HasProperty o-- QualifierCondition : qualifiers
+    QualifierCondition <|.. PropertyQualifier
+    QualifierCondition <|.. AllQualifiers
+    QualifierCondition <|.. AnyQualifier
+    QualifierCondition <|.. NoQualifier
+    AllQualifiers o-- QualifierCondition : conditions
+    AnyQualifier o-- QualifierCondition : conditions
+    NoQualifier o-- QualifierCondition : condition
     PropertyQualifier o-- ValueMatch : type, value
     RelationshipType o-- ValueMatch : match
     RelationshipTarget o-- ValueMatch : or
@@ -166,7 +186,8 @@ classDiagram
 | `CaseInsensitive` | A wrapper match. It runs the wrapped match ignoring case by calling `getCaseInsensitiveQueryBuilder(field)`. The wrapped match is not changed. |
 | `HasRelationship` | Matches concepts by a relationship's type and target (see [Queries about other concepts](#queries-about-other-concepts-joins)). |
 | `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions. |
-| `PropertyQualifier` | A qualifier a `HasProperty` property must have: a type name or code, optionally with a matching value, on one qualifier entry of that same property. `HasProperty` takes a list of them as an implicit AND. That's exploratory, not a settled design: see `HasProperty`'s Javadoc. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
+| `QualifierCondition` | A condition on one property entry's qualifiers, checked inside `HasProperty`'s nested query on that entry. `AllQualifiers`, `AnyQualifier`, and `NoQualifier` combine conditions (`bool` `must`, `should`, `must_not`). They're separate from the concept-level `And`/`Or`/`Not`, which combine sets of concepts and so can't keep qualifiers on one entry; the Javadoc explains the choice and the generic alternative. |
+| `PropertyQualifier` | The leaf `QualifierCondition`: a qualifier a `HasProperty` property must have, a type name or code, optionally with a matching value, on one qualifier entry of that same property. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
 | `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a match. |
 
 ## Value matches
