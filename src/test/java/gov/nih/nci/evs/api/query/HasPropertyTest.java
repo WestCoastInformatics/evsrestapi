@@ -9,6 +9,7 @@ import gov.nih.nci.evs.api.model.Qualifier;
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.service.OpensearchOperationsService;
 import gov.nih.nci.evs.api.util.ConceptUtils;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -121,11 +122,25 @@ public class HasPropertyTest {
   /** Evidence code: inferred from direct assay. */
   private static final String DIRECT_ASSAY = "IDA";
 
+  /** Evidence code: inferred from mutant phenotype. */
+  private static final String MUTANT_PHENOTYPE = "IMP";
+
+  /** Qualifier holding where a GO annotation came from. */
+  private static final String GO_SOURCE = "go-source";
+
+  /** Code of {@link #GO_SOURCE}. */
+  private static final String GO_SOURCE_CODE = "P390";
+
+  /** A GO annotation source: the Cancer Genome Anatomy Project. */
+  private static final String CGAP = "CGAP";
+
   /**
    * The concepts in the index. "Nevus" is Benign, but has a different property whose value is
    * "Malignant", which lesson 1 relies on. "Skin" has no properties. The two genes have GO
    * annotations: "INHBA Gene" has cell cycle arrest only from a direct assay, and an author
-   * statement only on its other annotation, which lesson 5 relies on.
+   * statement only on its other annotation, which lesson 5 relies on. "TP53 Gene" also has cell
+   * cycle arrest from a mutant phenotype, sourced from CGAP, which lesson 6's combination relies
+   * on.
    */
   private static final List<Concept> INDEXED_CONCEPTS =
       List.of(
@@ -157,7 +172,8 @@ public class HasPropertyTest {
               "C06",
               "TP53 Gene",
               getGoAnnotation(
-                  CELL_CYCLE_ARREST, CELL_CYCLE_ARREST_GO_ID, TRACEABLE_AUTHOR_STATEMENT)));
+                  CELL_CYCLE_ARREST, CELL_CYCLE_ARREST_GO_ID, TRACEABLE_AUTHOR_STATEMENT),
+              getGoAnnotation(CELL_CYCLE_ARREST, CELL_CYCLE_ARREST_GO_ID, MUTANT_PHENOTYPE, CGAP)));
 
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
   @Autowired private OpensearchOperationsService operationsService;
@@ -299,16 +315,15 @@ public class HasPropertyTest {
             terminologies,
             new Exact(GO_ANNOTATION),
             new Exact(CELL_CYCLE_ARREST),
-            List.of(
-                new PropertyQualifier(
-                    new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT))));
+            new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT)));
 
     assertEquals(Set.of("TP53 Gene"), fetchMatchingNames(genesWithAuthorStatedCellCycleArrest));
   }
 
   /**
-   * Every qualifier must be on the same property, each on any of its qualifier entries. Both genes
-   * have cell cycle arrest's GO id, but only "TP53 Gene" has it with an author statement.
+   * AllQualifiers needs every condition on the same property, each on any of its qualifier entries.
+   * Both genes have cell cycle arrest's GO id, but only "TP53 Gene" has it with an author
+   * statement.
    */
   @Test
   public void testAllQualifiersMatchOnSamePropertyEntry() {
@@ -316,10 +331,11 @@ public class HasPropertyTest {
         new HasProperty(
             terminologies,
             new Exact(GO_ANNOTATION),
-            List.of(
-                new PropertyQualifier(new Exact(GO_ID), new Exact(CELL_CYCLE_ARREST_GO_ID)),
-                new PropertyQualifier(
-                    new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT))));
+            new AllQualifiers(
+                List.of(
+                    new PropertyQualifier(new Exact(GO_ID), new Exact(CELL_CYCLE_ARREST_GO_ID)),
+                    new PropertyQualifier(
+                        new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT)))));
 
     assertEquals(Set.of("TP53 Gene"), fetchMatchingNames(genesWithAuthorStatedCellCycleArrestId));
   }
@@ -331,9 +347,7 @@ public class HasPropertyTest {
         new HasProperty(
             terminologies,
             new Exact(GO_ANNOTATION),
-            List.of(
-                new PropertyQualifier(
-                    new Exact(GO_ID), new Exact(ACTIVIN_INHIBITOR_ACTIVITY_GO_ID))));
+            new PropertyQualifier(new Exact(GO_ID), new Exact(ACTIVIN_INHIBITOR_ACTIVITY_GO_ID)));
 
     assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithActivinInhibitorId));
   }
@@ -343,9 +357,7 @@ public class HasPropertyTest {
   public void testQualifierTypeWithoutValueFindsAnyValue() {
     final EvsQuery genesWithAnyEvidence =
         new HasProperty(
-            terminologies,
-            new Exact(GO_ANNOTATION),
-            List.of(new PropertyQualifier(new Exact(GO_EVIDENCE))));
+            terminologies, new Exact(GO_ANNOTATION), new PropertyQualifier(new Exact(GO_EVIDENCE)));
 
     assertEquals(Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithAnyEvidence));
   }
@@ -360,8 +372,7 @@ public class HasPropertyTest {
         new HasProperty(
             terminologies,
             new Exact(GO_ANNOTATION),
-            List.of(
-                new PropertyQualifier(new Exact(GO_ID), new Exact(TRACEABLE_AUTHOR_STATEMENT))));
+            new PropertyQualifier(new Exact(GO_ID), new Exact(TRACEABLE_AUTHOR_STATEMENT)));
 
     assertEquals(Set.of(), fetchMatchingNames(genesWithGoIdTas));
   }
@@ -373,22 +384,262 @@ public class HasPropertyTest {
         new HasProperty(
             terminologies,
             new Exact(GO_ANNOTATION),
-            List.of(new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY))));
+            new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY)));
     final EvsQuery byCode =
         new HasProperty(
             terminologies,
             new Exact(GO_ANNOTATION_CODE),
-            List.of(new PropertyQualifier(new Exact(GO_EVIDENCE_CODE), new Exact(DIRECT_ASSAY))));
+            new PropertyQualifier(new Exact(GO_EVIDENCE_CODE), new Exact(DIRECT_ASSAY)));
 
     assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(byName));
     assertEquals(fetchMatchingNames(byName), fetchMatchingNames(byCode));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Lesson 6: qualifier conditions combine with their own logical operators, on one property.
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * AnyQualifier needs one of its conditions on the property. Both genes have cell cycle arrest,
+   * one from an author statement and one from a direct assay.
+   */
+  @Test
+  public void testAnyQualifierMatchesEitherConditionOnSamePropertyEntry() {
+    final EvsQuery genesWithCellCycleArrestFromAuthorOrAssay =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new Exact(CELL_CYCLE_ARREST),
+            new AnyQualifier(
+                List.of(
+                    new PropertyQualifier(
+                        new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT)),
+                    new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY)))));
+
+    assertEquals(
+        Set.of("INHBA Gene", "TP53 Gene"),
+        fetchMatchingNames(genesWithCellCycleArrestFromAuthorOrAssay));
+  }
+
+  /**
+   * A realistic combination: cell cycle arrest annotations backed by experiment (direct assay or
+   * mutant phenotype), not sourced from CGAP. "INHBA Gene"'s direct assay annotation matches. "TP53
+   * Gene"'s mutant phenotype annotation is from CGAP, and its other cell cycle arrest annotation is
+   * an author statement, so no single annotation of it meets every part, even though the gene has
+   * each part on some annotation.
+   */
+  @Test
+  public void testNestedQualifierConditionsMatchOnSamePropertyEntry() {
+    final QualifierCondition isExperimental =
+        new AnyQualifier(
+            List.of(
+                new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY)),
+                new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(MUTANT_PHENOTYPE))));
+    final QualifierCondition isFromCgap =
+        new PropertyQualifier(new Exact(GO_SOURCE), new Exact(CGAP));
+    final EvsQuery genesWithExperimentalNonCgapCellCycleArrest =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new AllQualifiers(
+                List.of(
+                    new PropertyQualifier(new Exact(GO_ID), new Exact(CELL_CYCLE_ARREST_GO_ID)),
+                    isExperimental,
+                    new NoQualifier(isFromCgap))));
+
+    assertEquals(
+        Set.of("INHBA Gene"), fetchMatchingNames(genesWithExperimentalNonCgapCellCycleArrest));
+  }
+
+  /** AnyQualifier with no alternatives matches nothing, rather than every property. */
+  @Test
+  public void testAnyQualifierWithoutConditionsMatchesNothing() {
+    final EvsQuery genesWithNoAlternatives =
+        new HasProperty(terminologies, new Exact(GO_ANNOTATION), new AnyQualifier(List.of()));
+
+    assertEquals(Set.of(), fetchMatchingNames(genesWithNoAlternatives));
+  }
+
+  /**
+   * NoQualifier is about one property entry. "INHBA Gene" has a direct assay annotation, but its
+   * other annotation isn't from a direct assay, so it still matches. The concept-level Not of "has
+   * a direct assay annotation" would leave it out.
+   */
+  @Test
+  public void testNoQualifierMatchesAnyPropertyEntryWithoutQualifier() {
+    final EvsQuery genesWithNonAssayAnnotation =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new NoQualifier(
+                new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY))));
+
+    assertEquals(
+        Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithNonAssayAnnotation));
+  }
+
+  /** NoQualifier with a property value excludes that entry: only "TP53 Gene"'s isn't an assay. */
+  @Test
+  public void testNoQualifierExcludesMatchingPropertyEntry() {
+    final EvsQuery genesWithNonAssayCellCycleArrest =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new Exact(CELL_CYCLE_ARREST),
+            new NoQualifier(
+                new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY))));
+
+    assertEquals(Set.of("TP53 Gene"), fetchMatchingNames(genesWithNonAssayCellCycleArrest));
+  }
+
+  /**
+   * Nested conditions work alongside a property value: cell cycle arrest annotations backed by
+   * experiment and not from CGAP. Only "INHBA Gene"'s direct assay annotation qualifies.
+   */
+  @Test
+  public void testNestedQualifierConditionsWithPropertyValue() {
+    final EvsQuery genesWithExperimentalNonCgapCellCycleArrest =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new Exact(CELL_CYCLE_ARREST),
+            new AllQualifiers(
+                List.of(
+                    new AnyQualifier(
+                        List.of(
+                            new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY)),
+                            new PropertyQualifier(
+                                new Exact(GO_EVIDENCE), new Exact(MUTANT_PHENOTYPE)))),
+                    new NoQualifier(
+                        new PropertyQualifier(new Exact(GO_SOURCE), new Exact(CGAP))))));
+
+    assertEquals(
+        Set.of("INHBA Gene"), fetchMatchingNames(genesWithExperimentalNonCgapCellCycleArrest));
+  }
+
+  /** AllQualifiers with no conditions requires nothing, so every entry of the type matches. */
+  @Test
+  public void testAllQualifiersWithoutConditionsMatchesAnyPropertyEntry() {
+    final EvsQuery genesWithNoRequirements =
+        new HasProperty(terminologies, new Exact(GO_ANNOTATION), new AllQualifiers(List.of()));
+
+    assertEquals(Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithNoRequirements));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Lesson 7: properties without qualifiers, and other value matches on qualifiers.
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * A property with no qualifiers can't meet a qualifier condition: no Neoplastic_Status has any.
+   */
+  @Test
+  public void testPropertyWithoutQualifiersFailsQualifierCondition() {
+    final EvsQuery statusesWithEvidence =
+        new HasProperty(
+            terminologies,
+            new Exact(NEOPLASTIC_STATUS),
+            new PropertyQualifier(new Exact(GO_EVIDENCE)));
+
+    assertEquals(Set.of(), fetchMatchingNames(statusesWithEvidence));
+  }
+
+  /**
+   * A property with no qualifiers meets NoQualifier, since it lacks the excluded qualifier: every
+   * Malignant neoplastic status matches.
+   */
+  @Test
+  public void testNoQualifierMatchesPropertyWithoutQualifiers() {
+    final EvsQuery malignantStatusesWithoutEvidence =
+        new HasProperty(
+            terminologies,
+            new Exact(NEOPLASTIC_STATUS),
+            new Exact(MALIGNANT),
+            new NoQualifier(new PropertyQualifier(new Exact(GO_EVIDENCE))));
+
+    assertEquals(
+        Set.of("Melanoma", "Basal Cell Carcinoma"),
+        fetchMatchingNames(malignantStatusesWithoutEvidence));
+  }
+
+  /** A qualifier's value takes any value match, e.g. a prefix of the GO id. */
+  @Test
+  public void testQualifierValueMatchedByStartsWith() {
+    final EvsQuery genesWithGoIdStartingGo0017 =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new PropertyQualifier(new Exact(GO_ID), new StartsWith("GO:0017")));
+
+    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithGoIdStartingGo0017));
+  }
+
+  /** A qualifier's value can ignore case: "ida" finds the direct assay annotation. */
+  @Test
+  public void testCaseInsensitiveQualifierValueMatchesAnyCase() {
+    final EvsQuery genesWithDirectAssayInAnyCase =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new PropertyQualifier(new Exact(GO_EVIDENCE), new CaseInsensitive(new Exact("ida"))));
+
+    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithDirectAssayInAnyCase));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Lesson 8: qualifier conditions follow the usual laws of logic.
+  // ---------------------------------------------------------------------------------------------
+
+  /** Excluding the exclusion of a qualifier finds the same concepts as the qualifier itself. */
+  @Test
+  public void testDoubleNoQualifierMatchesLikeQualifier() {
+    final QualifierCondition isDirectAssay =
+        new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY));
+    final EvsQuery genesWithDirectAssay =
+        new HasProperty(terminologies, new Exact(GO_ANNOTATION), isDirectAssay);
+    final EvsQuery genesWithoutNonDirectAssay =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new NoQualifier(new NoQualifier(isDirectAssay)));
+
+    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithDirectAssay));
+    assertEquals(
+        fetchMatchingNames(genesWithDirectAssay), fetchMatchingNames(genesWithoutNonDirectAssay));
+  }
+
+  /**
+   * De Morgan: an annotation that is neither a direct assay nor a mutant phenotype is the same as
+   * one that isn't a direct assay and isn't a mutant phenotype. Both genes have an author statement
+   * annotation.
+   */
+  @Test
+  public void testNoAnyQualifierMatchesLikeAllNoQualifiers() {
+    final QualifierCondition isDirectAssay =
+        new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY));
+    final QualifierCondition isMutantPhenotype =
+        new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(MUTANT_PHENOTYPE));
+    final EvsQuery genesWithNeither =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new NoQualifier(new AnyQualifier(List.of(isDirectAssay, isMutantPhenotype))));
+    final EvsQuery genesWithNotEither =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new AllQualifiers(
+                List.of(new NoQualifier(isDirectAssay), new NoQualifier(isMutantPhenotype))));
+
+    assertEquals(Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithNeither));
+    assertEquals(fetchMatchingNames(genesWithNeither), fetchMatchingNames(genesWithNotEither));
   }
 
   /** A property type, and a value or qualifiers when given, are required. */
   @Test
   public void testRejectsMissingValues() {
     final ValueMatch missingMatch = null;
-    final List<PropertyQualifier> missingQualifiers = null;
+    final QualifierCondition missingQualifiers = null;
     assertThrows(NullPointerException.class, () -> new HasProperty(terminologies, missingMatch));
     assertThrows(
         NullPointerException.class,
@@ -399,6 +650,9 @@ public class HasPropertyTest {
     assertThrows(NullPointerException.class, () -> new PropertyQualifier(missingMatch));
     assertThrows(
         NullPointerException.class, () -> new PropertyQualifier(new Exact(GO_ID), missingMatch));
+    assertThrows(NullPointerException.class, () -> new AllQualifiers(null));
+    assertThrows(NullPointerException.class, () -> new AnyQualifier(null));
+    assertThrows(NullPointerException.class, () -> new NoQualifier(null));
   }
 
   /**
@@ -476,11 +730,30 @@ public class HasPropertyTest {
    */
   private static Property getGoAnnotation(
       final String goTerm, final String goId, final String evidenceCode) {
+    return getGoAnnotation(goTerm, goId, evidenceCode, null);
+  }
+
+  /**
+   * Builds a GO annotation property with its go-id and go-evi qualifiers, and a go-source qualifier
+   * when a source is given.
+   *
+   * @param goTerm the Gene Ontology term's name, the property's value
+   * @param goId the Gene Ontology term's id
+   * @param evidenceCode how the annotation is supported
+   * @param source where the annotation came from, or null for none
+   * @return the property
+   */
+  private static Property getGoAnnotation(
+      final String goTerm, final String goId, final String evidenceCode, final String source) {
     final Property property = getProperty(GO_ANNOTATION, GO_ANNOTATION_CODE, goTerm);
-    property.setQualifiers(
-        List.of(
-            new Qualifier(GO_ID, goId, GO_ID_CODE),
-            new Qualifier(GO_EVIDENCE, evidenceCode, GO_EVIDENCE_CODE)));
+    final List<Qualifier> qualifiers = new ArrayList<>();
+    qualifiers.add(new Qualifier(GO_ID, goId, GO_ID_CODE));
+    qualifiers.add(new Qualifier(GO_EVIDENCE, evidenceCode, GO_EVIDENCE_CODE));
+    final boolean hasSource = source != null;
+    if (hasSource) {
+      qualifiers.add(new Qualifier(GO_SOURCE, source, GO_SOURCE_CODE));
+    }
+    property.setQualifiers(qualifiers);
     return property;
   }
 }

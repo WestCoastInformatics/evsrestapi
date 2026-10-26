@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 import org.opensearch.index.query.MultiMatchQueryBuilder;
 import org.opensearch.index.query.Operator;
 import org.opensearch.index.query.QueryBuilder;
@@ -38,6 +39,12 @@ public record SearchAsYouType(String term) implements ValueMatch {
    */
   public SearchAsYouType {
     Objects.requireNonNull(term, "term");
+  }
+
+  /* see superclass */
+  @Override
+  public SearchAsYouType getWithTermsMapped(final UnaryOperator<String> termMapper) {
+    return new SearchAsYouType(termMapper.apply(term));
   }
 
   /* see superclass */

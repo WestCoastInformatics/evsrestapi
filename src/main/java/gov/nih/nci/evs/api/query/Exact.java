@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
@@ -18,6 +19,12 @@ public record Exact(String term) implements SupportsIgnoringCase {
    */
   public Exact {
     Objects.requireNonNull(term, "term");
+  }
+
+  /* see superclass */
+  @Override
+  public Exact getWithTermsMapped(final UnaryOperator<String> termMapper) {
+    return new Exact(termMapper.apply(term));
   }
 
   /* see superclass */

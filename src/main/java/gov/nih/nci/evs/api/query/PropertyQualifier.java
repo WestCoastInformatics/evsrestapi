@@ -10,15 +10,15 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
 /**
- * A qualifier a property must have for {@link HasProperty} to match, e.g. a GO_Annotation whose
- * go-evi (P389) is "TAS". The qualifier's type and value must match on the same qualifier entry, of
- * the same property entry.
+ * The leaf {@link QualifierCondition}: a qualifier a property must have for {@link HasProperty} to
+ * match, e.g. a GO_Annotation whose go-evi (P389) is "TAS". The qualifier's type and value must
+ * match on the same qualifier entry, of the same property entry.
  *
  * <p>Built into the property's query rather than run as a separate search: qualifiers are in the
  * concept's own document, and a separate search would only say which concepts have the qualifier,
  * not which property it's on.
  */
-public final class PropertyQualifier {
+public final class PropertyQualifier implements QualifierCondition {
 
   /** A qualifier entry's type name, e.g. "go-evi", under the qualifier list field. */
   private static final String TYPE_NAME_FIELD = "type";
@@ -69,7 +69,8 @@ public final class PropertyQualifier {
    * @param operations the OpenSearch operations
    * @return the query
    */
-  QueryBuilder getPropertiesWithAnyQualifierMatching(
+  @Override
+  public QueryBuilder getPropertiesMatching(
       final List<Terminology> terminologies,
       final String qualifierListField,
       final OpenSearchOperations operations) {

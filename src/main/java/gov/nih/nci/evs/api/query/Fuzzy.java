@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 import org.opensearch.common.unit.Fuzziness;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
@@ -32,6 +33,12 @@ public record Fuzzy(String term, Fuzziness fuzziness) implements ValueMatch {
    */
   public Fuzzy(final String term) {
     this(term, Fuzziness.AUTO);
+  }
+
+  /* see superclass */
+  @Override
+  public Fuzzy getWithTermsMapped(final UnaryOperator<String> termMapper) {
+    return new Fuzzy(termMapper.apply(term), fuzziness);
   }
 
   /* see superclass */

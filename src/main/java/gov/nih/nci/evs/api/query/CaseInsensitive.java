@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 import org.opensearch.index.query.QueryBuilder;
 
 /**
@@ -21,6 +22,12 @@ public record CaseInsensitive(SupportsIgnoringCase match) implements ValueMatch 
    */
   public CaseInsensitive {
     Objects.requireNonNull(match, "match");
+  }
+
+  /* see superclass */
+  @Override
+  public CaseInsensitive getWithTermsMapped(final UnaryOperator<String> termMapper) {
+    return new CaseInsensitive(match.getWithTermsMapped(termMapper));
   }
 
   /* see superclass */

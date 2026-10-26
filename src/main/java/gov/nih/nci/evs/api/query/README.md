@@ -81,9 +81,22 @@ classDiagram
     class HasProperty {
         -ValueMatch typeNameOrCodeMatch
         -ValueMatch valueMatch
-        -List~PropertyQualifier~ qualifiers
+        -QualifierCondition qualifierCondition
     }
 
+    class QualifierCondition {
+        <<interface>>
+        +getPropertiesMatching(List~Terminology~, String, OpenSearchOperations) QueryBuilder
+    }
+    class AllQualifiers {
+        -List~QualifierCondition~ conditions
+    }
+    class AnyQualifier {
+        -List~QualifierCondition~ conditions
+    }
+    class NoQualifier {
+        -QualifierCondition condition
+    }
     class PropertyQualifier {
         -ValueMatch typeNameOrCodeMatch
         -ValueMatch valueMatch
@@ -169,6 +182,7 @@ classDiagram
     EvsQuery <|-- Or
     EvsQuery <|-- Not
     EvsQuery <|-- Boost
+    EvsQuery <|-- HasSynonym
     HasRelationship <|-- HasRole
     HasRelationship <|-- HasAssociation
     EvsQuery <|-- InSubset
@@ -182,7 +196,14 @@ classDiagram
     HasRelationship o-- RelationshipType
     HasRelationship o-- RelationshipTarget
     HasProperty o-- ValueMatch : type, value
-    HasProperty o-- PropertyQualifier : qualifiers
+    HasProperty o-- QualifierCondition : qualifiers
+    QualifierCondition <|.. PropertyQualifier
+    QualifierCondition <|.. AllQualifiers
+    QualifierCondition <|.. AnyQualifier
+    QualifierCondition <|.. NoQualifier
+    AllQualifiers o-- QualifierCondition : conditions
+    AnyQualifier o-- QualifierCondition : conditions
+    NoQualifier o-- QualifierCondition : condition
     PropertyQualifier o-- ValueMatch : type, value
     RelationshipType o-- ValueMatch : match
     RelationshipTarget o-- ValueMatch : or
@@ -216,7 +237,9 @@ classDiagram
 | `HasRelationship` | Matches concepts by a relationship's type and target (see [Queries about other concepts](#queries-about-other-concepts-joins)). |
 | `InSubset` | Matches members of subsets. A subset is a concept, and membership is an association to it (NCIt's Concept_In_Subset, A8, read from the terminology's `subsetMember` metadata), so it builds a `HasAssociation`. The subsets are a `RelationshipTarget`: a code, `OneOf` codes for any of several, or a query such as `DescendantOrSelfOf` a subset root. All-of and but-not combine `InSubset`s per concept. Exploratory: drops the current search's CDISC grouper special case. |
 | `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions. |
-| `PropertyQualifier` | A qualifier a `HasProperty` property must have: a type name or code, optionally with a matching value, on one qualifier entry of that same property. `HasProperty` takes a list of them as an implicit AND. That's exploratory, not a settled design: see `HasProperty`'s Javadoc. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
+| `HasSynonym` | Matches concepts with a synonym whose name, and optionally source, term type, and sub-source, match on the same synonym entry. Searches the remodeled `synonyms` list. The name is compared to the synonym's `normName`, with the match's terms normalized the same way (`ConceptUtils.normalize`) through `ValueMatch.getWithTermsMapped`, so matching ignores case and punctuation. Combine nodes with the concept-level `And`/`Or`/`Not`; OR or NOT between fields of one synonym isn't supported yet. |
+| `QualifierCondition` | A condition on one property entry's qualifiers, checked inside `HasProperty`'s nested query on that entry. `AllQualifiers`, `AnyQualifier`, and `NoQualifier` combine conditions (`bool` `must`, `should`, `must_not`). They're separate from the concept-level `And`/`Or`/`Not`, which combine sets of concepts and so can't keep qualifiers on one entry; the Javadoc explains the choice and the generic alternative. |
+| `PropertyQualifier` | The leaf `QualifierCondition`: a qualifier a `HasProperty` property must have, a type name or code, optionally with a matching value, on one qualifier entry of that same property. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
 | `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `FieldMatch` with `Exact`. Overlaps `OneOf`; kept as is from the hierarchy branch. Rejects more than 65,536 values, OpenSearch's default limit. |
 | `HierarchyQuery` | Base type for hierarchy nodes. Runs the inner (anchor) query first through `declareDependencies`, then, for each terminology version, matches the anchors' relatives only in that terminology's index. Handles `maxLevel` (shortest distance, at least 1) and `isSelfIncluded`. Subclasses implement `fetchRelativesQuery`. |
 | `DescendantOf` | Matches concepts strictly below the anchors, optionally within `maxLevel` levels. Any node can supply the anchors, including another hierarchy node. Terminologies with `ancestors`/`ancestorDepths` match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
@@ -382,6 +405,7 @@ regular-expression match:
 package gov.nih.nci.evs.api.query;
 
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
@@ -406,8 +430,17 @@ public record Regex(String term) implements ValueMatch {
   public QueryBuilder getQueryBuilder(final String field) {
     return QueryBuilders.regexpQuery(field, term);
   }
+
+  /* see superclass */
+  @Override
+  public Regex getWithTermsMapped(final UnaryOperator<String> termMapper) {
+    return new Regex(termMapper.apply(term));
+  }
 }
 ```
+
+`getWithTermsMapped` lets a node compare against a field indexed in a transformed form: `HasSynonym`
+normalizes every match's terms the way synonym names were normalized when they were loaded.
 
 It then works everywhere a value match does: `new FieldMatch(terminologies, "code", new
 Regex("C12[0-9]+"))`, or a relationship's type.
