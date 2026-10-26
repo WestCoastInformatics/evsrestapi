@@ -492,6 +492,149 @@ public class HasPropertyTest {
     assertEquals(Set.of("TP53 Gene"), fetchMatchingNames(genesWithNonAssayCellCycleArrest));
   }
 
+  /**
+   * Nested conditions work alongside a property value: cell cycle arrest annotations backed by
+   * experiment and not from CGAP. Only "INHBA Gene"'s direct assay annotation qualifies.
+   */
+  @Test
+  public void testNestedQualifierConditionsWithPropertyValue() {
+    final EvsQuery genesWithExperimentalNonCgapCellCycleArrest =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new Exact(CELL_CYCLE_ARREST),
+            new AllQualifiers(
+                List.of(
+                    new AnyQualifier(
+                        List.of(
+                            new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY)),
+                            new PropertyQualifier(
+                                new Exact(GO_EVIDENCE), new Exact(MUTANT_PHENOTYPE)))),
+                    new NoQualifier(
+                        new PropertyQualifier(new Exact(GO_SOURCE), new Exact(CGAP))))));
+
+    assertEquals(
+        Set.of("INHBA Gene"), fetchMatchingNames(genesWithExperimentalNonCgapCellCycleArrest));
+  }
+
+  /** AllQualifiers with no conditions requires nothing, so every entry of the type matches. */
+  @Test
+  public void testAllQualifiersWithoutConditionsMatchesAnyPropertyEntry() {
+    final EvsQuery genesWithNoRequirements =
+        new HasProperty(terminologies, new Exact(GO_ANNOTATION), new AllQualifiers(List.of()));
+
+    assertEquals(Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithNoRequirements));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Lesson 7: properties without qualifiers, and other value matches on qualifiers.
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * A property with no qualifiers can't meet a qualifier condition: no Neoplastic_Status has any.
+   */
+  @Test
+  public void testPropertyWithoutQualifiersFailsQualifierCondition() {
+    final EvsQuery statusesWithEvidence =
+        new HasProperty(
+            terminologies,
+            new Exact(NEOPLASTIC_STATUS),
+            new PropertyQualifier(new Exact(GO_EVIDENCE)));
+
+    assertEquals(Set.of(), fetchMatchingNames(statusesWithEvidence));
+  }
+
+  /**
+   * A property with no qualifiers meets NoQualifier, since it lacks the excluded qualifier: every
+   * Malignant neoplastic status matches.
+   */
+  @Test
+  public void testNoQualifierMatchesPropertyWithoutQualifiers() {
+    final EvsQuery malignantStatusesWithoutEvidence =
+        new HasProperty(
+            terminologies,
+            new Exact(NEOPLASTIC_STATUS),
+            new Exact(MALIGNANT),
+            new NoQualifier(new PropertyQualifier(new Exact(GO_EVIDENCE))));
+
+    assertEquals(
+        Set.of("Melanoma", "Basal Cell Carcinoma"),
+        fetchMatchingNames(malignantStatusesWithoutEvidence));
+  }
+
+  /** A qualifier's value takes any value match, e.g. a prefix of the GO id. */
+  @Test
+  public void testQualifierValueMatchedByStartsWith() {
+    final EvsQuery genesWithGoIdStartingGo0017 =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new PropertyQualifier(new Exact(GO_ID), new StartsWith("GO:0017")));
+
+    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithGoIdStartingGo0017));
+  }
+
+  /** A qualifier's value can ignore case: "ida" finds the direct assay annotation. */
+  @Test
+  public void testCaseInsensitiveQualifierValueMatchesAnyCase() {
+    final EvsQuery genesWithDirectAssayInAnyCase =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new PropertyQualifier(new Exact(GO_EVIDENCE), new CaseInsensitive(new Exact("ida"))));
+
+    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithDirectAssayInAnyCase));
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Lesson 8: qualifier conditions follow the usual laws of logic.
+  // ---------------------------------------------------------------------------------------------
+
+  /** Excluding the exclusion of a qualifier finds the same concepts as the qualifier itself. */
+  @Test
+  public void testDoubleNoQualifierMatchesLikeQualifier() {
+    final QualifierCondition isDirectAssay =
+        new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY));
+    final EvsQuery genesWithDirectAssay =
+        new HasProperty(terminologies, new Exact(GO_ANNOTATION), isDirectAssay);
+    final EvsQuery genesWithoutNonDirectAssay =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new NoQualifier(new NoQualifier(isDirectAssay)));
+
+    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithDirectAssay));
+    assertEquals(
+        fetchMatchingNames(genesWithDirectAssay), fetchMatchingNames(genesWithoutNonDirectAssay));
+  }
+
+  /**
+   * De Morgan: an annotation that is neither a direct assay nor a mutant phenotype is the same as
+   * one that isn't a direct assay and isn't a mutant phenotype. Both genes have an author statement
+   * annotation.
+   */
+  @Test
+  public void testNoAnyQualifierMatchesLikeAllNoQualifiers() {
+    final QualifierCondition isDirectAssay =
+        new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY));
+    final QualifierCondition isMutantPhenotype =
+        new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(MUTANT_PHENOTYPE));
+    final EvsQuery genesWithNeither =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new NoQualifier(new AnyQualifier(List.of(isDirectAssay, isMutantPhenotype))));
+    final EvsQuery genesWithNotEither =
+        new HasProperty(
+            terminologies,
+            new Exact(GO_ANNOTATION),
+            new AllQualifiers(
+                List.of(new NoQualifier(isDirectAssay), new NoQualifier(isMutantPhenotype))));
+
+    assertEquals(Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithNeither));
+    assertEquals(fetchMatchingNames(genesWithNeither), fetchMatchingNames(genesWithNotEither));
+  }
+
   /** A property type, and a value or qualifiers when given, are required. */
   @Test
   public void testRejectsMissingValues() {
