@@ -169,7 +169,7 @@ public abstract class HierarchyQuery extends EvsQuery {
    * @return the query
    */
   static EvsQuery getCodeQuery(final List<Terminology> terminologies, final String code) {
-    return new Match(terminologies, ID_FIELD, Objects.requireNonNull(code, "code"));
+    return new FieldMatch(terminologies, ID_FIELD, new Exact(Objects.requireNonNull(code, "code")));
   }
 
   /**
@@ -218,7 +218,7 @@ public abstract class HierarchyQuery extends EvsQuery {
    */
   private QueryBuilder getInIndexQuery(
       final OpenSearchOperations operations, final Terminology terminology) {
-    return new Match(terminologies, INDEX_FIELD, terminology.getIndexName())
+    return new FieldMatch(terminologies, INDEX_FIELD, new Exact(terminology.getIndexName()))
         .fetchOpenSearchQuery(operations);
   }
 }

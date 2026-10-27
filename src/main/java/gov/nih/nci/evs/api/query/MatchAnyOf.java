@@ -14,7 +14,7 @@ import org.opensearch.index.query.QueryBuilders;
 /**
  * Matches documents whose field equals any of a set of values (case sensitive, whole value), e.g.
  * concepts whose {@code ancestors} include any of several codes. The many-value form of {@link
- * Match}: one OpenSearch {@code terms} query instead of a {@code should} clause per value, which
+ * Exact}: one OpenSearch {@code terms} query instead of a {@code should} clause per value, which
  * would hit OpenSearch's clause limit for large sets.
  *
  * <p>OpenSearch accepts at most {@value #MAX_VALUES} values in one {@code terms} query by default,

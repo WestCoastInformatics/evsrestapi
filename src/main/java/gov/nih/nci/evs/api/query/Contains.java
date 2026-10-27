@@ -1,13 +1,15 @@
 package gov.nih.nci.evs.api.query;
 
-import gov.nih.nci.evs.api.model.Terminology;
-import java.util.List;
-import org.opensearch.data.core.OpenSearchOperations;
+import java.util.Objects;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
-/** Matches values that include the term anywhere (case sensitive). */
-public class Contains extends AtomicQuery implements SupportsIgnoringCase {
+/**
+ * Matches values that include the term anywhere (case sensitive).
+ *
+ * @param term the substring the value must include
+ */
+public record Contains(String term) implements SupportsIgnoringCase {
 
   /** Wildcard that matches any sequence of characters. */
   private static final String ANY_CHARACTERS = "*";
@@ -15,23 +17,21 @@ public class Contains extends AtomicQuery implements SupportsIgnoringCase {
   /**
    * Instantiates a {@link Contains}.
    *
-   * @param terminologies the terminologies being searched
-   * @param field the field to match against
    * @param term the substring the value must include
    */
-  public Contains(final List<Terminology> terminologies, final String field, final String term) {
-    super(terminologies, field, term);
+  public Contains {
+    Objects.requireNonNull(term, "term");
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder getQueryBuilder(final String field) {
     return QueryBuilders.wildcardQuery(field, getPattern());
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchCaseInsensitiveOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder getCaseInsensitiveQueryBuilder(final String field) {
     return QueryBuilders.wildcardQuery(field, getPattern()).caseInsensitive(true);
   }
 

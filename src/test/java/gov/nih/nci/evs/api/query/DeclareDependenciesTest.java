@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -36,6 +37,7 @@ import org.springframework.data.elasticsearch.core.query.Query;
  * concepts. That makes it cheap to return more than one page, which would otherwise take tens of
  * thousands of indexed documents.
  */
+@DemonstratesFieldMatch
 public class DeclareDependenciesTest {
 
   /** Index name the mocked pages claim their hits came from. */
@@ -50,11 +52,20 @@ public class DeclareDependenciesTest {
   /** Hits on a page that isn't full, so it's the last page. */
   private static final int PARTIAL_PAGE_SIZE = 3;
 
+  /** The current version of the made-up terminology, for queries over two versions. */
+  private static final String CURRENT_VERSION = "25.12e";
+
+  /** The previous version of the made-up terminology, for queries over two versions. */
+  private static final String PREVIOUS_VERSION = "25.11d";
+
   /** The terminology searched. */
   private List<Terminology> terminologies;
 
-  /** The query whose matching concepts are fetched. The mock ignores what it matches. */
-  private EvsQuery query;
+  /**
+   * Concepts with Skin's code, whose matching concepts are fetched. The mock ignores what it
+   * matches.
+   */
+  private EvsQuery conceptsWithSkinCode;
 
   /** Mocked OpenSearch operations, stubbed per test. */
   private OpenSearchOperations operations;
@@ -62,10 +73,9 @@ public class DeclareDependenciesTest {
   /** Builds the query and a fresh mock. */
   @BeforeEach
   public void setUp() {
-    final Terminology terminology = new Terminology();
-    terminology.setIndexName(INDEX_NAME);
-    terminologies = List.of(terminology);
-    query = new Match(terminologies, "code", "C12470");
+    terminologies =
+        List.of(QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME));
+    conceptsWithSkinCode = new FieldMatch(terminologies, "code", new Exact("C12470"));
     operations = mock(OpenSearchOperations.class);
   }
 
@@ -98,14 +108,45 @@ public class DeclareDependenciesTest {
   }
 
   /**
-   * Each hit's code is its first sort value, and its terminology version is that of the index it
-   * came from. The hit's content isn't read: with no stored fields, it's empty.
+   * Each hit's code is its first sort value. The hit's content isn't read: with no stored fields,
+   * it's empty.
    */
   @Test
-  public void testKeysComeFromSortValuesAndIndex() {
-    final Terminology current = getTerminology("concept_ncit_2512e", "25.12e");
-    final Terminology previous = getTerminology("concept_ncit_2511d", "25.11d");
-    final EvsQuery twoVersionQuery = new Match(List.of(current, previous), "code", "C12470");
+  public void testCodeComesFromFirstSortValue() {
+    final ConceptKeys keys = fetchTwoVersionKeys();
+
+    final Set<String> codes =
+        keys.getCodesByTerminologyVersion().values().stream()
+            .flatMap(Set::stream)
+            .collect(Collectors.toSet());
+    assertEquals(Set.of("C1", "C2"), codes);
+  }
+
+  /** Each hit's terminology version is that of the index it came from. */
+  @Test
+  public void testTerminologyVersionComesFromHitIndex() {
+    final ConceptKeys keys = fetchTwoVersionKeys();
+
+    assertEquals(
+        Map.of(
+            new ConceptKeys.TerminologyVersion(TERMINOLOGY, CURRENT_VERSION), Set.of("C1", "C2"),
+            new ConceptKeys.TerminologyVersion(TERMINOLOGY, PREVIOUS_VERSION), Set.of("C1")),
+        keys.getCodesByTerminologyVersion());
+  }
+
+  /**
+   * Runs a dependency query over two versions of the terminology, whose search returns empty hits:
+   * C1 and C2 from the current version's index, and C1 from the previous version's.
+   *
+   * @return the keys the dependency found
+   */
+  private ConceptKeys fetchTwoVersionKeys() {
+    final Terminology current =
+        QueryTestTerminologies.getTerminology(TERMINOLOGY, CURRENT_VERSION, "concept_ncit_2512e");
+    final Terminology previous =
+        QueryTestTerminologies.getTerminology(TERMINOLOGY, PREVIOUS_VERSION, "concept_ncit_2511d");
+    final EvsQuery conceptsWithSkinCodeInTwoVersions =
+        new FieldMatch(List.of(current, previous), "code", new Exact("C12470"));
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(
             getPage(
@@ -114,13 +155,7 @@ public class DeclareDependenciesTest {
                     getEmptyHit("C1", previous.getIndexName()),
                     getEmptyHit("C2", current.getIndexName()))));
 
-    final ConceptKeys keys = EvsQuery.declareDependencies(operations, twoVersionQuery).get(0);
-
-    assertEquals(
-        Map.of(
-            new ConceptKeys.TerminologyVersion(TERMINOLOGY, "25.12e"), Set.of("C1", "C2"),
-            new ConceptKeys.TerminologyVersion(TERMINOLOGY, "25.11d"), Set.of("C1")),
-        keys.getCodesByTerminologyVersion());
+    return EvsQuery.declareDependencies(operations, conceptsWithSkinCodeInTwoVersions).get(0);
   }
 
   /**
@@ -162,12 +197,12 @@ public class DeclareDependenciesTest {
   }
 
   /**
-   * Runs {@link #query} as a dependency and counts the codes it found.
+   * Runs {@link #conceptsWithSkinCode} as a dependency and counts the codes it found.
    *
    * @return the number of codes found, across terminology versions
    */
   private int fetchDependencyCodeCount() {
-    final ConceptKeys keys = EvsQuery.declareDependencies(operations, query).get(0);
+    final ConceptKeys keys = EvsQuery.declareDependencies(operations, conceptsWithSkinCode).get(0);
     return keys.getCodesByTerminologyVersion().values().stream().mapToInt(Set::size).sum();
   }
 
@@ -271,20 +306,5 @@ public class DeclareDependenciesTest {
         null,
         List.of(),
         new Concept());
-  }
-
-  /**
-   * Builds a version of the made-up terminology with its own index.
-   *
-   * @param indexName the index name
-   * @param version the version
-   * @return the terminology
-   */
-  private static Terminology getTerminology(final String indexName, final String version) {
-    final Terminology terminology = new Terminology();
-    terminology.setTerminology(TERMINOLOGY);
-    terminology.setVersion(version);
-    terminology.setIndexName(indexName);
-    return terminology;
   }
 }

@@ -62,7 +62,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  * <p>F is the polyhierarchy case: it is 2 below R through B, but a depth-first walk reaches it
  * through A and D first, at 3. Depth limits must use the shortest distance.
  *
- * <p>Runs against OpenSearch on port 9201, like {@link AtomicQueryTest}.
+ * <p>Runs against OpenSearch on port 9201, like {@link ValueMatchTest}.
  */
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
@@ -241,13 +241,14 @@ public class HierarchyQueryTest {
   /** An inner query matching B and C: below either of them. */
   @Test
   public void testDescendantOfInnerQueryWithSeveralAnchorsMatchesBelowEach() {
-    assertBoth(t -> new DescendantOf(t, new Match(t, GROUP_FIELD, GROUP_TAG)), "E", "F", "G");
+    assertBoth(
+        t -> new DescendantOf(t, new MatchAnyOf(t, GROUP_FIELD, Set.of(GROUP_TAG))), "E", "F", "G");
   }
 
   /** An inner query matching nothing gives nothing. */
   @Test
   public void testDescendantOfInnerQueryWithNoMatchesMatchesNothing() {
-    assertBoth(t -> new DescendantOf(t, new Match(t, GROUP_FIELD, UNMATCHED_TAG)));
+    assertBoth(t -> new DescendantOf(t, new MatchAnyOf(t, GROUP_FIELD, Set.of(UNMATCHED_TAG))));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -376,7 +377,7 @@ public class HierarchyQueryTest {
   /** An inner query matching B and C: above either of them. */
   @Test
   public void testAncestorOfInnerQueryWithSeveralAnchorsMatchesAboveEach() {
-    assertBoth(t -> new AncestorOf(t, new Match(t, GROUP_FIELD, GROUP_TAG)), "A", "R");
+    assertBoth(t -> new AncestorOf(t, new MatchAnyOf(t, GROUP_FIELD, Set.of(GROUP_TAG))), "A", "R");
   }
 
   // ---------------------------------------------------------------------------------------------

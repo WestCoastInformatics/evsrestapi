@@ -4,29 +4,39 @@ This package models a concept search as a tree of small query objects. Each node
 an OpenSearch `QueryBuilder`. Behavior is chosen by which classes you put in the tree (dynamic
 dispatch), not by switching on a `type` string as `OpenSearchServiceImpl.getTermQuery` does.
 
-- **Atomic queries** are the leaves. Each one matches a single field using a single strategy.
-- **Composite queries** (planned) combine other queries with `and`, `or`, and so on.
+There are two layers:
 
-Because every node has the same interface, any query can be nested inside any composite:
+- **Queries** (`EvsQuery`) say which concepts match. `FieldMatch` is the leaf: it matches one
+  concept field. Composite queries (planned) combine other queries with `and`, `or`, and so on.
+  `FieldMatch` is for building nodes, not part of the API: it's package-private, and tests may
+  only use it inside a class, method, or field marked `@DemonstratesFieldMatch` (enforced by
+  `FieldMatchUsageSourceCodeTest`). Tutorials showing how to use the API must stick to the
+  public nodes.
+- **Value matches** (`ValueMatch`) say how one value is compared (exactly, by prefix, within a
+  few edits, ...) without naming a field. A `FieldMatch` applies one to a concept field. A node
+  that owns its own fields applies one to those, e.g. a relationship's type to the entry's type
+  name and code.
+
+Because every query has the same interface, any query can be nested inside any composite:
 
 ```lisp
-(and (fuzzy  "normName" "melanoma")
-     (or (match       "code"     "C3224")
-         (starts-with "normName" "blood")))
+(and (field "normName" (fuzzy "melanoma"))
+     (or (field "code"     (exact "C3224"))
+         (field "normName" (starts-with "blood"))))
 ```
 
 ## Logical operators: use raw OpenSearch for now
 
 The plan is to build queries almost entirely from logical operator nodes (`And`, `Or`, `Not`,
-`Boost`, and similar), with raw OpenSearch `QueryBuilder`s only inside the atomic leaves. Those
+`Boost`, and similar), with raw OpenSearch `QueryBuilder`s only inside the value matches. Those
 nodes exist on a separate branch but **aren't tested yet, so don't build on them.**
 
 Until they land, combine conditions inside your node's `fetchOpenSearchQuery` with raw OpenSearch
 (`QueryBuilders.boolQuery()`, `nestedQuery`, `constantScoreQuery`, ...). Expect that code to be
 refactored onto the logical nodes later. To keep that refactor mechanical:
 
-- Build leaf conditions with the atomic nodes (`Match`, `StartsWith`, ...) and call their
-  `fetchOpenSearchQuery`, rather than writing `termQuery`/`prefixQuery` by hand.
+- Build leaf conditions with `FieldMatch` and a value match (`Exact`, `StartsWith`, ...) and call
+  its `fetchOpenSearchQuery`, rather than writing `termQuery`/`prefixQuery` by hand.
 - Keep the raw combining code (`bool`, `must`, `should`, `must_not`, `constant_score`) in small,
   clearly named helpers, so each one maps onto a single logical node.
 
@@ -43,41 +53,50 @@ classDiagram
         +fetchOpenSearchQuery(OpenSearchOperations)* QueryBuilder
     }
 
-    class AtomicQuery {
-        <<abstract>>
-        #String field
-        #String term
-        +getField() String
-        +getTerm() String
-    }
-
-    class SupportsIgnoringCase {
-        <<interface>>
-        +fetchCaseInsensitiveOpenSearchQuery() QueryBuilder
-    }
-
-    class CaseInsensitive {
-        -SupportsIgnoringCase query
-        +fetchOpenSearchQuery(OpenSearchOperations) QueryBuilder
-    }
-
-    class Match {
-        +fetchOpenSearchQuery(OpenSearchOperations) TermQueryBuilder
-    }
-    class Contains {
-        +fetchOpenSearchQuery(OpenSearchOperations) WildcardQueryBuilder
-    }
-    class StartsWith {
-        +fetchOpenSearchQuery(OpenSearchOperations) PrefixQueryBuilder
-    }
-    class Fuzzy {
-        -Fuzziness fuzziness
-        +fetchOpenSearchQuery(OpenSearchOperations) FuzzyQueryBuilder
+    class FieldMatch {
+        -String field
+        -ValueMatch match
     }
 
     class CompositeQuery {
         <<planned>>
         #List~EvsQuery~ children
+    }
+
+    class ValueMatch {
+        <<interface>>
+        +getQueryBuilder(String field) QueryBuilder
+    }
+
+    class SupportsIgnoringCase {
+        <<interface>>
+        +getCaseInsensitiveQueryBuilder(String field) QueryBuilder
+    }
+
+    class CaseInsensitive {
+        <<record>>
+        SupportsIgnoringCase match
+    }
+    class Exact {
+        <<record>>
+        String term
+    }
+    class Contains {
+        <<record>>
+        String term
+    }
+    class StartsWith {
+        <<record>>
+        String term
+    }
+    class Fuzzy {
+        <<record>>
+        String term
+        Fuzziness fuzziness
+    }
+    class SearchAsYouType {
+        <<record>>
+        String term
     }
 
     class MatchAnyOf {
@@ -99,17 +118,18 @@ classDiagram
     class AncestorOf
     class AncestorOrSelfOf
 
-    EvsQuery <|-- AtomicQuery
+    EvsQuery <|-- FieldMatch
     EvsQuery <|-- CompositeQuery
-    EvsQuery <|-- CaseInsensitive
-    AtomicQuery <|-- Match
-    AtomicQuery <|-- Contains
-    AtomicQuery <|-- StartsWith
-    AtomicQuery <|-- Fuzzy
-    SupportsIgnoringCase <|.. Match
+    CompositeQuery o-- EvsQuery : children
+    FieldMatch o-- ValueMatch : match
+
+    ValueMatch <|-- SupportsIgnoringCase
+    ValueMatch <|.. CaseInsensitive
+    ValueMatch <|.. Fuzzy
+    ValueMatch <|.. SearchAsYouType
+    SupportsIgnoringCase <|.. Exact
     SupportsIgnoringCase <|.. Contains
     SupportsIgnoringCase <|.. StartsWith
-    CompositeQuery o-- EvsQuery : children
     CaseInsensitive o-- SupportsIgnoringCase : wraps
     EvsQuery <|-- MatchAnyOf
     EvsQuery <|-- HierarchyQuery
@@ -122,12 +142,13 @@ classDiagram
 
 | Class | Role |
 |---|---|
-| `EvsQuery` | Base type for every node. Its contract is `fetchOpenSearchQuery(operations)`. It also holds an unmodifiable copy of the terminologies being searched. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
-| `AtomicQuery` | Base type for leaves. It adds the `field` and `term` every leaf needs and rejects `null` for either. Subclasses only decide which OpenSearch query to build. |
-| `SupportsIgnoringCase` | Implemented by queries that can also run ignoring case: `Match`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
-| `CaseInsensitive` | A wrapper node. It runs the wrapped query ignoring case by calling `fetchCaseInsensitiveOpenSearchQuery()`. The wrapped query is not changed. |
-| `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a term. |
-| `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `Match`. Rejects more than 65,536 values, OpenSearch's default limit. |
+| `EvsQuery` | Base type for every query node. Its contract is `fetchOpenSearchQuery(operations)`. It also holds an unmodifiable copy of the terminologies being searched. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
+| `FieldMatch` | The leaf query. It pairs a concept field with a `ValueMatch` and rejects `null` for either. It only says which field; the match says how. |
+| `ValueMatch` | How one value is compared, with no field. Its contract is `getQueryBuilder(field)`. The implementations are records: plain values with no behavior beyond building their query. |
+| `SupportsIgnoringCase` | A `ValueMatch` that can also ignore case: `Exact`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
+| `CaseInsensitive` | A wrapper match. It runs the wrapped match ignoring case by calling `getCaseInsensitiveQueryBuilder(field)`. The wrapped match is not changed. |
+| `CompositeQuery` | Not implemented yet. A composite holds child `EvsQuery` nodes instead of a field and a match. |
+| `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `FieldMatch` with `Exact`. Rejects more than 65,536 values, OpenSearch's default limit. |
 | `HierarchyQuery` | Base type for hierarchy nodes. Runs the inner (anchor) query first through `declareDependencies`, then, for each terminology version, matches the anchors' relatives only in that terminology's index. Handles `maxLevel` (shortest distance, at least 1) and `isSelfIncluded`. Subclasses implement `fetchRelativesQuery`. |
 | `DescendantOf` | Matches concepts strictly below the anchors, optionally within `maxLevel` levels. Any node can supply the anchors, including another hierarchy node. Terminologies with `ancestors`/`ancestorDepths` match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
 | `DescendantOrSelfOf` | `DescendantOf` that also matches the anchors themselves (distance 0). |
@@ -135,15 +156,15 @@ classDiagram
 | `AncestorOrSelfOf` | `AncestorOf` that also matches the anchors themselves. |
 | `RawBoolQueries` | The raw `bool` combining helpers (`getAllOfQuery`, `getAnyOfQuery`, `getMatchNothingQuery`) used until the logical operator nodes land; each maps onto `And`, `Or`, or `Not`. |
 
-## Atomic queries
+## Value matches
 
-Apart from `SearchAsYouType`, the atomic queries are **case sensitive** and compare against the
+Apart from `SearchAsYouType`, the value matches are **case sensitive** and compare against the
 **whole indexed value**. To ignore case, wrap one in `CaseInsensitive` (see below).
 `SearchAsYouType` works on individual words and always ignores case.
 
-| Class | Matches when the value… | OpenSearch query |
+| Record | Matches when the value… | OpenSearch query |
 |---|---|---|
-| `Match` | equals the term exactly | `term` |
+| `Exact` | equals the term exactly | `term` |
 | `Contains` | includes the term anywhere | `wildcard` on `*term*`, with `*`, `?`, and `\` in the term escaped |
 | `StartsWith` | begins with the term | `prefix` |
 | `Fuzzy` | is within a small edit distance of the term (`Fuzziness.AUTO` by default, or pass one) | `fuzzy` |
@@ -152,7 +173,7 @@ Apart from `SearchAsYouType`, the atomic queries are **case sensitive** and comp
 ### Choosing a field
 
 Whole-value matching only works on `Keyword` fields. On an analyzed `Text` field such as `name`,
-OpenSearch stores lowercased tokens, so these queries match individual words instead of the full
+OpenSearch stores lowercased tokens, so these matches compare individual words instead of the full
 value.
 
 Today **no field stores concept or synonym names in their original case**:
@@ -161,33 +182,37 @@ Today **no field stores concept or synonym names in their original case**:
 - `normName` and `synonyms.normName` are `Keyword`, but `ConceptUtils.normalize` lowercases them
   and strips punctuation first.
 
-So against current indexes, `Match`, `Contains`, and the others are effectively case insensitive
+So against current indexes, `Exact`, `Contains`, and the others are effectively case insensitive
 on `normName`, and the term should be normalized the same way. True case-sensitive name matching
 needs a keyword subfield (e.g. `name.keyword` via `@MultiField`, as `Mapping.source` does) and a
 reindex.
 
 Fields under `synonyms`, `definitions`, and `properties` are nested. Queries on them must be
-wrapped in a `nestedQuery`, which is a natural job for a future `Nested` composite.
+wrapped in a `nestedQuery`, which is a natural job for a future `In` composite. It would own
+the list's field paths and take a `ValueMatch` for each part of an entry.
 
 ### Usage
 
 ```java
-final EvsQuery query = new StartsWith(terminologies, "normName", "melan");
+final EvsQuery query = new FieldMatch(terminologies, "normName", new StartsWith("melan"));
 boolQuery.must(query.fetchOpenSearchQuery(operations));
 ```
 
 ## Ignoring case
 
-`CaseInsensitive` wraps a query that implements `SupportsIgnoringCase`:
+`CaseInsensitive` wraps a value match that implements `SupportsIgnoringCase`:
 
 ```java
 // Finds "Melanoma", "melanoma", and "Malignant Melanoma"
 final EvsQuery query =
-    new CaseInsensitive(new Contains(terminologies, "name", "MELANOMA"));
+    new FieldMatch(terminologies, "name", new CaseInsensitive(new Contains("MELANOMA")));
 ```
 
-The constructor only accepts queries that implement `SupportsIgnoringCase`, so
-`new CaseInsensitive(new Fuzzy(...))` doesn't compile. To let a new query be wrapped, implement
+Case is a property of how a value is compared, so it goes on the match, not on a query. That
+puts it on exactly one comparison.
+
+The constructor only accepts matches that implement `SupportsIgnoringCase`, so
+`new CaseInsensitive(new Fuzzy(...))` doesn't compile. To let a new match be wrapped, implement
 `SupportsIgnoringCase` and return the same OpenSearch query with case ignored, usually by calling
 `.caseInsensitive(true)` on the builder.
 
@@ -221,40 +246,45 @@ fetch.
 
 ## Extending
 
-### Adding an atomic query
+### Adding a value match
 
-Extend `AtomicQuery`, pass the constructor arguments through, and build the OpenSearch query from
-`field` and `term`. For example, a regular-expression leaf:
+Add a record implementing `ValueMatch` (or `SupportsIgnoringCase`, if it can ignore case), and
+build the OpenSearch query from the field it's given and its own components. For example, a
+regular-expression match:
 
 ```java
 package gov.nih.nci.evs.api.query;
 
-import gov.nih.nci.evs.api.model.Terminology;
-import java.util.List;
+import java.util.Objects;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
-/** Matches values against a regular expression (case sensitive). */
-public class Regex extends AtomicQuery {
+/**
+ * Matches values against a regular expression (case sensitive).
+ *
+ * @param term the regular expression the value must match
+ */
+public record Regex(String term) implements ValueMatch {
 
   /**
    * Instantiates a {@link Regex}.
    *
-   * @param terminologies the terminologies being searched
-   * @param field the field to match against
    * @param term the regular expression the value must match
    */
-  public Regex(final List<Terminology> terminologies, final String field, final String term) {
-    super(terminologies, field, term);
+  public Regex {
+    Objects.requireNonNull(term, "term");
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder getQueryBuilder(final String field) {
     return QueryBuilders.regexpQuery(field, term);
   }
 }
 ```
+
+It then works everywhere a value match does: `new FieldMatch(terminologies, "code", new
+Regex("C12[0-9]+"))`.
 
 ### Adding a composite query
 
@@ -312,23 +342,24 @@ final EvsQuery query =
     new And(
         terminologies,
         List.of(
-            new Fuzzy(terminologies, "normName", "melanoma"),
+            new FieldMatch(terminologies, "normName", new Fuzzy("melanoma")),
             new Or(
                 terminologies,
                 List.of(
-                    new Match(terminologies, "code", "C3224"),
-                    new StartsWith(terminologies, "normName", "blood")))));
+                    new FieldMatch(terminologies, "code", new Exact("C3224")),
+                    new FieldMatch(terminologies, "normName", new StartsWith("blood"))))));
 ```
 
 ### Checklist for a new query
 
 1. Name it after what it matches, and document that behavior in the class Javadoc.
-2. Build an OpenSearch query in `fetchOpenSearchQuery(operations)`. Only run a search there for a query
+2. Build an OpenSearch query in `fetchOpenSearchQuery(operations)` (a query) or
+   `getQueryBuilder(field)` (a value match). Only run a search there for a query
    about another concept, through `declareDependencies` (see
    [Queries about other concepts](#queries-about-other-concepts-joins)).
 3. Escape any characters in the term that are syntax for the OpenSearch query you use (see
    `Contains.escapeWildcards`).
-4. If the OpenSearch query supports ignoring case, implement `SupportsIgnoringCase`.
-5. Add a lesson to `AtomicQueryTest` (or a similar test) that runs the query against the test index
+4. If a value match's OpenSearch query supports ignoring case, implement `SupportsIgnoringCase`.
+5. Add a lesson to `ValueMatchTest` (or a similar test) that runs the query against the test index
    and asserts which values it finds. Test behavior, not the built `QueryBuilder`.
 6. Run `./gradlew spotlessApply`.
