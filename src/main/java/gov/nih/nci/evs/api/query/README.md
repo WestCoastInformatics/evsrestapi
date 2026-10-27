@@ -393,6 +393,35 @@ an `IllegalStateException`, instead of cutting the codes short and silently retu
 `HasAssociation` (and any `HasRelationship`) need a reindex. Each nested entry is its own hidden
 document, so NCIt's many associations (e.g. `Concept_In_Subset`) grow the index.
 
+## Hierarchy queries
+
+`DescendantOf` and `AncestorOf` match concepts below or above anchor concepts (spec 1.3). The
+`OrSelf` forms also match the anchors. Each takes either a code or an inner query that selects the
+anchors, and an optional `maxLevel` (shortest distance, at least 1).
+
+```java
+// Everything below Neoplasm (C3262)
+new DescendantOf(terminologies, "C3262");
+
+// Neoplasm and its children only
+new DescendantOrSelfOf(terminologies, "C3262", 1);
+
+// Every ancestor of Malignant Neoplasm (C4872), along every path
+new AncestorOf(terminologies, "C4872");
+
+// Siblings of C4872, and C4872 itself: the children of its parents
+new DescendantOf(terminologies, new AncestorOf(terminologies, "C4872", 1), 1);
+
+// Below anything that is below C3262 (the inner query runs first, see above)
+new DescendantOf(terminologies, new DescendantOf(terminologies, "C3262"));
+```
+
+Like any node, the result is one OpenSearch query, so it combines with other conditions:
+
+```java
+boolQuery.must(new DescendantOf(terminologies, "C3262").fetchOpenSearchQuery(operations));
+```
+
 ## Extending
 
 ### Adding a value match
