@@ -422,6 +422,57 @@ Like any node, the result is one OpenSearch query, so it combines with other con
 boolQuery.must(new DescendantOf(terminologies, "C3262").fetchOpenSearchQuery(operations));
 ```
 
+## Facets (spec 1.8)
+
+A facet counts, over the current results, how many concepts have each value of one dimension: a
+field on the concept, narrowed where needed. For example, the semantic type facet counts
+`properties.value` over the property entries whose type is Semantic_Type. The counts come back as
+facet name → (value → count), most concepts first, at most 50 values per facet.
+
+**Each node class decides its facet** in `fetchFacetBuilders(operations)`. It's the dimension the
+node constrains, and to change a facet you change that one method:
+
+| Node | Facet name | Counts |
+|---|---|---|
+| `DescendantOf` (and `DescendantOrSelfOf`) | `branch:<anchors>` | each child of the anchors, with everything at or below it (to drill down a level) |
+| `HasRole` / `HasAssociation` | `roles:<type>` / `associations:<type>` | each target of the relationship type |
+| `HasProperty` | `properties:<type>` | each value of the property type |
+| `InSubset` | `subset` | each subset (all of them, whichever this node selects) |
+| `MatchAnyOf` | `<field>` | each value of the field |
+| `And` / `Or` / `Not` / `Boost` | their children's | (each name once) |
+
+Other nodes, such as text matches and `AncestorOf`, have no facet.
+
+**Running a faceted search:** `FacetedSearch.fetch` follows the standard pattern, so a facet keeps
+showing the values the user could switch to:
+
+- **The base query** is the typed text and fixed conditions. Every count starts from it.
+- **Each `Facet`** is a dimension node, used only for its facet, plus the user's picks in it, if
+  any. Several picks in one facet are an `Or`; facets combine as AND.
+- **The picks** narrow the hits returned (a post filter). Each facet is counted over the base query
+  and every *other* facet's picks, but not its own.
+
+```java
+// "melanoma", primary site Skin or Eye, in CTRP; show semantic types too
+final FacetedSearchResult result =
+    FacetedSearch.fetch(
+        operations,
+        melanomaQuery,
+        List.of(
+            Facet.of(
+                new HasRole(t, primarySite),
+                new Or(t, List.of(new HasRole(t, primarySite, skin), new HasRole(t, primarySite, eye)))),
+            Facet.of(new InSubset(t, CTRP), new InSubset(t, CTRP)),
+            Facet.of(new HasProperty(t, new Exact("Semantic_Type")))),
+        PageRequest.of(0, 10),
+        new IncludeParam("minimal"));
+
+result.facets().get("roles:R101");   // {C12470=2, C12401=1}: sites within CTRP, ignoring the site picks
+```
+
+To drill down after a branch is picked, add a second facet whose dimension is `DescendantOf` the
+picked concept. The branch facet needs the ancestor fields; on an index without them it's empty.
+
 ## Extending
 
 ### Adding a value match

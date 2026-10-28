@@ -8,6 +8,7 @@ import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 
 /**
  * Matches concepts with a relationship of the given type in one of their relationship lists,
@@ -37,6 +38,9 @@ public abstract class HasRelationship extends EvsQuery {
 
   /** Joins the list's name and an entry field into the entry field's full name. */
   private static final String ENTRY_FIELD_SEPARATOR = ".";
+
+  /** The entry field holding the target's code, which the facet counts. */
+  private static final String TARGET_CODE_FIELD = "relatedCode";
 
   /**
    * The relationship's type: the kind of relationship the entry expresses, e.g.
@@ -145,6 +149,29 @@ public abstract class HasRelationship extends EvsQuery {
     }
 
     return relationshipTarget.fetchConceptsPointingToTarget(this, entriesOfType, operations);
+  }
+
+  /**
+   * Returns this node's facet: for its relationship type, how many concepts point to each target,
+   * e.g. for a primary site role, each site. Named after the list and the type, e.g. "roles:R101".
+   *
+   * @param operations the OpenSearch operations
+   * @return the facet aggregation
+   */
+  @Override
+  public List<AbstractAggregationBuilder<?>> fetchFacetBuilders(
+      final OpenSearchOperations operations) {
+    final String facetName =
+        FacetAggregations.getFacetName(
+            getRelationshipListFieldName(),
+            FacetAggregations.getMatchKey(relationshipType.getNameOrCodeMatch()));
+    final QueryBuilder entriesOfType = relationshipType.getEntriesOfType(this, operations);
+    return List.of(
+        FacetAggregations.getNestedTermsFacet(
+            facetName,
+            getRelationshipListFieldName(),
+            entriesOfType,
+            getEntryFieldName(TARGET_CODE_FIELD)));
   }
 
   /**

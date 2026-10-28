@@ -6,8 +6,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 
 /**
  * Matches concepts strictly below any concept an inner query matches, in the same terminology
@@ -40,6 +43,15 @@ public class DescendantOf extends HierarchyQuery {
 
   /** The first depth below an anchor: its direct children. */
   private static final int FIRST_DEPTH = 1;
+
+  /** The dimension of this node's facet. */
+  private static final String BRANCH_DIMENSION = "branch";
+
+  /** Position of the anchors among the facet's dependencies. */
+  private static final int ANCHORS_POSITION = 0;
+
+  /** Position of the anchors' children among the facet's dependencies. */
+  private static final int CHILDREN_POSITION = 1;
 
   /**
    * Instantiates a {@link DescendantOf} for everything below the concepts an inner query matches.
@@ -117,6 +129,45 @@ public class DescendantOf extends HierarchyQuery {
 
     // TODO: Remove the fallback once every terminology is reindexed with ancestor fields
     return fetchBelowAnchorsFallbackQuery(operations, terminology, anchorCodes);
+  }
+
+  /**
+   * Returns this node's facet, to drill down one level: for each child of the anchors, how many
+   * concepts are that child or below it. E.g. for C3262 Neoplasm, one count each for Neoplasm by
+   * Morphology, by Site, and by Special Category. Named after the anchors, e.g. "branch:C3262".
+   *
+   * <p>Counts use {@link #ANCESTORS_FIELD}, so on an index without the ancestor fields the facet is
+   * empty.
+   *
+   * @param operations the OpenSearch operations, for finding the anchors and their children
+   * @return the facet aggregation
+   */
+  @Override
+  public List<AbstractAggregationBuilder<?>> fetchFacetBuilders(
+      final OpenSearchOperations operations) {
+    final DescendantOf childrenOfAnchors =
+        new DescendantOf(terminologies, getAnchorQuery(), FIRST_DEPTH);
+    final List<ConceptKeys> anchorsAndChildren =
+        declareDependencies(operations, getAnchorQuery(), childrenOfAnchors);
+    final Set<String> anchorCodes = getCodes(anchorsAndChildren.get(ANCHORS_POSITION));
+    final Set<String> childCodes = getCodes(anchorsAndChildren.get(CHILDREN_POSITION));
+
+    final String facetName =
+        FacetAggregations.getFacetName(
+            BRANCH_DIMENSION, FacetAggregations.getCodesKey(anchorCodes));
+    return List.of(FacetAggregations.getBranchesFacet(facetName, ANCESTORS_FIELD, childCodes));
+  }
+
+  /**
+   * Returns the codes found in any terminology version.
+   *
+   * @param keys the concept keys
+   * @return the codes
+   */
+  private static Set<String> getCodes(final ConceptKeys keys) {
+    return keys.getCodesByTerminologyVersion().values().stream()
+        .flatMap(Set::stream)
+        .collect(Collectors.toCollection(TreeSet::new));
   }
 
   /**

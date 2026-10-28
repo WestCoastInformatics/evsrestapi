@@ -8,6 +8,7 @@ import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 
 /**
  * Matches concepts that have a property of the given type, optionally with a value matching the
@@ -138,6 +139,26 @@ public final class HasProperty extends EvsQuery {
     }
 
     return getConceptsWithAnyPropertyMatching(entryConditions);
+  }
+
+  /**
+   * Returns this node's facet: for its property type, how many concepts have each value, e.g. each
+   * semantic type. Named after the list and the type, e.g. "properties:Semantic_Type".
+   *
+   * @param operations the OpenSearch operations
+   * @return the facet aggregation
+   */
+  @Override
+  public List<AbstractAggregationBuilder<?>> fetchFacetBuilders(
+      final OpenSearchOperations operations) {
+    final String facetName =
+        FacetAggregations.getFacetName(
+            PROPERTIES_FIELD, FacetAggregations.getMatchKey(typeNameOrCodeMatch));
+    final NameOrCodeMatch typeMatch =
+        new NameOrCodeMatch(terminologies, TYPE_NAME_FIELD, TYPE_CODE_FIELD, typeNameOrCodeMatch);
+    return List.of(
+        FacetAggregations.getNestedTermsFacet(
+            facetName, PROPERTIES_FIELD, typeMatch.fetchOpenSearchQuery(operations), VALUE_FIELD));
   }
 
   /**

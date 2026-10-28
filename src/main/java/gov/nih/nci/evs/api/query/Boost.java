@@ -6,6 +6,7 @@ import java.util.Objects;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 
 /**
  * Matches what the child query matches, but scores every match the same fixed amount, ignoring how
@@ -37,5 +38,12 @@ public class Boost extends EvsQuery {
   @Override
   public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
     return QueryBuilders.constantScoreQuery(child.fetchOpenSearchQuery(operations)).boost(score);
+  }
+
+  /* see superclass */
+  @Override
+  public List<AbstractAggregationBuilder<?>> fetchFacetBuilders(
+      final OpenSearchOperations operations) {
+    return child.fetchFacetBuilders(operations);
   }
 }

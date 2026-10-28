@@ -6,6 +6,7 @@ import java.util.Objects;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 
 /**
  * Matches concepts that the child query doesn't match, including concepts missing the child's
@@ -38,5 +39,12 @@ public class Not extends EvsQuery {
     return QueryBuilders.boolQuery()
         .filter(QueryBuilders.matchAllQuery())
         .mustNot(child.fetchOpenSearchQuery(operations));
+  }
+
+  /* see superclass */
+  @Override
+  public List<AbstractAggregationBuilder<?>> fetchFacetBuilders(
+      final OpenSearchOperations operations) {
+    return child.fetchFacetBuilders(operations);
   }
 }

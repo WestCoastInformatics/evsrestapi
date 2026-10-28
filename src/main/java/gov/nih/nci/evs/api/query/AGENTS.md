@@ -23,7 +23,16 @@ concepts (`declareDependencies`), and how to add a new node.
   public nodes. `FieldMatchUsageSourceCodeTest` enforces this.
 - Keep the raw combining code in small, clearly named helpers, so each maps onto one logical node.
 
+## Facets
+
+- A node exposes the facet for the dimension it constrains by overriding
+  `fetchFacetBuilders(operations)`; build the aggregation with `FacetAggregations` so
+  `FacetResults` can read it. Logical operators pass up their children's facets.
+- `FacetedSearch` runs a base query plus facets (dimension node + the user's picks) the standard way;
+  see "Facets" in `README.md`.
+
 ## Tests
 
 - `ValueMatchTest`, `HasRoleTest`, and `HasAssociationTest` run against OpenSearch on port 9201.
 - `DeclareDependenciesTest` uses a mocked `OpenSearchOperations` and needs no services.
+- `FacetedSearchTest` runs against OpenSearch on port 9201; `FacetAggregationsTest` needs no services.

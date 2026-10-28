@@ -10,6 +10,7 @@ import java.util.TreeSet;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 
 /**
  * Matches documents whose field equals any of a set of values (case sensitive, whole value), e.g.
@@ -79,5 +80,18 @@ public class MatchAnyOf extends EvsQuery {
   @Override
   public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
     return QueryBuilders.termsQuery(field, values);
+  }
+
+  /**
+   * Returns this node's facet, named after its field: how many concepts have each value of the
+   * field, whichever values this node selects.
+   *
+   * @param operations the OpenSearch operations
+   * @return the facet aggregation
+   */
+  @Override
+  public List<AbstractAggregationBuilder<?>> fetchFacetBuilders(
+      final OpenSearchOperations operations) {
+    return List.of(FacetAggregations.getTermsFacet(field, field));
   }
 }

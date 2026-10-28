@@ -6,6 +6,7 @@ import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 
 /**
  * Matches concepts that any child query matches. No children matches nothing, so an empty list of
@@ -40,5 +41,12 @@ public class Or extends EvsQuery {
         QueryBuilders.boolQuery().minimumShouldMatch(anyChildMatches);
     children.forEach(child -> anyChildQuery.should(child.fetchOpenSearchQuery(operations)));
     return anyChildQuery;
+  }
+
+  /* see superclass */
+  @Override
+  public List<AbstractAggregationBuilder<?>> fetchFacetBuilders(
+      final OpenSearchOperations operations) {
+    return FacetAggregations.fetchChildFacetBuilders(operations, children);
   }
 }

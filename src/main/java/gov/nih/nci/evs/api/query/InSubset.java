@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Set;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 
 /**
  * Matches concepts that are members of the given subsets, e.g. every concept in CDISC SDTM
@@ -35,6 +36,12 @@ import org.opensearch.index.query.QueryBuilder;
  * OpenSearchServiceImpl}, left out until it's decided whether the query language should keep it.
  */
 public final class InSubset extends EvsQuery {
+
+  /** Name of this node's facet. */
+  private static final String SUBSET_FACET_NAME = "subset";
+
+  /** The membership entry field holding the subset's code, which the facet counts. */
+  private static final String SUBSET_CODE_FIELD = "relatedCode";
 
   /**
    * The association types marking membership (e.g. A8) across every searched terminology, so one
@@ -77,6 +84,28 @@ public final class InSubset extends EvsQuery {
     final HasAssociation membership = new HasAssociation(terminologies, membershipType, subsets);
 
     return membership.fetchOpenSearchQuery(operations);
+  }
+
+  /**
+   * Returns this node's facet, named "subset": how many concepts are in each subset. It counts
+   * every subset, whichever ones this node selects.
+   *
+   * @param operations the OpenSearch operations
+   * @return the facet aggregation
+   */
+  @Override
+  public List<AbstractAggregationBuilder<?>> fetchFacetBuilders(
+      final OpenSearchOperations operations) {
+    final RelationshipType membershipType =
+        new RelationshipType(new OneOf(membershipTypeNamesOrCodes));
+    final HasAssociation anyMembership = new HasAssociation(terminologies, membershipType);
+
+    return List.of(
+        FacetAggregations.getNestedTermsFacet(
+            SUBSET_FACET_NAME,
+            anyMembership.getRelationshipListFieldName(),
+            membershipType.getEntriesOfType(anyMembership, operations),
+            anyMembership.getEntryFieldName(SUBSET_CODE_FIELD)));
   }
 
   /**

@@ -14,6 +14,7 @@ import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.search.aggregations.AbstractAggregationBuilder;
 import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
 import org.springframework.data.domain.PageRequest;
@@ -160,6 +161,22 @@ public abstract class EvsQuery {
    * @return the query builder
    */
   public abstract QueryBuilder fetchOpenSearchQuery(OpenSearchOperations operations);
+
+  /**
+   * Returns the facets of the dimension this node constrains: aggregations counting, over the
+   * current results, how many concepts have each value, e.g. each semantic type for a semantic type
+   * condition. {@link FacetedSearch} runs them and {@link FacetResults} reads them.
+   *
+   * <p>Nodes without a natural facet, such as text matches, keep this default. Logical operators
+   * return their children's.
+   *
+   * @param operations the OpenSearch operations, for any lookups the facet needs
+   * @return the facet aggregations, possibly none
+   */
+  public List<AbstractAggregationBuilder<?>> fetchFacetBuilders(
+      final OpenSearchOperations operations) {
+    return List.of();
+  }
 
   /**
    * Returns the concept indexes of the terminologies, to search.
