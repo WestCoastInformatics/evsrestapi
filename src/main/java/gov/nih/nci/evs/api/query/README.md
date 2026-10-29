@@ -198,6 +198,7 @@ classDiagram
     EvsQuery <|-- HasSynonym
     HasRelationship <|-- HasRole
     HasRelationship <|-- HasAssociation
+    HasRelationship <|-- HasInverseRole
     EvsQuery <|-- InSubset
     InSubset ..> HasAssociation : builds
     InSubset o-- RelationshipTarget : subsets
@@ -385,11 +386,11 @@ Some nodes hold a query that describes a *different* concept from the one being 
 **Roles and associations share one node.** A concept's `roles` and `associations` are both lists of
 entries pairing a type (name and code) with a related concept's code and name, so `HasRelationship` searches
 either. It's abstract: each subclass says which list it searches by overriding
-`getRelationshipListFieldName()`; `HasRole` returns `roles` and `HasAssociation` returns `associations`. `HasRelationship` owns the list: the
+`getRelationshipListFieldName()`; `HasRole` returns `roles`, `HasInverseRole` returns `inverseRoles`, and `HasAssociation` returns `associations`. `HasRelationship` owns the
 nested query on it and the terminology version filter. `RelationshipType` and `RelationshipTarget`
 own which entry fields they compare (`type` and `code`; `relatedName` and `relatedCode`) and build
-their `FieldMatch`es on them, with the list's name in front (`roles.type`, ...). `roles`
-and `associations` are mapped as nested; searching `inverseRoles` or `inverseAssociations` first
+their `FieldMatch`es on them, with the list's name in front (`roles.type`, ...). `roles`,
+`inverseRoles`, and `associations` are mapped as nested; searching `inverseAssociations` first
 needs that mapping and a reindex.
 
 **The type is a value match; the target is a value match or a query.** A `RelationshipType` takes a `ValueMatch`
@@ -440,10 +441,11 @@ benchmark, and the SPARQL (Fuseki) comparison, is written up under 1.4 Role in t
 `index.max_terms_count`). A relationship target matching more concepts in one terminology version fails with
 an `IllegalStateException`, instead of cutting the codes short and silently returning wrong results.
 
-**Reindex:** `terminology.keyword` and `version.keyword` are new subfields, and `roles` and
-`associations` are now nested. Existing concept indexes have none of these, so `HasRole`,
-`HasAssociation` (and any `HasRelationship`) need a reindex. Each nested entry is its own hidden
-document, so NCIt's many associations (e.g. `Concept_In_Subset`) grow the index.
+**Reindex:** `terminology.keyword` and `version.keyword` are new subfields, and `roles`,
+`inverseRoles`, and `associations` are now nested. Existing concept indexes have none of these, so
+`HasRole`, `HasInverseRole`, `HasAssociation` (and any `HasRelationship`) need a reindex. Each
+nested entry is its own hidden document, so NCIt's many associations (e.g. `Concept_In_Subset`)
+grow the index.
 
 ## Extending
 

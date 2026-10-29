@@ -259,10 +259,10 @@ public class Concept extends ConceptMinimal {
   private List<DisjointWith> disjointWith;
 
   /**
-   * The inverse roles. enabled = false will set the index = false, to avoid indexing the fields in
-   * this Concept model
+   * The inverse roles. Nested so an inverse role's type and target can be searched together (see
+   * HasInverseRole).
    */
-  @Field(type = FieldType.Object, enabled = false)
+  @Field(type = FieldType.Nested)
   private List<Role> inverseRoles;
 
   /**
