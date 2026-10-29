@@ -214,10 +214,10 @@ public class Concept extends ConceptMinimal {
   private List<Association> associations;
 
   /**
-   * The inverse associations. enabled = false will set the index = false, to avoid indexing the
-   * fields in this Concept model
+   * The inverse associations: other concepts' associations pointing to this one. Nested so an
+   * inverse association's type and source can be searched together (see HasInverseAssociation).
    */
-  @Field(type = FieldType.Object, enabled = false)
+  @Field(type = FieldType.Nested)
   private List<Association> inverseAssociations;
 
   /** The roles. Nested so a role's type and target can be searched together (see HasRole). */
