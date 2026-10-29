@@ -123,6 +123,7 @@ classDiagram
     EvsQuery <|-- HasRelationship
     EvsQuery <|-- CompositeQuery
     HasRelationship <|-- HasRole
+    HasRelationship <|-- HasInverseRole
     CompositeQuery o-- EvsQuery : children
     FieldMatch o-- ValueMatch : match
     HasRelationship o-- RelationshipType
@@ -224,11 +225,11 @@ Some nodes hold a query that describes a *different* concept from the one being 
 **Roles and associations share one node.** A concept's `roles` and `associations` are both lists of
 entries pairing a type (name and code) with a related concept's code and name, so `HasRelationship` searches
 either. It's abstract: each subclass says which list it searches by overriding
-`getRelationshipListFieldName()`; `HasRole` returns `roles`. `HasRelationship` owns the list: the
+`getRelationshipListFieldName()`; `HasRole` returns `roles`, `HasInverseRole` returns `inverseRoles`. `HasRelationship` owns the list: the
 nested query on it and the terminology version filter. `RelationshipType` and `RelationshipTarget`
 own which entry fields they compare (`type` and `code`; `relatedName` and `relatedCode`) and build
 their `FieldMatch`es on them, with the list's name in front (`roles.type`, ...). Only
-`roles` is mapped as nested today; searching `associations` (1.5), `inverseRoles`, or
+`roles` and `inverseRoles` are mapped as nested today; searching `associations` (1.5) or
 `inverseAssociations` first needs that mapping and a reindex.
 
 **The type is a value match; the target is a value match or a query.** A `RelationshipType` takes a `ValueMatch`
@@ -279,9 +280,9 @@ benchmark, and the SPARQL (Fuseki) comparison, is written up under 1.4 Role in t
 `index.max_terms_count`). A relationship target matching more concepts in one terminology version fails with
 an `IllegalStateException`, instead of cutting the codes short and silently returning wrong results.
 
-**Reindex:** `terminology.keyword` and `version.keyword` are new subfields, and `roles` is now
-nested. Existing concept indexes have neither, so `HasRole` (and any `HasRelationship`) needs a
-reindex.
+**Reindex:** `terminology.keyword` and `version.keyword` are new subfields, and `roles` and
+`inverseRoles` are now nested. Existing concept indexes have neither, so `HasRole`,
+`HasInverseRole` (and any `HasRelationship`) need a reindex.
 
 ## Extending
 
