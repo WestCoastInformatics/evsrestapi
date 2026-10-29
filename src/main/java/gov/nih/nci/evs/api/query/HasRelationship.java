@@ -14,8 +14,9 @@ import org.opensearch.index.query.QueryBuilders;
  * optionally pointing to the given target, e.g. concepts whose primary anatomic site role points to
  * Skin or anything below Skin. Roles and associations are both lists of entries pairing a type with
  * a related concept, so one node searches either: only the list differs. Each subclass says which
- * list it searches ({@link #getRelationshipListFieldName}): {@link HasRole} searches {@code roles}
- * and {@link HasAssociation} searches {@code associations}.
+ * list it searches ({@link #getRelationshipListFieldName}): {@link HasRole} searches {@code roles},
+ * {@link HasAssociation} searches {@code associations}, and {@link HasInverseAssociation} searches
+ * {@code inverseAssociations}.
  *
  * <p>The type and target must match on the same entry. A concept with "primary site: Lung" and
  * "associated site: Skin" does not match "primary site: Skin".
