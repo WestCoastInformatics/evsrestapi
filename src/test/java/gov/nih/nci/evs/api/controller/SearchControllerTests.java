@@ -5402,8 +5402,8 @@ public class SearchControllerTests {
   }
 
   /**
-   * Test codeList with codes that contain query syntax characters (e.g. ':' in GO, HGNC, ChEBI).
-   * These previously matched nothing because the ':' was parsed as a field name.
+   * Test codeList with codes that contain ':' (e.g. GO, HGNC, ChEBI). These previously matched
+   * nothing because the ':' was parsed as a field name.
    *
    * @throws Exception the exception
    */
@@ -5414,6 +5414,40 @@ public class SearchControllerTests {
     assertCodeListSearch("chebi", "CHEBI:13193");
     // Codes without special characters are unchanged
     assertCodeListSearch("ncit", "C3224", "C4872");
+  }
+
+  /**
+   * Test that only ':' is escaped in codeList, so wildcards and codes the caller already escaped
+   * still work as before.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testSearchCodeListWildcardsUnchanged() throws Exception {
+    assertThat(getCodeListTotal("ncit", "C322*")).isGreaterThan(1);
+    assertThat(getCodeListTotal("ncit", "C322?")).isGreaterThan(1);
+    assertThat(getCodeListTotal("go", "GO\\:0008150")).isEqualTo(1);
+  }
+
+  /**
+   * Returns the total of a codeList search.
+   *
+   * @param terminology the terminology
+   * @param codeList the codeList parameter value
+   * @return the total
+   * @throws Exception the exception
+   */
+  private long getCodeListTotal(final String terminology, final String codeList) throws Exception {
+    final String url = "/api/v1/concept/" + terminology + "/search";
+    log.info("Testing url - " + url + "?codeList=" + codeList);
+    final MvcResult result =
+        this.mvc
+            .perform(get(url).param("codeList", codeList))
+            .andExpect(status().isOk())
+            .andReturn();
+    return ThreadLocalMapper.get()
+        .readValue(result.getResponse().getContentAsString(), ConceptResultList.class)
+        .getTotal();
   }
 
   /**
