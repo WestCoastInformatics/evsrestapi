@@ -847,6 +847,7 @@ public class SparqlQueryManagerServiceImpl implements SparqlQueryManagerService 
       concept.setPaths(hierarchy.getPaths(terminology, conceptCode));
       HierarchyUtils.applyAncestors(concept);
       concept.setDescendants(hierarchy.getDescendants(conceptCode));
+      concept.setDescendantCount(concept.getDescendants().size());
       concept.setLeaf(concept.getChildren().isEmpty());
 
       // Ensure that all list elements of the concept are in a natural sort

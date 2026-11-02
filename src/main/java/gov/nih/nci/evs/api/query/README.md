@@ -55,6 +55,10 @@ classDiagram
         #List~Terminology~ terminologies
         +getTerminologies() List~Terminology~
         +fetchOpenSearchQuery(OpenSearchOperations)* QueryBuilder
+        +fetchConcepts(OpenSearchOperations, Pageable, IncludeParam) SearchHits~Concept~
+        #getSorts() List~SortBuilder~
+        #getHighlightFields() List~HighlightBuilder.Field~
+        +getIndexCoordinates() IndexCoordinates
     }
 
     class FieldMatch {
@@ -156,9 +160,18 @@ classDiagram
         String term
     }
 
+    class Typeahead {
+        -String incompleteTerm
+        +getHasWordsToComplete(String)$ boolean
+        +fetchOpenSearchQuery(OpenSearchOperations) QueryBuilder
+        +getSorts() List~SortBuilder~
+    }
+
     EvsQuery <|-- FieldMatch
     EvsQuery <|-- HasRelationship
     EvsQuery <|-- HasProperty
+    EvsQuery <|-- Typeahead
+    Typeahead ..> FieldMatch : builds
     class MatchAnyOf {
         -String field
         -Set~String~ values
@@ -185,6 +198,8 @@ classDiagram
     EvsQuery <|-- HasSynonym
     HasRelationship <|-- HasRole
     HasRelationship <|-- HasAssociation
+    HasRelationship <|-- HasInverseRole
+    HasRelationship <|-- HasInverseAssociation
     EvsQuery <|-- InSubset
     InSubset ..> HasAssociation : builds
     InSubset o-- RelationshipTarget : subsets
@@ -229,7 +244,7 @@ classDiagram
 
 | Class | Role |
 |---|---|
-| `EvsQuery` | Base type for every query node. Its contract is `fetchOpenSearchQuery(operations)`. It also holds an unmodifiable copy of the terminologies being searched. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
+| `EvsQuery` | Base type for every node. Its contract is `fetchOpenSearchQuery(operations)`. It also holds an unmodifiable copy of the terminologies being searched, and (experimental, see [Sorting](#sorting-experimental)) contributes sorts and builds a whole search request. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
 | `FieldMatch` | The leaf query. It pairs a concept field with a `ValueMatch` and rejects `null` for either. It only says which field; the match says how. |
 | `ValueMatch` | How one value is compared, with no field. Its contract is `getQueryBuilder(field)`. The implementations are records: plain values with no behavior beyond building their query. |
 | `SupportsIgnoringCase` | A `ValueMatch` that can also ignore case: `Exact`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
@@ -248,6 +263,7 @@ classDiagram
 | `AncestorOrSelfOf` | `AncestorOf` that also matches the anchors themselves. |
 | `RawBoolQueries` | The raw `bool` combining helpers (`getAllOfQuery`, `getAnyOfQuery`, `getMatchNothingQuery`) used until the logical operator nodes land; each maps onto `And`, `Or`, or `Not`. |
 | `And`, `Or`, `Not`, `Boost` | Logical queries. They hold child `EvsQuery` nodes instead of a field and a match. See [Logical queries](#logical-queries). Exploratory on this branch: merged from `eas/logical-operators`, tested only by `LogicalQueryTest` and the subset lessons. |
+| `Typeahead` | The query behind `/concept/typeahead`. Builds `FieldMatch`es: preferred names with `SearchAsYouType` (on `name.search_as_you_type`), and codes case sensitively with `Exact` (whole code) and `StartsWith` (partial code) on `code`, leaving out concepts with `active: false`, and overrides `getSorts()` to sort matches into tiers (a whole typed code, then name matches, then code-only matches) and rank general concepts with short names first within a tier. It ranks on the `descendantCount` field stored at load time, falling back to counting `descendants.leaf` on indexes loaded before that field existed. The count is the size of the stored `descendants`, so the SNOMED root (`138875005`), whose descendants the loader skips, has a count of 0 and ranks like a leaf. `Typeahead.getHasWordsToComplete(term)` says whether a term has anything to complete; the constructor rejects terms that don't. The endpoint's `total` stops at 10,000 (OpenSearch's default count limit): typeahead doesn't page, so unlike search it doesn't run a second query for the exact count. `SearchControllerTests.testTypeaheadTotalCapsAtCountedHitLimit` pins this. Highlighting is optional: the endpoint takes an `include` parameter like search (default `minimal`). With `include=minimal,highlights`, `fetchConcepts` asks OpenSearch to highlight the matched fields, and the endpoint returns OpenSearch's highlight of each suggestion's name (or of its code, if only the code matched). OpenSearch marks whole words: `lung ca` gives `<em>Lung</em> <em>Carcinoma</em>`. Typeahead overrides `getHighlightFields()` to highlight the main `name` field with a `match_bool_prefix` highlight query, because highlighting the `search_as_you_type` subfield it matched never marks the partial last word (and `*` doesn't reach subfields at all). `TypeaheadTest` lesson 10, `SearchControllerTests.testTypeaheadNameMatchHighlightsTypedWords`, `...testTypeaheadCodeMatchHighlightsCode`, `...testTypeaheadEndpointDefaultIncludeReturnsNoHighlights`, and `...testTypeaheadEndpointHighlightsIncludeReturnsHighlights` pin this. |
 
 ## Value matches
 
@@ -322,6 +338,44 @@ The constructor only accepts matches that implement `SupportsIgnoringCase`, so
 `SupportsIgnoringCase` and return the same OpenSearch query with case ignored, usually by calling
 `.caseInsensitive(true)` on the builder.
 
+## Sorting (experimental)
+
+> **Experimental** (branch `eas/typeahead-composed-sorts`). This lets query nodes contribute
+> sorts that compose by priority. If it turns out not to fit, go back to commit `5765d1eb`, where
+> `Typeahead` supplied its sorts and `OpenSearchServiceImpl` built the request. The alternatives
+> considered were ranking through the score (`script_score` / `rank_feature`, which blends across
+> branches) and a separate top-level sort object (an `EvsSort` tree passed alongside the query).
+
+Any node can be run as the outermost query of a search, one page at a time:
+
+```java
+final SearchHits<Concept> hits = query.fetchConcepts(operations, pageable, include);
+```
+
+The request's sort order comes from `getSorts()`. Most nodes only match and return no sorts.
+`Typeahead` returns its ranking sort. The rules:
+
+1. **A node's own sorts come first, then each child's sorts in child order.** Composites must
+   implement `getSorts()` this way. A nested node's sorts therefore only break ties left by the
+   nodes above and before it, like `ORDER BY a, b, c` in SQL. `And(a, b)` and `And(b, a)` match the
+   same concepts but can order them differently.
+2. **Negating composites contribute nothing.** A `Not` returns none of its children's sorts.
+3. **Duplicates are dropped.** The first occurrence of a sort keeps its position.
+4. **`fetchConcepts` always appends the tie-break `_index`, then `code`.** Each terminology
+   has its own index, so this orders by terminology, then code, and results are stable between
+   requests. (`terminology` is analyzed text and can't be sorted on.)
+
+Known limits:
+
+- **A sort ranks every hit, not just the hits its node matched.** Under `And`, every hit matched
+  every child, so this doesn't come up. Under `Or`, a child's sort also orders hits that only its
+  sibling matched. Script sorts like `Typeahead`'s work on any concept. Field sorts put documents
+  missing the field last.
+- **There's no way to replace the tree's sorts yet,** for example with a user-chosen "name A to Z".
+  Add an override parameter to `fetchConcepts` when one is needed.
+- **Sorts can't blend.** A higher-priority sort always wins outright. Blending relevance across
+  branches needs ranking through the score instead.
+
 ## Queries about other concepts (joins)
 
 Some nodes hold a query that describes a *different* concept from the one being matched:
@@ -333,12 +387,22 @@ Some nodes hold a query that describes a *different* concept from the one being 
 **Roles and associations share one node.** A concept's `roles` and `associations` are both lists of
 entries pairing a type (name and code) with a related concept's code and name, so `HasRelationship` searches
 either. It's abstract: each subclass says which list it searches by overriding
-`getRelationshipListFieldName()`; `HasRole` returns `roles` and `HasAssociation` returns `associations`. `HasRelationship` owns the list: the
-nested query on it and the terminology version filter. `RelationshipType` and `RelationshipTarget`
-own which entry fields they compare (`type` and `code`; `relatedName` and `relatedCode`) and build
-their `FieldMatch`es on them, with the list's name in front (`roles.type`, ...). `roles`
-and `associations` are mapped as nested; searching `inverseRoles` or `inverseAssociations` first
-needs that mapping and a reindex.
+`getRelationshipListFieldName()`; `HasRole` returns `roles`, `HasInverseRole` returns `inverseRoles`,
+`HasAssociation` returns `associations`, and `HasInverseAssociation` returns `inverseAssociations`.
+`HasRelationship` owns the list: the nested query on it and the terminology version filter.
+`RelationshipType` and `RelationshipTarget` own which entry fields they compare (`type` and `code`;
+`relatedName` and `relatedCode`) and build their `FieldMatch`es on them, with the list's name in
+front (`roles.type`, ...). `roles`, `inverseRoles`, `associations`, and `inverseAssociations` are
+all mapped as nested.
+
+**Direction is a list, not a flag.** An `inverseAssociations` entry mirrors another concept's
+association: same type, with that other concept as the related concept. So
+`HasInverseAssociation` is the same search on a different list, and its `RelationshipTarget` is the
+association's source. "The subsets Cutaneous Melanoma is in" is
+`HasInverseAssociation(Exact("Concept_In_Subset"), RelationshipTarget(Exact("C01")))`. A subset
+concept holds one inverse entry per member (about 32,000 for the CDISC Terminology), past
+OpenSearch's default of 10,000 nested entries per document, so indexes are created with a higher
+`index.mapping.nested_objects.limit`.
 
 **The type is a value match; the target is a value match or a query.** A `RelationshipType` takes a `ValueMatch`
 and applies it to both the entry's type name and its type code, so the caller picks how the type
@@ -388,10 +452,12 @@ benchmark, and the SPARQL (Fuseki) comparison, is written up under 1.4 Role in t
 `index.max_terms_count`). A relationship target matching more concepts in one terminology version fails with
 an `IllegalStateException`, instead of cutting the codes short and silently returning wrong results.
 
-**Reindex:** `terminology.keyword` and `version.keyword` are new subfields, and `roles` and
-`associations` are now nested. Existing concept indexes have none of these, so `HasRole`,
-`HasAssociation` (and any `HasRelationship`) need a reindex. Each nested entry is its own hidden
-document, so NCIt's many associations (e.g. `Concept_In_Subset`) grow the index.
+**Reindex:** `terminology.keyword` and `version.keyword` are new subfields, and `roles`,
+`inverseRoles`, `associations`, and `inverseAssociations` are now nested. Existing concept indexes
+have none of these, so `HasRole`, `HasInverseRole`, `HasAssociation`, `HasInverseAssociation` (and
+any `HasRelationship`) need a reindex. Each nested entry is its own hidden document, so NCIt's many
+associations (e.g. `Concept_In_Subset`) grow the index, and the inverse lists roughly double that
+growth.
 
 ## Hierarchy queries
 

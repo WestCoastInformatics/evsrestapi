@@ -107,6 +107,14 @@ public class Concept extends ConceptMinimal {
   private Boolean leaf;
 
   /**
+   * The number of descendants, stored so searches can rank on it without loading {@link
+   * #descendants}. Like normName, it is written to the index but not read back.
+   */
+  @WriteOnlyProperty
+  @Field(type = FieldType.Integer)
+  private Integer descendantCount;
+
+  /**
    * The active flag. Intentionally not on ConceptMinimal to avoid parents/children having to have
    * flag maintained
    */
@@ -233,10 +241,10 @@ public class Concept extends ConceptMinimal {
   private List<Association> associations;
 
   /**
-   * The inverse associations. enabled = false will set the index = false, to avoid indexing the
-   * fields in this Concept model
+   * The inverse associations: other concepts' associations pointing to this one. Nested so an
+   * inverse association's type and source can be searched together (see HasInverseAssociation).
    */
-  @Field(type = FieldType.Object, enabled = false)
+  @Field(type = FieldType.Nested)
   private List<Association> inverseAssociations;
 
   /** The roles. Nested so a role's type and target can be searched together (see HasRole). */
@@ -251,10 +259,10 @@ public class Concept extends ConceptMinimal {
   private List<DisjointWith> disjointWith;
 
   /**
-   * The inverse roles. enabled = false will set the index = false, to avoid indexing the fields in
-   * this Concept model
+   * The inverse roles. Nested so an inverse role's type and target can be searched together (see
+   * HasInverseRole).
    */
-  @Field(type = FieldType.Object, enabled = false)
+  @Field(type = FieldType.Nested)
   private List<Role> inverseRoles;
 
   /**
@@ -378,6 +386,7 @@ public class Concept extends ConceptMinimal {
     highlights = new HashMap<>(other.getHighlights());
     conceptStatus = other.getConceptStatus();
     leaf = other.getLeaf();
+    descendantCount = other.getDescendantCount();
     active = other.getActive();
     defining = other.getDefining();
     normName = other.getNormName();
@@ -612,6 +621,25 @@ public class Concept extends ConceptMinimal {
    */
   public void setLeaf(final Boolean leaf) {
     this.leaf = leaf;
+  }
+
+  /**
+   * Returns the descendant count.
+   *
+   * @return the descendant count
+   */
+  @Schema(hidden = true)
+  public Integer getDescendantCount() {
+    return descendantCount;
+  }
+
+  /**
+   * Sets the descendant count.
+   *
+   * @param descendantCount the descendant count
+   */
+  public void setDescendantCount(final Integer descendantCount) {
+    this.descendantCount = descendantCount;
   }
 
   /**

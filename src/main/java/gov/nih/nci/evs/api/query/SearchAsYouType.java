@@ -50,6 +50,10 @@ public record SearchAsYouType(String term) implements ValueMatch {
   /* see superclass */
   @Override
   public QueryBuilder getQueryBuilder(final String field) {
+    /**
+     * The recommended way to query a search_as_you_type field is using a multi_match query with the
+     * type set to bool_prefix. This targets the root field and its generated subfields.
+     */
     return QueryBuilders.multiMatchQuery(
             term, field, field + WORD_PAIRS_SUFFIX, field + WORD_TRIPLES_SUFFIX)
         .type(MultiMatchQueryBuilder.Type.BOOL_PREFIX)
