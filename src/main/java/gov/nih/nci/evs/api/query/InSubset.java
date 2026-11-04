@@ -69,6 +69,15 @@ public final class InSubset extends EvsQuery {
     this.membershipTypeNamesOrCodes = getMembershipTypeNamesOrCodes(terminologies);
   }
 
+  /**
+   * Returns the subsets.
+   *
+   * @return the subsets, as a match on their code or name or as a query over them
+   */
+  public RelationshipTarget getSubsets() {
+    return subsets;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {

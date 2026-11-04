@@ -56,7 +56,7 @@ public class AncestorOf extends HierarchyQuery {
    * @param code the anchor concept's code
    */
   public AncestorOf(final List<Terminology> terminologies, final String code) {
-    super(terminologies, getCodeQuery(terminologies, code), ANY_LEVEL, WITHOUT_SELF);
+    super(terminologies, code, ANY_LEVEL, WITHOUT_SELF);
   }
 
   /**
@@ -68,7 +68,7 @@ public class AncestorOf extends HierarchyQuery {
    * @param maxLevel the maximum distance above the anchor, at least 1
    */
   public AncestorOf(final List<Terminology> terminologies, final String code, final int maxLevel) {
-    super(terminologies, getCodeQuery(terminologies, code), maxLevel, WITHOUT_SELF);
+    super(terminologies, code, maxLevel, WITHOUT_SELF);
   }
 
   /**
@@ -86,6 +86,23 @@ public class AncestorOf extends HierarchyQuery {
       final Integer maxLevel,
       final boolean isSelfIncluded) {
     super(terminologies, descendantQuery, maxLevel, isSelfIncluded);
+  }
+
+  /**
+   * Instantiates an {@link AncestorOf} anchored on one concept, optionally matching the anchor
+   * itself.
+   *
+   * @param terminologies the terminologies being searched
+   * @param code the anchor concept's code
+   * @param maxLevel the maximum distance from the anchor, at least 1, or null for any distance
+   * @param isSelfIncluded whether the anchor itself matches
+   */
+  protected AncestorOf(
+      final List<Terminology> terminologies,
+      final String code,
+      final Integer maxLevel,
+      final boolean isSelfIncluded) {
+    super(terminologies, code, maxLevel, isSelfIncluded);
   }
 
   /* see superclass */

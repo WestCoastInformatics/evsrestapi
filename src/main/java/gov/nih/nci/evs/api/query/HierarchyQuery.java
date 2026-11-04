@@ -46,11 +46,17 @@ public abstract class HierarchyQuery extends EvsQuery {
   /** For constructors whose anchors don't match (unless one is a relative of another). */
   static final boolean WITHOUT_SELF = false;
 
+  /** For an anchor given as an inner query rather than a code. */
+  private static final String NO_ANCHOR_CODE = null;
+
   /** Position of the anchor query's result in {@link #declareDependencies}'s list: the only one. */
   private static final int ANCHOR_QUERY_POSITION = 0;
 
   /** The query matching the anchor concepts. */
   private final EvsQuery anchorQuery;
+
+  /** The anchor concept's code when the node was built from one, or null for an inner query. */
+  private final String anchorCode;
 
   /** The maximum distance from the anchors, or null for any distance. */
   private final Integer maxLevel;
@@ -59,7 +65,7 @@ public abstract class HierarchyQuery extends EvsQuery {
   private final boolean isSelfIncluded;
 
   /**
-   * Instantiates a {@link HierarchyQuery}.
+   * Instantiates a {@link HierarchyQuery} anchored on the concepts an inner query matches.
    *
    * @param terminologies the terminologies being searched
    * @param anchorQuery the query matching the anchor concepts
@@ -71,8 +77,53 @@ public abstract class HierarchyQuery extends EvsQuery {
       final EvsQuery anchorQuery,
       final Integer maxLevel,
       final boolean isSelfIncluded) {
+    this(
+        terminologies,
+        Objects.requireNonNull(anchorQuery, "anchorQuery"),
+        NO_ANCHOR_CODE,
+        maxLevel,
+        isSelfIncluded);
+  }
+
+  /**
+   * Instantiates a {@link HierarchyQuery} anchored on one concept.
+   *
+   * @param terminologies the terminologies being searched
+   * @param anchorCode the anchor concept's code
+   * @param maxLevel the maximum distance from the anchor, at least 1, or null for any distance
+   * @param isSelfIncluded whether the anchor itself matches
+   */
+  protected HierarchyQuery(
+      final List<Terminology> terminologies,
+      final String anchorCode,
+      final Integer maxLevel,
+      final boolean isSelfIncluded) {
+    this(
+        terminologies,
+        getCodeQuery(terminologies, anchorCode),
+        anchorCode,
+        maxLevel,
+        isSelfIncluded);
+  }
+
+  /**
+   * Instantiates a {@link HierarchyQuery}.
+   *
+   * @param terminologies the terminologies being searched
+   * @param anchorQuery the query matching the anchor concepts
+   * @param anchorCode the anchor concept's code, or null when the anchor is an inner query
+   * @param maxLevel the maximum distance from the anchors, at least 1, or null for any distance
+   * @param isSelfIncluded whether the anchors themselves match
+   */
+  private HierarchyQuery(
+      final List<Terminology> terminologies,
+      final EvsQuery anchorQuery,
+      final String anchorCode,
+      final Integer maxLevel,
+      final boolean isSelfIncluded) {
     super(terminologies);
-    this.anchorQuery = Objects.requireNonNull(anchorQuery, "anchorQuery");
+    this.anchorQuery = anchorQuery;
+    this.anchorCode = anchorCode;
 
     final boolean hasInvalidMaxLevel = maxLevel != null && maxLevel < MIN_MAX_LEVEL;
     if (hasInvalidMaxLevel) {
@@ -91,6 +142,15 @@ public abstract class HierarchyQuery extends EvsQuery {
    */
   public EvsQuery getAnchorQuery() {
     return anchorQuery;
+  }
+
+  /**
+   * Returns the anchor concept's code, when the node was built from one.
+   *
+   * @return the anchor code, or null when the anchor is an inner query
+   */
+  public String getAnchorCode() {
+    return anchorCode;
   }
 
   /**
@@ -168,7 +228,7 @@ public abstract class HierarchyQuery extends EvsQuery {
    * @param code the code
    * @return the query
    */
-  static EvsQuery getCodeQuery(final List<Terminology> terminologies, final String code) {
+  private static EvsQuery getCodeQuery(final List<Terminology> terminologies, final String code) {
     return new FieldMatch(terminologies, ID_FIELD, new Exact(Objects.requireNonNull(code, "code")));
   }
 

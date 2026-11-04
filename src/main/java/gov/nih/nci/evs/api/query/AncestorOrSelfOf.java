@@ -42,7 +42,7 @@ public class AncestorOrSelfOf extends AncestorOf {
    * @param code the anchor concept's code
    */
   public AncestorOrSelfOf(final List<Terminology> terminologies, final String code) {
-    super(terminologies, getCodeQuery(terminologies, code), ANY_LEVEL, WITH_SELF);
+    super(terminologies, code, ANY_LEVEL, WITH_SELF);
   }
 
   /**
@@ -55,6 +55,6 @@ public class AncestorOrSelfOf extends AncestorOf {
    */
   public AncestorOrSelfOf(
       final List<Terminology> terminologies, final String code, final int maxLevel) {
-    super(terminologies, getCodeQuery(terminologies, code), maxLevel, WITH_SELF);
+    super(terminologies, code, maxLevel, WITH_SELF);
   }
 }

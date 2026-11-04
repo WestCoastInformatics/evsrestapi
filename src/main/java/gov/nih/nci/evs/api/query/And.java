@@ -24,6 +24,15 @@ public class And extends EvsQuery {
     this.children = List.copyOf(children);
   }
 
+  /**
+   * Returns the queries that must all match.
+   *
+   * @return the child queries
+   */
+  public List<EvsQuery> getChildren() {
+    return children;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {

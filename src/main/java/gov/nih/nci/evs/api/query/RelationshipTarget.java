@@ -44,6 +44,12 @@ public final class RelationshipTarget {
    */
   static final int MAX_TARGET_CODES = 65_536;
 
+  /** The query selecting the target concepts, or null when the target is a value match. */
+  private final EvsQuery query;
+
+  /** How the entry's target name or code must match, or null when the target is a query. */
+  private final ValueMatch nameOrCodeMatch;
+
   /** Builds the query matching concepts whose relationship points to this target. */
   private final TargetQueryBuilder targetQueryBuilder;
 
@@ -54,7 +60,8 @@ public final class RelationshipTarget {
    * @param query the query selecting the target concepts
    */
   public RelationshipTarget(final EvsQuery query) {
-    Objects.requireNonNull(query, "query");
+    this.query = Objects.requireNonNull(query, "query");
+    this.nameOrCodeMatch = null;
     this.targetQueryBuilder =
         (relationship, entriesOfType, operations) ->
             fetchConceptsPointingToAnyConceptMatching(
@@ -68,11 +75,30 @@ public final class RelationshipTarget {
    * @param nameOrCodeMatch how the entry's target name or code must match
    */
   public RelationshipTarget(final ValueMatch nameOrCodeMatch) {
-    Objects.requireNonNull(nameOrCodeMatch, "nameOrCodeMatch");
+    this.query = null;
+    this.nameOrCodeMatch = Objects.requireNonNull(nameOrCodeMatch, "nameOrCodeMatch");
     this.targetQueryBuilder =
         (relationship, entriesOfType, operations) ->
             getConceptsPointingToNameOrCodeMatching(
                 relationship, entriesOfType, nameOrCodeMatch, operations);
+  }
+
+  /**
+   * Returns the query selecting the target concepts.
+   *
+   * @return the target query, or null when the target is a value match
+   */
+  public EvsQuery getQuery() {
+    return query;
+  }
+
+  /**
+   * Returns how the entry's target name or code must match.
+   *
+   * @return the name or code match, or null when the target is a query
+   */
+  public ValueMatch getNameOrCodeMatch() {
+    return nameOrCodeMatch;
   }
 
   /**

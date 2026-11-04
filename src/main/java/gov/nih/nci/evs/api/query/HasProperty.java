@@ -117,6 +117,33 @@ public final class HasProperty extends EvsQuery {
     this.qualifierCondition = qualifierCondition;
   }
 
+  /**
+   * Returns the match for the property's type name or code.
+   *
+   * @return the type name or code match
+   */
+  public ValueMatch getTypeNameOrCodeMatch() {
+    return typeNameOrCodeMatch;
+  }
+
+  /**
+   * Returns the match for the property's value.
+   *
+   * @return the value match, or null for any value
+   */
+  public ValueMatch getValueMatch() {
+    return valueMatch;
+  }
+
+  /**
+   * Returns the condition the property's qualifiers must meet.
+   *
+   * @return the qualifier condition, or null for none
+   */
+  public QualifierCondition getQualifierCondition() {
+    return qualifierCondition;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {

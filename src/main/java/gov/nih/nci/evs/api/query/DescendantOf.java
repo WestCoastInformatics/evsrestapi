@@ -71,7 +71,7 @@ public class DescendantOf extends HierarchyQuery {
    * @param code the anchor concept's code
    */
   public DescendantOf(final List<Terminology> terminologies, final String code) {
-    super(terminologies, getCodeQuery(terminologies, code), ANY_LEVEL, WITHOUT_SELF);
+    super(terminologies, code, ANY_LEVEL, WITHOUT_SELF);
   }
 
   /**
@@ -84,7 +84,7 @@ public class DescendantOf extends HierarchyQuery {
    */
   public DescendantOf(
       final List<Terminology> terminologies, final String code, final int maxLevel) {
-    super(terminologies, getCodeQuery(terminologies, code), maxLevel, WITHOUT_SELF);
+    super(terminologies, code, maxLevel, WITHOUT_SELF);
   }
 
   /**
@@ -102,6 +102,23 @@ public class DescendantOf extends HierarchyQuery {
       final Integer maxLevel,
       final boolean isSelfIncluded) {
     super(terminologies, ancestorQuery, maxLevel, isSelfIncluded);
+  }
+
+  /**
+   * Instantiates a {@link DescendantOf} anchored on one concept, optionally matching the anchor
+   * itself.
+   *
+   * @param terminologies the terminologies being searched
+   * @param code the anchor concept's code
+   * @param maxLevel the maximum distance from the anchor, at least 1, or null for any distance
+   * @param isSelfIncluded whether the anchor itself matches
+   */
+  protected DescendantOf(
+      final List<Terminology> terminologies,
+      final String code,
+      final Integer maxLevel,
+      final boolean isSelfIncluded) {
+    super(terminologies, code, maxLevel, isSelfIncluded);
   }
 
   /* see superclass */

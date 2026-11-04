@@ -51,6 +51,9 @@ public final class HasSynonym extends EvsQuery {
   /** A synonym entry's sub-source, e.g. "NCI-GLOSS". */
   private static final String SUB_SOURCE_FIELD = SYNONYMS_FIELD + ".subSource";
 
+  /** The match for the synonym's name as given, or null to match any name. */
+  private final ValueMatch nameMatch;
+
   /** The match for the synonym's name, with normalized terms, or null to match any name. */
   private final ValueMatch normalizedNameMatch;
 
@@ -107,12 +110,49 @@ public final class HasSynonym extends EvsQuery {
       final ValueMatch termTypeMatch,
       final ValueMatch subSourceMatch) {
     super(terminologies);
+    this.nameMatch = nameMatch;
     final boolean hasNameMatch = nameMatch != null;
     this.normalizedNameMatch =
         hasNameMatch ? nameMatch.getWithTermsMapped(ConceptUtils::normalize) : null;
     this.sourceMatch = sourceMatch;
     this.termTypeMatch = termTypeMatch;
     this.subSourceMatch = subSourceMatch;
+  }
+
+  /**
+   * Returns the match for the synonym's name, as given (before normalizing).
+   *
+   * @return the name match, or null for any name
+   */
+  public ValueMatch getNameMatch() {
+    return nameMatch;
+  }
+
+  /**
+   * Returns the match for the synonym's source.
+   *
+   * @return the source match, or null for any source
+   */
+  public ValueMatch getSourceMatch() {
+    return sourceMatch;
+  }
+
+  /**
+   * Returns the match for the synonym's term type.
+   *
+   * @return the term type match, or null for any term type
+   */
+  public ValueMatch getTermTypeMatch() {
+    return termTypeMatch;
+  }
+
+  /**
+   * Returns the match for the synonym's sub-source.
+   *
+   * @return the sub-source match, or null for any sub-source
+   */
+  public ValueMatch getSubSourceMatch() {
+    return subSourceMatch;
   }
 
   /* see superclass */
