@@ -459,6 +459,34 @@ any `HasRelationship`) need a reindex. Each nested entry is its own hidden docum
 associations (e.g. `Concept_In_Subset`) grow the index, and the inverse lists roughly double that
 growth.
 
+## JSON form
+
+Query trees convert to and from JSON with `json.QueryJson`, the request format of the planned
+composable search endpoint. Every node, value match, and qualifier condition is a JSON object
+whose `type` names it in lower camel case; they nest, so trees do too. The JSON never names
+terminologies: the request does (one per request, from the path), and `QueryJson.readQuery` gives
+them to every node. Unknown types and properties fail.
+
+```json
+{"type": "and", "children": [
+  {"type": "descendantOf", "code": "C3262", "maxLevel": 3},
+  {"type": "not", "child": {"type": "descendantOf", "code": "C4872"}},
+  {"type": "hasRole", "relationshipType": {"type": "exact", "term": "R101"},
+   "target": {"query": {"type": "descendantOrSelfOf", "code": "C12470"}}}
+]}
+```
+
+- Hierarchy nodes take a `code` or a nested `anchor` query (exactly one) and an optional `maxLevel`.
+- A relationship type is just its value match. A target is `{"query": ...}` or `{"match": ...}`.
+- `QueryJsonTest` lists every type with its JSON. It writes each tree, reads it back, and checks the
+  JSON is the same, so the nodes need no `equals`.
+
+The nodes know nothing about JSON. `QueryJson` attaches Jackson annotations to them from the
+outside with mix-ins (`json.QueryMixins`): type names, which getters are properties, and which
+constructor builds each node. Nodes whose JSON differs from their constructors (hierarchy nodes,
+relationship nodes, relationship targets) are read through small builders in `json.JsonBuilders`,
+and hierarchy nodes are written by `json.HierarchyQuerySerializer`.
+
 ## Extending
 
 ### Adding a value match
@@ -587,4 +615,5 @@ final EvsQuery query =
 4. If a value match's OpenSearch query supports ignoring case, implement `SupportsIgnoringCase`.
 5. Add a lesson to `ValueMatchTest` (or a similar test) that runs the query against the test index
    and asserts which values it finds. Test behavior, not the built `QueryBuilder`.
-6. Run `./gradlew spotlessApply`.
+6. Give it a JSON form (see [JSON form](#json-form)): add a mix-in for it to `json.QueryMixins`, list it in `QueryMixins`' `@JsonSubTypes`, register the mix-in in `QueryJson`, and add a case to `QueryJsonTest`.
+7. Run `./gradlew spotlessApply`.
