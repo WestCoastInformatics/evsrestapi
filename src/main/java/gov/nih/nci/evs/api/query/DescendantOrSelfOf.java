@@ -1,8 +1,5 @@
 package gov.nih.nci.evs.api.query;
 
-import gov.nih.nci.evs.api.model.Terminology;
-import java.util.List;
-
 /**
  * Matches the concepts an inner query matches and every concept below them, in the same terminology
  * version. For example, Skin and everything below Skin. Like {@link DescendantOf}, the inner query
@@ -15,46 +12,40 @@ public class DescendantOrSelfOf extends DescendantOf {
    * Instantiates a {@link DescendantOrSelfOf} for the concepts an inner query matches and
    * everything below them.
    *
-   * @param terminologies the terminologies being searched
    * @param ancestorQuery the query matching the anchor concepts
    */
-  public DescendantOrSelfOf(final List<Terminology> terminologies, final EvsQuery ancestorQuery) {
-    super(terminologies, ancestorQuery, ANY_LEVEL, WITH_SELF);
+  public DescendantOrSelfOf(final EvsQuery ancestorQuery) {
+    super(ancestorQuery, ANY_LEVEL, WITH_SELF);
   }
 
   /**
    * Instantiates a {@link DescendantOrSelfOf} for the concepts an inner query matches and those
    * within {@code maxLevel} levels below them.
    *
-   * @param terminologies the terminologies being searched
    * @param ancestorQuery the query matching the anchor concepts
    * @param maxLevel the maximum depth below the anchors, at least 1
    */
-  public DescendantOrSelfOf(
-      final List<Terminology> terminologies, final EvsQuery ancestorQuery, final int maxLevel) {
-    super(terminologies, ancestorQuery, maxLevel, WITH_SELF);
+  public DescendantOrSelfOf(final EvsQuery ancestorQuery, final int maxLevel) {
+    super(ancestorQuery, maxLevel, WITH_SELF);
   }
 
   /**
    * Instantiates a {@link DescendantOrSelfOf} for one concept and everything below it.
    *
-   * @param terminologies the terminologies being searched
    * @param code the anchor concept's code
    */
-  public DescendantOrSelfOf(final List<Terminology> terminologies, final String code) {
-    super(terminologies, getCodeQuery(terminologies, code), ANY_LEVEL, WITH_SELF);
+  public DescendantOrSelfOf(final String code) {
+    super(getCodeQuery(code), ANY_LEVEL, WITH_SELF);
   }
 
   /**
    * Instantiates a {@link DescendantOrSelfOf} for one concept and those within {@code maxLevel}
    * levels below it.
    *
-   * @param terminologies the terminologies being searched
    * @param code the anchor concept's code
    * @param maxLevel the maximum depth below the anchor, at least 1
    */
-  public DescendantOrSelfOf(
-      final List<Terminology> terminologies, final String code, final int maxLevel) {
-    super(terminologies, getCodeQuery(terminologies, code), maxLevel, WITH_SELF);
+  public DescendantOrSelfOf(final String code, final int maxLevel) {
+    super(getCodeQuery(code), maxLevel, WITH_SELF);
   }
 }

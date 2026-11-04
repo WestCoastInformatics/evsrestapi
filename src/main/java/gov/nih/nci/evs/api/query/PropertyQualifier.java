@@ -64,31 +64,29 @@ public final class PropertyQualifier implements QualifierCondition {
    * Returns a query matching property entries with at least one qualifier entry matching this
    * qualifier. Runs inside the query over the property entries.
    *
-   * @param terminologies the terminologies being searched
    * @param qualifierListField the property entry's list of qualifiers, mapped as nested
    * @param operations the OpenSearch operations
+   * @param terminologies the terminologies being searched
    * @return the query
    */
   @Override
   public QueryBuilder getPropertiesMatching(
-      final List<Terminology> terminologies,
       final String qualifierListField,
-      final OpenSearchOperations operations) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     final NameOrCodeMatch typeMatch =
         new NameOrCodeMatch(
-            terminologies,
             getEntryFieldName(qualifierListField, TYPE_NAME_FIELD),
             getEntryFieldName(qualifierListField, TYPE_CODE_FIELD),
             typeNameOrCodeMatch);
     final BoolQueryBuilder entryConditions =
-        QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations));
+        QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations, terminologies));
 
     final boolean hasValueMatch = valueMatch != null;
     if (hasValueMatch) {
       final FieldMatch qualifierValueMatch =
-          new FieldMatch(
-              terminologies, getEntryFieldName(qualifierListField, VALUE_FIELD), valueMatch);
-      entryConditions.must(qualifierValueMatch.fetchOpenSearchQuery(operations));
+          new FieldMatch(getEntryFieldName(qualifierListField, VALUE_FIELD), valueMatch);
+      entryConditions.must(qualifierValueMatch.fetchOpenSearchQuery(operations, terminologies));
     }
 
     return QueryBuilders.nestedQuery(qualifierListField, entryConditions, ScoreMode.None);

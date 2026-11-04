@@ -244,7 +244,7 @@ public class HasRoleTest {
   @Test
   public void testRoleTypeWithoutTargetFindsAnyTarget() {
     final EvsQuery diseasesWithAnyPrimarySite =
-        new HasRole(terminologies, new RelationshipType(new Exact(PRIMARY_SITE)));
+        new HasRole(new RelationshipType(new Exact(PRIMARY_SITE)));
 
     assertEquals(
         Set.of(
@@ -270,7 +270,6 @@ public class HasRoleTest {
     final EvsQuery diseasesWithPrimarySiteSkin = getHasRole(PRIMARY_SITE, SKIN);
     final EvsQuery complicationsOfDiseasesWithPrimarySiteSkin =
         new HasRole(
-            terminologies,
             new RelationshipType(new Exact(COMPLICATION_OF)),
             new RelationshipTarget(diseasesWithPrimarySiteSkin));
 
@@ -287,7 +286,6 @@ public class HasRoleTest {
     final EvsQuery diseasesWithPrimarySiteLiver = getHasRole(PRIMARY_SITE, LIVER);
     final EvsQuery complicationsOfDiseasesWithPrimarySiteLiver =
         new HasRole(
-            terminologies,
             new RelationshipType(new Exact(COMPLICATION_OF)),
             new RelationshipTarget(diseasesWithPrimarySiteLiver));
 
@@ -306,7 +304,6 @@ public class HasRoleTest {
     final EvsQuery partsOfBodySurface = getHasRole(PART_OF, BODY_SURFACE);
     final EvsQuery diseasesWithAnySiteOnBodySurface =
         new HasRole(
-            terminologies,
             new RelationshipType(new CaseInsensitive(new Contains("site"))),
             new RelationshipTarget(partsOfBodySurface));
 
@@ -329,16 +326,16 @@ public class HasRoleTest {
   public void testTargetFoundInOneVersionOnlyMatchesRolesInThatVersion() {
     final EvsQuery diseasesOfSiteNamedSkin =
         new HasRole(
-            bothVersions,
             new RelationshipType(new Exact(PRIMARY_SITE)),
             new RelationshipTarget(new CaseInsensitive(new Exact("Skin"))));
     final EvsQuery complicationsOfDiseasesOfSiteNamedSkin =
         new HasRole(
-            bothVersions,
             new RelationshipType(new Exact(COMPLICATION_OF)),
             new RelationshipTarget(diseasesOfSiteNamedSkin));
 
-    assertEquals(Set.of("Skin Ulcer"), fetchMatchingNames(complicationsOfDiseasesOfSiteNamedSkin));
+    assertEquals(
+        Set.of("Skin Ulcer"),
+        fetchMatchingNames(complicationsOfDiseasesOfSiteNamedSkin, bothVersions));
   }
 
   /**
@@ -349,18 +346,15 @@ public class HasRoleTest {
   public void testTargetFoundInBothVersionsMatchesRolesInBoth() {
     final EvsQuery diseasesOfSkinCode =
         new HasRole(
-            bothVersions,
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(new Exact(SKIN)));
+            new RelationshipType(new Exact(PRIMARY_SITE)), new RelationshipTarget(new Exact(SKIN)));
     final EvsQuery complicationsOfDiseasesOfSkinCode =
         new HasRole(
-            bothVersions,
             new RelationshipType(new Exact(COMPLICATION_OF)),
             new RelationshipTarget(diseasesOfSkinCode));
 
     assertEquals(
         Set.of("Skin Ulcer", "Integument Ulcer"),
-        fetchMatchingNames(complicationsOfDiseasesOfSkinCode));
+        fetchMatchingNames(complicationsOfDiseasesOfSkinCode, bothVersions));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -380,7 +374,7 @@ public class HasRoleTest {
   @Test
   public void testPartialRoleNameFindsNothing() {
     final EvsQuery conceptsWithRoleNamedAnatomicSite =
-        new HasRole(terminologies, new RelationshipType(new Exact("Anatomic_Site")));
+        new HasRole(new RelationshipType(new Exact("Anatomic_Site")));
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithRoleNamedAnatomicSite));
   }
@@ -442,7 +436,7 @@ public class HasRoleTest {
   public void testTargetMatchedByFuzzyName() {
     final RelationshipType roleType = new RelationshipType(new Exact(PRIMARY_SITE));
     final EvsQuery diseasesWithPrimarySiteNamedLikeSkinnn =
-        new HasRole(terminologies, roleType, new RelationshipTarget(new Fuzzy("skinnn")));
+        new HasRole(roleType, new RelationshipTarget(new Fuzzy("skinnn")));
 
     assertEquals(
         Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
@@ -454,7 +448,7 @@ public class HasRoleTest {
   public void testTargetMatchedByCode() {
     final RelationshipType roleType = new RelationshipType(new Exact(PRIMARY_SITE));
     final EvsQuery diseasesWithPrimarySiteCodeSkin =
-        new HasRole(terminologies, roleType, new RelationshipTarget(new Exact(SKIN)));
+        new HasRole(roleType, new RelationshipTarget(new Exact(SKIN)));
 
     assertEquals(
         Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
@@ -470,10 +464,7 @@ public class HasRoleTest {
   public void testTargetMatchedByCodePrefixFindsAnyOfThem() {
     final RelationshipType roleType = new RelationshipType(new Exact(PRIMARY_SITE));
     final EvsQuery diseasesWithPrimarySiteSkinOrLung =
-        new HasRole(
-            terminologies,
-            roleType,
-            new RelationshipTarget(new StartsWith(SKIN_AND_LUNG_CODE_PREFIX)));
+        new HasRole(roleType, new RelationshipTarget(new StartsWith(SKIN_AND_LUNG_CODE_PREFIX)));
 
     assertEquals(
         Set.of(
@@ -493,7 +484,6 @@ public class HasRoleTest {
   public void testTypeAndTargetMatchedByCaseInsensitiveContains() {
     final EvsQuery conceptsWithSiteRoleTargetingSkin =
         new HasRole(
-            terminologies,
             new RelationshipType(new CaseInsensitive(new Contains("site"))),
             new RelationshipTarget(new CaseInsensitive(new Contains("skin"))));
 
@@ -507,7 +497,7 @@ public class HasRoleTest {
   public void testUnmatchedTargetNameOrCodeFindsNothing() {
     final RelationshipType roleType = new RelationshipType(new Exact(PRIMARY_SITE));
     final EvsQuery diseasesWithPrimarySiteNamedExactlyLiver =
-        new HasRole(terminologies, roleType, new RelationshipTarget(new Exact("Liver")));
+        new HasRole(roleType, new RelationshipTarget(new Exact("Liver")));
 
     assertEquals(Set.of(), fetchMatchingNames(diseasesWithPrimarySiteNamedExactlyLiver));
   }
@@ -525,7 +515,7 @@ public class HasRoleTest {
     final EvsQuery hasLungPrimarySite = getHasRole(PRIMARY_SITE, LUNG);
     final EvsQuery hasSkinAssociatedSite = getHasRole(ASSOCIATED_SITE, SKIN);
     final EvsQuery lungDiseasesWithSkinAssociatedSite =
-        new And(terminologies, List.of(hasLungPrimarySite, hasSkinAssociatedSite));
+        new And(List.of(hasLungPrimarySite, hasSkinAssociatedSite));
 
     assertEquals(Set.of("Lung Carcinoma"), fetchMatchingNames(lungDiseasesWithSkinAssociatedSite));
   }
@@ -538,7 +528,7 @@ public class HasRoleTest {
     final ValueMatch missingMatch = null;
     assertThrows(NullPointerException.class, () -> new RelationshipTarget(missingQuery));
     assertThrows(NullPointerException.class, () -> new RelationshipTarget(missingMatch));
-    assertThrows(NullPointerException.class, () -> new HasRole(terminologies, null));
+    assertThrows(NullPointerException.class, () -> new HasRole(null));
   }
 
   /**
@@ -560,7 +550,7 @@ public class HasRoleTest {
    * @return the query
    */
   private HasRole getHasRole(final RelationshipType roleType, final String targetCode) {
-    return new HasRole(terminologies, roleType, new RelationshipTarget(new Exact(targetCode)));
+    return new HasRole(roleType, new RelationshipTarget(new Exact(targetCode)));
   }
 
   /**
@@ -570,7 +560,19 @@ public class HasRoleTest {
    * @return the names of the matching concepts
    */
   private Set<String> fetchMatchingNames(final EvsQuery query) {
-    return fetchMatchingNames(query.fetchOpenSearchQuery(operations), query.getIndexCoordinates());
+    return fetchMatchingNames(query, terminologies);
+  }
+
+  /**
+   * Runs the query against the indexes of the given terminologies.
+   *
+   * @param query the query to run
+   * @param searched the terminologies being searched
+   * @return the names of the matching concepts
+   */
+  private Set<String> fetchMatchingNames(final EvsQuery query, final List<Terminology> searched) {
+    return fetchMatchingNames(
+        query.fetchOpenSearchQuery(operations, searched), EvsQuery.getIndexCoordinates(searched));
   }
 
   /**

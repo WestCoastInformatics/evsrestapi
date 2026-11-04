@@ -157,10 +157,9 @@ public class CombiningPropertiesAndSynonymsTest {
   public void testAndOfPropertiesRequiresEachProperty() {
     final EvsQuery malignantWithIcdO3Code =
         new And(
-            terminologies,
             List.of(
-                new HasProperty(terminologies, new Exact(NEOPLASTIC_STATUS), new Exact(MALIGNANT)),
-                new HasProperty(terminologies, new Exact(ICD_O_3_CODE))));
+                new HasProperty(new Exact(NEOPLASTIC_STATUS), new Exact(MALIGNANT)),
+                new HasProperty(new Exact(ICD_O_3_CODE))));
 
     assertEquals(Set.of("Lung Carcinoma"), fetchMatchingNames(malignantWithIcdO3Code));
   }
@@ -170,10 +169,9 @@ public class CombiningPropertiesAndSynonymsTest {
   public void testOrOfSynonymsFindsSynonymFromEitherSource() {
     final EvsQuery withCdiscOrFdaSynonym =
         new Or(
-            terminologies,
             List.of(
-                new HasSynonym(terminologies, null, new Exact(CDISC), null),
-                new HasSynonym(terminologies, null, new Exact(FDA), null)));
+                new HasSynonym(null, new Exact(CDISC), null),
+                new HasSynonym(null, new Exact(FDA), null)));
 
     assertEquals(
         Set.of("Melanoma", "Nevus", "Lung Carcinoma"), fetchMatchingNames(withCdiscOrFdaSynonym));
@@ -185,9 +183,7 @@ public class CombiningPropertiesAndSynonymsTest {
   @Test
   public void testNotOfSynonymFindsConceptsWithoutMatchingSynonym() {
     final EvsQuery withoutCdiscPt =
-        new Not(
-            terminologies,
-            new HasSynonym(terminologies, null, new Exact(CDISC), new Exact(PREFERRED_TERM)));
+        new Not(new HasSynonym(null, new Exact(CDISC), new Exact(PREFERRED_TERM)));
 
     assertEquals(Set.of("Lung Carcinoma", "Skin"), fetchMatchingNames(withoutCdiscPt));
   }
@@ -197,11 +193,9 @@ public class CombiningPropertiesAndSynonymsTest {
   public void testAndOfSynonymAndPropertyCombinesLists() {
     final EvsQuery malignantWithCdiscPt =
         new And(
-            terminologies,
             List.of(
-                new HasSynonym(terminologies, null, new Exact(CDISC), new Exact(PREFERRED_TERM)),
-                new HasProperty(
-                    terminologies, new Exact(NEOPLASTIC_STATUS), new Exact(MALIGNANT))));
+                new HasSynonym(null, new Exact(CDISC), new Exact(PREFERRED_TERM)),
+                new HasProperty(new Exact(NEOPLASTIC_STATUS), new Exact(MALIGNANT))));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(malignantWithCdiscPt));
   }
@@ -218,10 +212,9 @@ public class CombiningPropertiesAndSynonymsTest {
   public void testAndOfSynonymsMayMatchDifferentSynonyms() {
     final EvsQuery withCdiscSynonymAndSySynonym =
         new And(
-            terminologies,
             List.of(
-                new HasSynonym(terminologies, null, new Exact(CDISC), null),
-                new HasSynonym(terminologies, null, null, new Exact(SYNONYM))));
+                new HasSynonym(null, new Exact(CDISC), null),
+                new HasSynonym(null, null, new Exact(SYNONYM))));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(withCdiscSynonymAndSySynonym));
   }
@@ -229,8 +222,7 @@ public class CombiningPropertiesAndSynonymsTest {
   /** One synonym node keeps its fields on one synonym: no concept has a CDISC SY. */
   @Test
   public void testSingleSynonymNodeKeepsFieldsOnOneSynonym() {
-    final EvsQuery withCdiscSy =
-        new HasSynonym(terminologies, null, new Exact(CDISC), new Exact(SYNONYM));
+    final EvsQuery withCdiscSy = new HasSynonym(null, new Exact(CDISC), new Exact(SYNONYM));
 
     assertEquals(Set.of(), fetchMatchingNames(withCdiscSy));
   }
@@ -244,10 +236,12 @@ public class CombiningPropertiesAndSynonymsTest {
   private Set<String> fetchMatchingNames(final EvsQuery query) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
-            .withQuery(query.fetchOpenSearchQuery(operations))
+            .withQuery(query.fetchOpenSearchQuery(operations, terminologies))
             .withPageable(ALL_CONCEPTS)
             .build();
-    return operations.search(search, Concept.class, query.getIndexCoordinates()).stream()
+    return operations
+        .search(search, Concept.class, EvsQuery.getIndexCoordinates(terminologies))
+        .stream()
         .map(SearchHit::getContent)
         .map(Concept::getName)
         .collect(Collectors.toSet());

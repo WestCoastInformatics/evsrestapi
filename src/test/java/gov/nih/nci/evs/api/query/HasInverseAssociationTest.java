@@ -210,8 +210,7 @@ public class HasInverseAssociationTest {
   @Test
   public void testAssociationTypeWithoutSourceFindsAnyConceptPointedTo() {
     final EvsQuery subsetsWithAnyMember =
-        new HasInverseAssociation(
-            terminologies, new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
+        new HasInverseAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
 
     assertEquals(
         Set.of(
@@ -226,11 +225,9 @@ public class HasInverseAssociationTest {
   @Test
   public void testAssociationCodeMatchesLikeName() {
     final EvsQuery subsetsWithAnyMemberByName =
-        new HasInverseAssociation(
-            terminologies, new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
+        new HasInverseAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
     final EvsQuery subsetsWithAnyMemberByCode =
-        new HasInverseAssociation(
-            terminologies, new RelationshipType(new Exact(CONCEPT_IN_SUBSET_CODE)));
+        new HasInverseAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET_CODE)));
 
     assertEquals(
         fetchMatchingNames(subsetsWithAnyMemberByName),
@@ -260,7 +257,6 @@ public class HasInverseAssociationTest {
   public void testSourceMatchedByCaseInsensitiveContainsOnName() {
     final EvsQuery subsetsContainingANoma =
         new HasInverseAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(new CaseInsensitive(new Contains("NOMA"))));
 
@@ -279,7 +275,6 @@ public class HasInverseAssociationTest {
         getHasInverseAssociation(CUTANEOUS_MELANOMA);
     final EvsQuery subsetsContainingThoseSubsets =
         new HasInverseAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(subsetsContainingCutaneousMelanoma));
 
@@ -302,12 +297,10 @@ public class HasInverseAssociationTest {
   public void testSourceMatchingNothingFindsNothing() {
     final EvsQuery diseasesWithPrimarySiteLiver =
         new HasRole(
-            terminologies,
             new RelationshipType(new Exact(PRIMARY_SITE)),
             new RelationshipTarget(new Exact(LIVER)));
     final EvsQuery subsetsContainingThoseDiseases =
         new HasInverseAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(diseasesWithPrimarySiteLiver));
 
@@ -322,7 +315,7 @@ public class HasInverseAssociationTest {
   @Test
   public void testRoleTypeFindsNoInverseAssociations() {
     final EvsQuery conceptsPointedToByPrimarySiteAssociation =
-        new HasInverseAssociation(terminologies, new RelationshipType(new Exact(PRIMARY_SITE)));
+        new HasInverseAssociation(new RelationshipType(new Exact(PRIMARY_SITE)));
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsPointedToByPrimarySiteAssociation));
   }
@@ -336,7 +329,6 @@ public class HasInverseAssociationTest {
   public void testAssociationDoesNotSearchInverseAssociations() {
     final EvsQuery conceptsInCutaneousMelanoma =
         new HasAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(new Exact(CUTANEOUS_MELANOMA)));
 
@@ -364,12 +356,9 @@ public class HasInverseAssociationTest {
   public void testRoleQueryAsSourceFindsSubsetsOfDiseasesAtSite() {
     final EvsQuery diseasesWithPrimarySiteSkin =
         new HasRole(
-            terminologies,
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(new Exact(SKIN)));
+            new RelationshipType(new Exact(PRIMARY_SITE)), new RelationshipTarget(new Exact(SKIN)));
     final EvsQuery subsetsOfDiseasesWithPrimarySiteSkin =
         new HasInverseAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(diseasesWithPrimarySiteSkin));
 
@@ -389,7 +378,6 @@ public class HasInverseAssociationTest {
         getHasInverseAssociation(CUTANEOUS_MELANOMA);
     final EvsQuery conceptsSharingSubsetWithCutaneousMelanoma =
         new HasAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(subsetsContainingCutaneousMelanoma));
 
@@ -406,17 +394,15 @@ public class HasInverseAssociationTest {
   @Test
   public void testCombinesWithHasAssociation() {
     final EvsQuery hasAnyMember =
-        new HasInverseAssociation(
-            terminologies, new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
+        new HasInverseAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
     final EvsQuery isInCtrpTerminology =
         new HasAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(new Exact(CTRP_TERMINOLOGY)));
     final QueryBuilder nonEmptySubsetsInCtrpTerminology =
         QueryBuilders.boolQuery()
-            .must(hasAnyMember.fetchOpenSearchQuery(operations))
-            .must(isInCtrpTerminology.fetchOpenSearchQuery(operations));
+            .must(hasAnyMember.fetchOpenSearchQuery(operations, terminologies))
+            .must(isInCtrpTerminology.fetchOpenSearchQuery(operations, terminologies));
 
     assertEquals(
         Set.of("CTRP Disease Terminology"), fetchMatchingNames(nonEmptySubsetsInCtrpTerminology));
@@ -425,7 +411,7 @@ public class HasInverseAssociationTest {
   /** An association type is required. */
   @Test
   public void testMissingAssociationTypeThrowsErrors() {
-    assertThrows(NullPointerException.class, () -> new HasInverseAssociation(terminologies, null));
+    assertThrows(NullPointerException.class, () -> new HasInverseAssociation(null));
   }
 
   /**
@@ -437,7 +423,6 @@ public class HasInverseAssociationTest {
    */
   private HasInverseAssociation getHasInverseAssociation(final String sourceCode) {
     return new HasInverseAssociation(
-        terminologies,
         new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
         new RelationshipTarget(new Exact(sourceCode)));
   }
@@ -449,7 +434,7 @@ public class HasInverseAssociationTest {
    * @return the names of the matching concepts
    */
   private Set<String> fetchMatchingNames(final EvsQuery query) {
-    return fetchMatchingNames(query.fetchOpenSearchQuery(operations));
+    return fetchMatchingNames(query.fetchOpenSearchQuery(operations, terminologies));
   }
 
   /**

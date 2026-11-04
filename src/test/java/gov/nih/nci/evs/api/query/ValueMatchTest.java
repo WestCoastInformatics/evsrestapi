@@ -312,10 +312,10 @@ public class ValueMatchTest {
    */
   @DemonstratesFieldMatch
   private Set<String> fetchMatchingNames(final ValueMatch match) {
-    final EvsQuery namesMatching = new FieldMatch(TERMINOLOGIES, NAME_FIELD, match);
+    final EvsQuery namesMatching = new FieldMatch(NAME_FIELD, match);
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
-            .withQuery(namesMatching.fetchOpenSearchQuery(operations))
+            .withQuery(namesMatching.fetchOpenSearchQuery(operations, TERMINOLOGIES))
             .withPageable(ALL_NAMES)
             .build();
     return operations.search(search, IndexedName.class, INDEX).stream()

@@ -9,8 +9,8 @@ import org.opensearch.index.query.QueryBuilders;
 
 /**
  * Matches concepts that the child query doesn't match, including concepts missing the child's
- * field. E.g. {@code new Not(t, new InSubset(t, send))} keeps concepts outside SEND, including
- * concepts in no subset at all.
+ * field. E.g. {@code new Not(new InSubset(send))} keeps concepts outside SEND, including concepts
+ * in no subset at all.
  *
  * <p>Adds nothing to the score, so wrapping it in an {@link And} doesn't change how the other
  * children rank.
@@ -23,20 +23,19 @@ public class Not extends EvsQuery {
   /**
    * Instantiates a {@link Not}.
    *
-   * @param terminologies the terminologies being searched
    * @param child the query concepts must not match
    */
-  public Not(final List<Terminology> terminologies, final EvsQuery child) {
-    super(terminologies);
+  public Not(final EvsQuery child) {
     this.child = Objects.requireNonNull(child, "child");
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     // A bool query with only must_not would score every match 1; a match_all filter scores 0
     return QueryBuilders.boolQuery()
         .filter(QueryBuilders.matchAllQuery())
-        .mustNot(child.fetchOpenSearchQuery(operations));
+        .mustNot(child.fetchOpenSearchQuery(operations, terminologies));
   }
 }

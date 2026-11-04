@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -174,13 +175,13 @@ public class HierarchyQueryTest {
   /** Everything below A, at any depth, and not A itself. */
   @Test
   public void testDescendantOfMatchesEverythingBelowAnchor() {
-    assertBoth(t -> new DescendantOf(t, "A"), "C", "D", "E", "F", "G");
+    assertBoth(() -> new DescendantOf("A"), "C", "D", "E", "F", "G");
   }
 
   /** A leaf has nothing below it. */
   @Test
   public void testDescendantOfLeafMatchesNothing() {
-    assertBoth(t -> new DescendantOf(t, "G"));
+    assertBoth(() -> new DescendantOf("G"));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -190,13 +191,13 @@ public class HierarchyQueryTest {
   /** A and everything below A. */
   @Test
   public void testDescendantOrSelfOfIncludesAnchorAndEverythingBelow() {
-    assertBoth(t -> new DescendantOrSelfOf(t, "A"), "A", "C", "D", "E", "F", "G");
+    assertBoth(() -> new DescendantOrSelfOf("A"), "A", "C", "D", "E", "F", "G");
   }
 
   /** A leaf matches only itself. */
   @Test
   public void testDescendantOrSelfOfLeafMatchesItself() {
-    assertBoth(t -> new DescendantOrSelfOf(t, "G"), "G");
+    assertBoth(() -> new DescendantOrSelfOf("G"), "G");
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -206,7 +207,7 @@ public class HierarchyQueryTest {
   /** maxLevel 1 is the direct children. */
   @Test
   public void testDescendantOfMaxLevelOneMatchesDirectChildren() {
-    assertBoth(t -> new DescendantOf(t, "A", 1), "C", "D");
+    assertBoth(() -> new DescendantOf("A", 1), "C", "D");
   }
 
   /**
@@ -215,13 +216,13 @@ public class HierarchyQueryTest {
    */
   @Test
   public void testDescendantOfMaxLevelTwoUsesShortestDistance() {
-    assertBoth(t -> new DescendantOf(t, "R", 2), "A", "B", "C", "D", "F");
+    assertBoth(() -> new DescendantOf("R", 2), "A", "B", "C", "D", "F");
   }
 
   /** With the anchor included, the anchor is depth 0 and always matches. */
   @Test
   public void testDescendantOrSelfOfMaxLevelOneIncludesAnchorAndChildren() {
-    assertBoth(t -> new DescendantOrSelfOf(t, "A", 1), "A", "C", "D");
+    assertBoth(() -> new DescendantOrSelfOf("A", 1), "A", "C", "D");
   }
 
   /** maxLevel must be at least 1. */
@@ -229,9 +230,7 @@ public class HierarchyQueryTest {
   public void testDescendantOfMaxLevelZeroThrowsErrors() {
     final int invalidMaxLevel = 0;
 
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> new DescendantOf(List.of(indexed), "A", invalidMaxLevel));
+    assertThrows(IllegalArgumentException.class, () -> new DescendantOf("A", invalidMaxLevel));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -242,13 +241,13 @@ public class HierarchyQueryTest {
   @Test
   public void testDescendantOfInnerQueryWithSeveralAnchorsMatchesBelowEach() {
     assertBoth(
-        t -> new DescendantOf(t, new MatchAnyOf(t, GROUP_FIELD, Set.of(GROUP_TAG))), "E", "F", "G");
+        () -> new DescendantOf(new MatchAnyOf(GROUP_FIELD, Set.of(GROUP_TAG))), "E", "F", "G");
   }
 
   /** An inner query matching nothing gives nothing. */
   @Test
   public void testDescendantOfInnerQueryWithNoMatchesMatchesNothing() {
-    assertBoth(t -> new DescendantOf(t, new MatchAnyOf(t, GROUP_FIELD, Set.of(UNMATCHED_TAG))));
+    assertBoth(() -> new DescendantOf(new MatchAnyOf(GROUP_FIELD, Set.of(UNMATCHED_TAG))));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -258,7 +257,7 @@ public class HierarchyQueryTest {
   /** Below the children of R: the inner query is itself a hierarchy node. */
   @Test
   public void testDescendantOfNestedDescendantOfMatchesBelowChildren() {
-    assertBoth(t -> new DescendantOf(t, new DescendantOf(t, "R", 1)), "C", "D", "E", "F", "G");
+    assertBoth(() -> new DescendantOf(new DescendantOf("R", 1)), "C", "D", "E", "F", "G");
   }
 
   /** Two levels of nesting with depth limits at each. */
@@ -266,7 +265,7 @@ public class HierarchyQueryTest {
   public void testDescendantOrSelfOfDoublyNestedWithDepthsMatchesExpectedLevels() {
     // Children of R are A and B; their children are C, D, and F; those and one more level below
     assertBoth(
-        t -> new DescendantOrSelfOf(t, new DescendantOf(t, new DescendantOf(t, "R", 1), 1), 1),
+        () -> new DescendantOrSelfOf(new DescendantOf(new DescendantOf("R", 1), 1), 1),
         "C",
         "D",
         "E",
@@ -279,8 +278,8 @@ public class HierarchyQueryTest {
     assertRawQueryBoth(
         t ->
             QueryBuilders.boolQuery()
-                .must(new DescendantOf(t, "A").fetchOpenSearchQuery(operations))
-                .mustNot(new DescendantOf(t, "C").fetchOpenSearchQuery(operations)),
+                .must(new DescendantOf("A").fetchOpenSearchQuery(operations, t))
+                .mustNot(new DescendantOf("C").fetchOpenSearchQuery(operations, t)),
         "C",
         "D",
         "F");
@@ -294,9 +293,9 @@ public class HierarchyQueryTest {
   @Test
   public void testDescendantOfIndexedAndLegacyTogetherMatchesInEachIndex() {
     final List<Terminology> both = List.of(indexed, legacy);
-    final DescendantOf query = new DescendantOf(both, "A");
+    final DescendantOf query = new DescendantOf("A");
     final Map<String, Set<String>> byIndex =
-        fetchCodesByIndex(both, query.fetchOpenSearchQuery(operations));
+        fetchCodesByIndex(both, query.fetchOpenSearchQuery(operations, both));
     final Set<String> expected = Set.of("C", "D", "E", "F", "G");
 
     assertThat(byIndex.get(indexed.getIndexName())).isEqualTo(expected);
@@ -310,43 +309,43 @@ public class HierarchyQueryTest {
   /** Everything above G, and not G itself. */
   @Test
   public void testAncestorOfMatchesEverythingAboveAnchor() {
-    assertBoth(t -> new AncestorOf(t, "G"), "E", "C", "A", "R");
+    assertBoth(() -> new AncestorOf("G"), "E", "C", "A", "R");
   }
 
   /** F has two parents, so its ancestors come from both paths. */
   @Test
   public void testAncestorOfPolyhierarchyFollowsEveryPath() {
-    assertBoth(t -> new AncestorOf(t, "F"), "D", "B", "A", "R");
+    assertBoth(() -> new AncestorOf("F"), "D", "B", "A", "R");
   }
 
   /** The root has nothing above it. */
   @Test
   public void testAncestorOfRootMatchesNothing() {
-    assertBoth(t -> new AncestorOf(t, "R"));
+    assertBoth(() -> new AncestorOf("R"));
   }
 
   /** AncestorOrSelfOf also matches the anchor. */
   @Test
   public void testAncestorOrSelfOfIncludesAnchorAndEverythingAbove() {
-    assertBoth(t -> new AncestorOrSelfOf(t, "G"), "G", "E", "C", "A", "R");
+    assertBoth(() -> new AncestorOrSelfOf("G"), "G", "E", "C", "A", "R");
   }
 
   /** The root matches only itself. */
   @Test
   public void testAncestorOrSelfOfRootMatchesItself() {
-    assertBoth(t -> new AncestorOrSelfOf(t, "R"), "R");
+    assertBoth(() -> new AncestorOrSelfOf("R"), "R");
   }
 
   /** maxLevel 1 is the direct parents. */
   @Test
   public void testAncestorOfMaxLevelOneMatchesDirectParents() {
-    assertBoth(t -> new AncestorOf(t, "F", 1), "D", "B");
+    assertBoth(() -> new AncestorOf("F", 1), "D", "B");
   }
 
   /** maxLevel 1 with the anchor included is the anchor and its direct parents. */
   @Test
   public void testAncestorOrSelfOfMaxLevelOneIncludesAnchorAndParents() {
-    assertBoth(t -> new AncestorOrSelfOf(t, "F", 1), "F", "D", "B");
+    assertBoth(() -> new AncestorOrSelfOf("F", 1), "F", "D", "B");
   }
 
   /**
@@ -355,13 +354,13 @@ public class HierarchyQueryTest {
    */
   @Test
   public void testAncestorOfMaxLevelTwoUsesShortestDistanceForPolyhierarchy() {
-    assertBoth(t -> new AncestorOf(t, "F", 2), "D", "B", "A", "R");
+    assertBoth(() -> new AncestorOf("F", 2), "D", "B", "A", "R");
   }
 
   /** maxLevel 2 above G, which has a single path, stops at its parent and grandparent. */
   @Test
   public void testAncestorOfMaxLevelTwoStopsAtGrandparent() {
-    assertBoth(t -> new AncestorOf(t, "G", 2), "E", "C");
+    assertBoth(() -> new AncestorOf("G", 2), "E", "C");
   }
 
   /** maxLevel must be at least 1. */
@@ -369,15 +368,13 @@ public class HierarchyQueryTest {
   public void testAncestorOfMaxLevelZeroThrowsErrors() {
     final int invalidMaxLevel = 0;
 
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> new AncestorOf(List.of(indexed), "G", invalidMaxLevel));
+    assertThrows(IllegalArgumentException.class, () -> new AncestorOf("G", invalidMaxLevel));
   }
 
   /** An inner query matching B and C: above either of them. */
   @Test
   public void testAncestorOfInnerQueryWithSeveralAnchorsMatchesAboveEach() {
-    assertBoth(t -> new AncestorOf(t, new MatchAnyOf(t, GROUP_FIELD, Set.of(GROUP_TAG))), "A", "R");
+    assertBoth(() -> new AncestorOf(new MatchAnyOf(GROUP_FIELD, Set.of(GROUP_TAG))), "A", "R");
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -387,19 +384,19 @@ public class HierarchyQueryTest {
   /** Above the children of A (C and D): A and R. */
   @Test
   public void testAncestorOfDescendantOfMatchesAboveChildren() {
-    assertBoth(t -> new AncestorOf(t, new DescendantOf(t, "A", 1)), "A", "R");
+    assertBoth(() -> new AncestorOf(new DescendantOf("A", 1)), "A", "R");
   }
 
   /** Below the parent of G (E): G. */
   @Test
   public void testDescendantOfAncestorOfMatchesBelowParent() {
-    assertBoth(t -> new DescendantOf(t, new AncestorOf(t, "G", 1)), "G");
+    assertBoth(() -> new DescendantOf(new AncestorOf("G", 1)), "G");
   }
 
   /** Siblings of C, and C: the children of C's parents. */
   @Test
   public void testDescendantOfAncestorOfMaxLevelOneMatchesSiblingsAndSelf() {
-    assertBoth(t -> new DescendantOf(t, new AncestorOf(t, "C", 1), 1), "C", "D");
+    assertBoth(() -> new DescendantOf(new AncestorOf("C", 1), 1), "C", "D");
   }
 
   /** Common ancestors of G and F, composed in a raw bool. */
@@ -408,8 +405,8 @@ public class HierarchyQueryTest {
     assertRawQueryBoth(
         t ->
             QueryBuilders.boolQuery()
-                .must(new AncestorOf(t, "G").fetchOpenSearchQuery(operations))
-                .must(new AncestorOf(t, "F").fetchOpenSearchQuery(operations)),
+                .must(new AncestorOf("G").fetchOpenSearchQuery(operations, t))
+                .must(new AncestorOf("F").fetchOpenSearchQuery(operations, t)),
         "A",
         "R");
   }
@@ -418,9 +415,9 @@ public class HierarchyQueryTest {
   @Test
   public void testAncestorOfIndexedAndLegacyTogetherMatchesInEachIndex() {
     final List<Terminology> both = List.of(indexed, legacy);
-    final AncestorOf query = new AncestorOf(both, "G");
+    final AncestorOf query = new AncestorOf("G");
     final Map<String, Set<String>> byIndex =
-        fetchCodesByIndex(both, query.fetchOpenSearchQuery(operations));
+        fetchCodesByIndex(both, query.fetchOpenSearchQuery(operations, both));
     final Set<String> expected = Set.of("E", "C", "A", "R");
 
     assertThat(byIndex.get(indexed.getIndexName())).isEqualTo(expected);
@@ -431,20 +428,15 @@ public class HierarchyQueryTest {
   // Helpers
   // ---------------------------------------------------------------------------------------------
 
-  /** Builds a query for a list of terminologies. */
-  private interface QueryFactory {
-    EvsQuery build(List<Terminology> terminologies);
-  }
-
   /**
    * Asserts the query matches exactly the expected codes in the indexed copy and in the legacy
    * copy.
    *
-   * @param factory builds the query for one terminology
+   * @param factory builds the query, which is run against each terminology
    * @param expected the expected codes
    */
-  private void assertBoth(final QueryFactory factory, final String... expected) {
-    assertRawQueryBoth(t -> factory.build(t).fetchOpenSearchQuery(operations), expected);
+  private void assertBoth(final Supplier<EvsQuery> factory, final String... expected) {
+    assertRawQueryBoth(t -> factory.get().fetchOpenSearchQuery(operations, t), expected);
   }
 
   /**

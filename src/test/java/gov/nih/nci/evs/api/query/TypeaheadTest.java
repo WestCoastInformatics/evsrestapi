@@ -213,7 +213,7 @@ public class TypeaheadTest {
   /** A typeahead can't be built for text without words. */
   @Test
   public void testTypeaheadRejectsTextWithoutWords() {
-    assertThrows(IllegalArgumentException.class, () -> new Typeahead(List.of(terminology), "---"));
+    assertThrows(IllegalArgumentException.class, () -> new Typeahead("---"));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -410,9 +410,12 @@ public class TypeaheadTest {
   /** With highlights included, OpenSearch marks the matched words of the name. */
   @Test
   public void testHighlightsComeFromOpenSearch() {
-    final Typeahead typeahead = new Typeahead(List.of(terminology), "lung carc");
+    final Typeahead typeahead = new Typeahead("lung carc");
     final SearchHit<Concept> lungCarcinoma =
-        typeahead.fetchConcepts(operations, ALL_CONCEPTS, MINIMAL_FIELDS_AND_HIGHLIGHTS).stream()
+        typeahead
+            .fetchConcepts(
+                operations, List.of(terminology), ALL_CONCEPTS, MINIMAL_FIELDS_AND_HIGHLIGHTS)
+            .stream()
             .filter(hit -> hit.getContent().getCode().equals("C02"))
             .findFirst()
             .orElseThrow();
@@ -446,8 +449,8 @@ public class TypeaheadTest {
       final List<Terminology> terminologies,
       final String incompleteTerm,
       final Function<Concept, String> getValue) {
-    final Typeahead typeahead = new Typeahead(terminologies, incompleteTerm);
-    return typeahead.fetchConcepts(operations, ALL_CONCEPTS, MINIMAL_FIELDS).stream()
+    final Typeahead typeahead = new Typeahead(incompleteTerm);
+    return typeahead.fetchConcepts(operations, terminologies, ALL_CONCEPTS, MINIMAL_FIELDS).stream()
         .map(SearchHit::getContent)
         .map(getValue)
         .collect(Collectors.toList());

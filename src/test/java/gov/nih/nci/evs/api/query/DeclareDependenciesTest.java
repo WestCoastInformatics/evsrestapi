@@ -78,7 +78,7 @@ public class DeclareDependenciesTest {
   public void setUp() {
     terminologies =
         List.of(QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME));
-    conceptsWithSkinCode = new FieldMatch(terminologies, "code", new Exact("C12470"));
+    conceptsWithSkinCode = new FieldMatch("code", new Exact("C12470"));
     operations = mock(OpenSearchOperations.class);
   }
 
@@ -148,8 +148,7 @@ public class DeclareDependenciesTest {
         QueryTestTerminologies.getTerminology(TERMINOLOGY, CURRENT_VERSION, "concept_ncit_2512e");
     final Terminology previous =
         QueryTestTerminologies.getTerminology(TERMINOLOGY, PREVIOUS_VERSION, "concept_ncit_2511d");
-    final EvsQuery conceptsWithSkinCodeInTwoVersions =
-        new FieldMatch(List.of(current, previous), "code", new Exact("C12470"));
+    final EvsQuery conceptsWithSkinCodeInTwoVersions = new FieldMatch("code", new Exact("C12470"));
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(
             getPage(
@@ -158,7 +157,9 @@ public class DeclareDependenciesTest {
                     getEmptyHit("C1", previous.getIndexName()),
                     getEmptyHit("C2", current.getIndexName()))));
 
-    return EvsQuery.declareDependencies(operations, conceptsWithSkinCodeInTwoVersions).get(0);
+    return EvsQuery.declareDependencies(
+            operations, List.of(current, previous), conceptsWithSkinCodeInTwoVersions)
+        .get(0);
   }
 
   /**
@@ -205,7 +206,8 @@ public class DeclareDependenciesTest {
    * @return the number of codes found, across terminology versions
    */
   private int fetchDependencyCodeCount() {
-    final ConceptKeys keys = EvsQuery.declareDependencies(operations, conceptsWithSkinCode).get(0);
+    final ConceptKeys keys =
+        EvsQuery.declareDependencies(operations, terminologies, conceptsWithSkinCode).get(0);
     return keys.getCodesByTerminologyVersion().values().stream().mapToInt(Set::size).sum();
   }
 
@@ -227,11 +229,10 @@ public class DeclareDependenciesTest {
             });
     final HasRole hasRole =
         new HasRole(
-            terminologies,
-            new RelationshipType(new Exact("R101")),
-            new RelationshipTarget(conceptsWithSkinCode));
+            new RelationshipType(new Exact("R101")), new RelationshipTarget(conceptsWithSkinCode));
 
-    assertThrows(IllegalStateException.class, () -> hasRole.fetchOpenSearchQuery(operations));
+    assertThrows(
+        IllegalStateException.class, () -> hasRole.fetchOpenSearchQuery(operations, terminologies));
   }
 
   /**

@@ -66,47 +66,39 @@ public final class HasSynonym extends EvsQuery {
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with a matching name, from any source.
    *
-   * @param terminologies the terminologies being searched
    * @param nameMatch the match for the synonym's name
    */
-  public HasSynonym(final List<Terminology> terminologies, final ValueMatch nameMatch) {
-    this(terminologies, Objects.requireNonNull(nameMatch, "nameMatch"), null, null, null);
+  public HasSynonym(final ValueMatch nameMatch) {
+    this(Objects.requireNonNull(nameMatch, "nameMatch"), null, null, null);
   }
 
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with a matching name, source, and term
    * type, from any sub-source.
    *
-   * @param terminologies the terminologies being searched
    * @param nameMatch the match for the synonym's name, or null for any name
    * @param sourceMatch the match for the synonym's source, or null for any source
    * @param termTypeMatch the match for the synonym's term type, or null for any term type
    */
   public HasSynonym(
-      final List<Terminology> terminologies,
-      final ValueMatch nameMatch,
-      final ValueMatch sourceMatch,
-      final ValueMatch termTypeMatch) {
-    this(terminologies, nameMatch, sourceMatch, termTypeMatch, null);
+      final ValueMatch nameMatch, final ValueMatch sourceMatch, final ValueMatch termTypeMatch) {
+    this(nameMatch, sourceMatch, termTypeMatch, null);
   }
 
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with a matching name, source, term
    * type, and sub-source.
    *
-   * @param terminologies the terminologies being searched
    * @param nameMatch the match for the synonym's name, or null for any name
    * @param sourceMatch the match for the synonym's source, or null for any source
    * @param termTypeMatch the match for the synonym's term type, or null for any term type
    * @param subSourceMatch the match for the synonym's sub-source, or null for any sub-source
    */
   public HasSynonym(
-      final List<Terminology> terminologies,
       final ValueMatch nameMatch,
       final ValueMatch sourceMatch,
       final ValueMatch termTypeMatch,
       final ValueMatch subSourceMatch) {
-    super(terminologies);
     final boolean hasNameMatch = nameMatch != null;
     this.normalizedNameMatch =
         hasNameMatch ? nameMatch.getWithTermsMapped(ConceptUtils::normalize) : null;
@@ -117,12 +109,14 @@ public final class HasSynonym extends EvsQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final BoolQueryBuilder entryConditions = QueryBuilders.boolQuery();
-    addFieldCondition(entryConditions, NORMALIZED_NAME_FIELD, normalizedNameMatch, operations);
-    addFieldCondition(entryConditions, SOURCE_FIELD, sourceMatch, operations);
-    addFieldCondition(entryConditions, TERM_TYPE_FIELD, termTypeMatch, operations);
-    addFieldCondition(entryConditions, SUB_SOURCE_FIELD, subSourceMatch, operations);
+    addFieldCondition(
+        entryConditions, NORMALIZED_NAME_FIELD, normalizedNameMatch, operations, terminologies);
+    addFieldCondition(entryConditions, SOURCE_FIELD, sourceMatch, operations, terminologies);
+    addFieldCondition(entryConditions, TERM_TYPE_FIELD, termTypeMatch, operations, terminologies);
+    addFieldCondition(entryConditions, SUB_SOURCE_FIELD, subSourceMatch, operations, terminologies);
 
     return QueryBuilders.nestedQuery(SYNONYMS_FIELD, entryConditions, ScoreMode.None);
   }
@@ -135,16 +129,18 @@ public final class HasSynonym extends EvsQuery {
    * @param field the synonym entry's field
    * @param match the match for the field, or null to leave the field unconstrained
    * @param operations the OpenSearch operations
+   * @param terminologies the terminologies being searched
    */
-  private void addFieldCondition(
+  private static void addFieldCondition(
       final BoolQueryBuilder entryConditions,
       final String field,
       final ValueMatch match,
-      final OpenSearchOperations operations) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     final boolean hasMatch = match != null;
     if (hasMatch) {
       entryConditions.filter(
-          new FieldMatch(terminologies, field, match).fetchOpenSearchQuery(operations));
+          new FieldMatch(field, match).fetchOpenSearchQuery(operations, terminologies));
     }
   }
 }

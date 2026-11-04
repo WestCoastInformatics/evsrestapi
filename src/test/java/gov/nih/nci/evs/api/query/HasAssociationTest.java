@@ -168,7 +168,7 @@ public class HasAssociationTest {
   @Test
   public void testAssociationTypeWithoutTargetFindsAnyTarget() {
     final EvsQuery conceptsInAnySubset =
-        new HasAssociation(terminologies, new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
+        new HasAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
 
     assertEquals(
         Set.of("Cutaneous Melanoma", "Lung Carcinoma", "CTRP Disease Terminology", "Skin"),
@@ -179,9 +179,9 @@ public class HasAssociationTest {
   @Test
   public void testAssociationCodeMatchesLikeName() {
     final EvsQuery conceptsInAnySubsetByName =
-        new HasAssociation(terminologies, new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
+        new HasAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
     final EvsQuery conceptsInAnySubsetByCode =
-        new HasAssociation(terminologies, new RelationshipType(new Exact(CONCEPT_IN_SUBSET_CODE)));
+        new HasAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET_CODE)));
 
     assertEquals(
         fetchMatchingNames(conceptsInAnySubsetByName),
@@ -197,7 +197,6 @@ public class HasAssociationTest {
   public void testTargetMatchedByCode() {
     final EvsQuery conceptsInCtrpDiseases =
         new HasAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(new Exact(CTRP_DISEASES)));
 
@@ -212,7 +211,6 @@ public class HasAssociationTest {
   public void testTargetMatchedByCaseInsensitiveContainsOnName() {
     final EvsQuery conceptsInSubsetNamedLikeCtrp =
         new HasAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(new CaseInsensitive(new Contains("ctrp"))));
 
@@ -230,12 +228,10 @@ public class HasAssociationTest {
   public void testTargetQueryFindsConceptsInSubsetsOfSubset() {
     final EvsQuery subsetsInCtrpTerminology =
         new HasAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(new Exact(CTRP_TERMINOLOGY)));
     final EvsQuery conceptsInSubsetsOfCtrpTerminology =
         new HasAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(subsetsInCtrpTerminology));
 
@@ -251,7 +247,7 @@ public class HasAssociationTest {
   @Test
   public void testRoleTypeFindsNoAssociations() {
     final EvsQuery conceptsWithPrimarySiteAssociation =
-        new HasAssociation(terminologies, new RelationshipType(new Exact(PRIMARY_SITE)));
+        new HasAssociation(new RelationshipType(new Exact(PRIMARY_SITE)));
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithPrimarySiteAssociation));
   }
@@ -260,7 +256,7 @@ public class HasAssociationTest {
   @Test
   public void testAssociationTypeFindsNoRoles() {
     final EvsQuery conceptsWithSubsetRole =
-        new HasRole(terminologies, new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
+        new HasRole(new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithSubsetRole));
   }
@@ -274,14 +270,11 @@ public class HasAssociationTest {
   public void testRoleTargetCanBeAssociationQuery() {
     final EvsQuery sitesOfInterest =
         new HasAssociation(
-            terminologies,
             new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
             new RelationshipTarget(new Exact(SITES_OF_INTEREST)));
     final EvsQuery diseasesWithPrimarySiteOfInterest =
         new HasRole(
-            terminologies,
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(sitesOfInterest));
+            new RelationshipType(new Exact(PRIMARY_SITE)), new RelationshipTarget(sitesOfInterest));
 
     assertEquals(
         Set.of("Cutaneous Melanoma"), fetchMatchingNames(diseasesWithPrimarySiteOfInterest));
@@ -290,7 +283,7 @@ public class HasAssociationTest {
   /** An association type is required. */
   @Test
   public void testRejectsMissingType() {
-    assertThrows(NullPointerException.class, () -> new HasAssociation(terminologies, null));
+    assertThrows(NullPointerException.class, () -> new HasAssociation(null));
   }
 
   /**
@@ -302,10 +295,12 @@ public class HasAssociationTest {
   private Set<String> fetchMatchingNames(final EvsQuery query) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
-            .withQuery(query.fetchOpenSearchQuery(operations))
+            .withQuery(query.fetchOpenSearchQuery(operations, terminologies))
             .withPageable(ALL_CONCEPTS)
             .build();
-    return operations.search(search, Concept.class, query.getIndexCoordinates()).stream()
+    return operations
+        .search(search, Concept.class, EvsQuery.getIndexCoordinates(terminologies))
+        .stream()
         .map(SearchHit::getContent)
         .map(Concept::getName)
         .collect(Collectors.toSet());

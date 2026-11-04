@@ -53,12 +53,9 @@ public abstract class HasRelationship extends EvsQuery {
    * Instantiates a {@link HasRelationship} that matches a relationship of the given type, pointing
    * to any concept.
    *
-   * @param terminologies the terminologies being searched
    * @param relationshipType the relationship's type
    */
-  protected HasRelationship(
-      final List<Terminology> terminologies, final RelationshipType relationshipType) {
-    super(terminologies);
+  protected HasRelationship(final RelationshipType relationshipType) {
     this.relationshipType = Objects.requireNonNull(relationshipType, "relationshipType");
     this.relationshipTarget = null;
   }
@@ -67,15 +64,11 @@ public abstract class HasRelationship extends EvsQuery {
    * Instantiates a {@link HasRelationship} that matches a relationship of the given type pointing
    * to the target.
    *
-   * @param terminologies the terminologies being searched
    * @param relationshipType the relationship's type
    * @param relationshipTarget what the relationship must point to
    */
   protected HasRelationship(
-      final List<Terminology> terminologies,
-      final RelationshipType relationshipType,
-      final RelationshipTarget relationshipTarget) {
-    super(terminologies);
+      final RelationshipType relationshipType, final RelationshipTarget relationshipTarget) {
     this.relationshipType = Objects.requireNonNull(relationshipType, "relationshipType");
     this.relationshipTarget = Objects.requireNonNull(relationshipTarget, "relationshipTarget");
   }
@@ -137,15 +130,18 @@ public abstract class HasRelationship extends EvsQuery {
    * @return the query builder
    */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
-    final QueryBuilder entriesOfType = relationshipType.getEntriesOfType(this, operations);
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
+    final QueryBuilder entriesOfType =
+        relationshipType.getEntriesOfType(this, operations, terminologies);
 
     final boolean hasRelationshipTarget = getHasRelationshipTarget();
     if (!hasRelationshipTarget) {
       return getConceptsWithAnyEntryMatching(entriesOfType);
     }
 
-    return relationshipTarget.fetchConceptsPointingToTarget(this, entriesOfType, operations);
+    return relationshipTarget.fetchConceptsPointingToTarget(
+        this, entriesOfType, operations, terminologies);
   }
 
   /**
@@ -174,21 +170,22 @@ public abstract class HasRelationship extends EvsQuery {
    * @param terminologyVersion the terminology version the concept must be from
    * @param entryConditions the conditions one entry must meet
    * @param operations the OpenSearch operations, for building the field matches
+   * @param terminologies the terminologies being searched
    * @return the query builder
    */
   QueryBuilder getConceptsInVersionWithAnyEntryMatching(
       final ConceptKeys.TerminologyVersion terminologyVersion,
       final QueryBuilder entryConditions,
-      final OpenSearchOperations operations) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     final FieldMatch terminologyMatch =
-        new FieldMatch(
-            terminologies, TERMINOLOGY_FIELD, new Exact(terminologyVersion.terminology()));
+        new FieldMatch(TERMINOLOGY_FIELD, new Exact(terminologyVersion.terminology()));
     final FieldMatch versionMatch =
-        new FieldMatch(terminologies, VERSION_FIELD, new Exact(terminologyVersion.version()));
+        new FieldMatch(VERSION_FIELD, new Exact(terminologyVersion.version()));
 
     return QueryBuilders.boolQuery()
-        .filter(terminologyMatch.fetchOpenSearchQuery(operations))
-        .filter(versionMatch.fetchOpenSearchQuery(operations))
+        .filter(terminologyMatch.fetchOpenSearchQuery(operations, terminologies))
+        .filter(versionMatch.fetchOpenSearchQuery(operations, terminologies))
         .filter(getConceptsWithAnyEntryMatching(entryConditions));
   }
 }

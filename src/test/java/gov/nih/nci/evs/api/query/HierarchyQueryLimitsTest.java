@@ -160,8 +160,7 @@ public class HierarchyQueryLimitsTest {
   /** MatchAnyOf with exactly the limit of values is accepted. */
   @Test
   public void testMatchAnyOfAtLimitIsAccepted() {
-    assertDoesNotThrow(
-        () -> new MatchAnyOf(terminologies, ANCESTORS_FIELD, getCodes(MatchAnyOf.MAX_VALUES)));
+    assertDoesNotThrow(() -> new MatchAnyOf(ANCESTORS_FIELD, getCodes(MatchAnyOf.MAX_VALUES)));
   }
 
   /** MatchAnyOf with one more value than the limit throws an error naming the field and count. */
@@ -170,7 +169,7 @@ public class HierarchyQueryLimitsTest {
     final IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new MatchAnyOf(terminologies, ANCESTORS_FIELD, getCodes(TOO_MANY)));
+            () -> new MatchAnyOf(ANCESTORS_FIELD, getCodes(TOO_MANY)));
 
     assertTrue(e.getMessage().contains("'" + ANCESTORS_FIELD + "'"), e.getMessage());
     assertTrue(e.getMessage().contains(String.valueOf(TOO_MANY)), e.getMessage());
@@ -222,8 +221,7 @@ public class HierarchyQueryLimitsTest {
   @Test
   public void testDescendantOfWithNullAnchorQueryThrowsErrorNamingAnchorQuery() {
     final NullPointerException e =
-        assertThrows(
-            NullPointerException.class, () -> new DescendantOf(terminologies, (EvsQuery) null));
+        assertThrows(NullPointerException.class, () -> new DescendantOf((EvsQuery) null));
 
     assertEquals(ANCHOR_QUERY_ARGUMENT, e.getMessage());
   }
@@ -233,8 +231,7 @@ public class HierarchyQueryLimitsTest {
   public void testAncestorOrSelfOfWithNullAnchorQueryThrowsErrorNamingAnchorQuery() {
     final NullPointerException e =
         assertThrows(
-            NullPointerException.class,
-            () -> new AncestorOrSelfOf(terminologies, (EvsQuery) null, ONE_LEVEL));
+            NullPointerException.class, () -> new AncestorOrSelfOf((EvsQuery) null, ONE_LEVEL));
 
     assertEquals(ANCHOR_QUERY_ARGUMENT, e.getMessage());
   }
@@ -243,8 +240,7 @@ public class HierarchyQueryLimitsTest {
   @Test
   public void testAncestorOfWithNullCodeThrowsErrorNamingCode() {
     final NullPointerException e =
-        assertThrows(
-            NullPointerException.class, () -> new AncestorOf(terminologies, (String) null));
+        assertThrows(NullPointerException.class, () -> new AncestorOf((String) null));
 
     assertEquals(CODE_ARGUMENT, e.getMessage());
   }
@@ -254,8 +250,7 @@ public class HierarchyQueryLimitsTest {
   public void testDescendantOrSelfOfWithNullCodeThrowsErrorNamingCode() {
     final NullPointerException e =
         assertThrows(
-            NullPointerException.class,
-            () -> new DescendantOrSelfOf(terminologies, (String) null, ONE_LEVEL));
+            NullPointerException.class, () -> new DescendantOrSelfOf((String) null, ONE_LEVEL));
 
     assertEquals(CODE_ARGUMENT, e.getMessage());
   }
@@ -277,8 +272,8 @@ public class HierarchyQueryLimitsTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                new DescendantOf(terminologies, DESCENDANT_ANCHOR_CODE)
-                    .fetchOpenSearchQuery(operations));
+                new DescendantOf(DESCENDANT_ANCHOR_CODE)
+                    .fetchOpenSearchQuery(operations, terminologies));
 
     assertTrue(e.getMessage().contains(REINDEX_MESSAGE), e.getMessage());
   }
@@ -296,8 +291,8 @@ public class HierarchyQueryLimitsTest {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            new DescendantOf(terminologies, DESCENDANT_ANCHOR_CODE, ONE_LEVEL)
-                .fetchOpenSearchQuery(operations));
+            new DescendantOf(DESCENDANT_ANCHOR_CODE, ONE_LEVEL)
+                .fetchOpenSearchQuery(operations, terminologies));
   }
 
   /** An anchor with more ancestors than fit in one query throws an error. */
@@ -309,8 +304,8 @@ public class HierarchyQueryLimitsTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                new AncestorOf(terminologies, ANCESTOR_ANCHOR_CODE)
-                    .fetchOpenSearchQuery(operations));
+                new AncestorOf(ANCESTOR_ANCHOR_CODE)
+                    .fetchOpenSearchQuery(operations, terminologies));
 
     assertTrue(e.getMessage().contains(TOO_MANY_ANCESTORS_MESSAGE), e.getMessage());
   }

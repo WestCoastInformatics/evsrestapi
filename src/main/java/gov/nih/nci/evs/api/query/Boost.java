@@ -23,19 +23,19 @@ public class Boost extends EvsQuery {
   /**
    * Instantiates a {@link Boost}.
    *
-   * @param terminologies the terminologies being searched
    * @param child the query whose matches are scored
    * @param score the score every match gets
    */
-  public Boost(final List<Terminology> terminologies, final EvsQuery child, final float score) {
-    super(terminologies);
+  public Boost(final EvsQuery child, final float score) {
     this.child = Objects.requireNonNull(child, "child");
     this.score = score;
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
-    return QueryBuilders.constantScoreQuery(child.fetchOpenSearchQuery(operations)).boost(score);
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
+    return QueryBuilders.constantScoreQuery(child.fetchOpenSearchQuery(operations, terminologies))
+        .boost(score);
   }
 }

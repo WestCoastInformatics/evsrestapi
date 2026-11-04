@@ -1,5 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
+import gov.nih.nci.evs.api.model.Terminology;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.opensearch.data.core.OpenSearchOperations;
@@ -56,9 +58,9 @@ public final class RelationshipTarget {
   public RelationshipTarget(final EvsQuery query) {
     Objects.requireNonNull(query, "query");
     this.targetQueryBuilder =
-        (relationship, entriesOfType, operations) ->
+        (relationship, entriesOfType, operations, terminologies) ->
             fetchConceptsPointingToAnyConceptMatching(
-                relationship, entriesOfType, query, operations);
+                relationship, entriesOfType, query, operations, terminologies);
   }
 
   /**
@@ -70,9 +72,9 @@ public final class RelationshipTarget {
   public RelationshipTarget(final ValueMatch nameOrCodeMatch) {
     Objects.requireNonNull(nameOrCodeMatch, "nameOrCodeMatch");
     this.targetQueryBuilder =
-        (relationship, entriesOfType, operations) ->
+        (relationship, entriesOfType, operations, terminologies) ->
             getConceptsPointingToNameOrCodeMatching(
-                relationship, entriesOfType, nameOrCodeMatch, operations);
+                relationship, entriesOfType, nameOrCodeMatch, operations, terminologies);
   }
 
   /**
@@ -81,14 +83,16 @@ public final class RelationshipTarget {
    * @param relationship the node searching the relationship list
    * @param entriesOfType the query matching an entry of the relationship's type
    * @param operations the OpenSearch operations, for running a target query
+   * @param terminologies the terminologies being searched
    * @return the query builder
    */
   QueryBuilder fetchConceptsPointingToTarget(
       final HasRelationship relationship,
       final QueryBuilder entriesOfType,
-      final OpenSearchOperations operations) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     return targetQueryBuilder.fetchConceptsPointingToTarget(
-        relationship, entriesOfType, operations);
+        relationship, entriesOfType, operations, terminologies);
   }
 
   /**
@@ -99,23 +103,24 @@ public final class RelationshipTarget {
    * @param entriesOfType the query matching an entry of the relationship's type
    * @param nameOrCodeMatch how the entry's target name or code must match
    * @param operations the OpenSearch operations, for building the field matches
+   * @param terminologies the terminologies being searched
    * @return the query builder
    */
   private static QueryBuilder getConceptsPointingToNameOrCodeMatching(
       final HasRelationship relationship,
       final QueryBuilder entriesOfType,
       final ValueMatch nameOrCodeMatch,
-      final OpenSearchOperations operations) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     final NameOrCodeMatch targetNameOrCodeMatch =
         new NameOrCodeMatch(
-            relationship.getTerminologies(),
             relationship.getEntryFieldName(TARGET_NAME_FIELD),
             relationship.getEntryFieldName(TARGET_CODE_FIELD),
             nameOrCodeMatch);
     final QueryBuilder entryConditions =
         QueryBuilders.boolQuery()
             .must(entriesOfType)
-            .must(targetNameOrCodeMatch.fetchOpenSearchQuery(operations));
+            .must(targetNameOrCodeMatch.fetchOpenSearchQuery(operations, terminologies));
 
     return relationship.getConceptsWithAnyEntryMatching(entryConditions);
   }
@@ -129,14 +134,17 @@ public final class RelationshipTarget {
    * @param entriesOfType the query matching an entry of the relationship's type
    * @param targetQuery the query selecting the target concepts
    * @param operations the OpenSearch operations, for running the target query
+   * @param terminologies the terminologies being searched
    * @return the query builder
    */
   private static QueryBuilder fetchConceptsPointingToAnyConceptMatching(
       final HasRelationship relationship,
       final QueryBuilder entriesOfType,
       final EvsQuery targetQuery,
-      final OpenSearchOperations operations) {
-    final ConceptKeys targetKeys = EvsQuery.declareDependencies(operations, targetQuery).get(0);
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
+    final ConceptKeys targetKeys =
+        EvsQuery.declareDependencies(operations, terminologies, targetQuery).get(0);
 
     final boolean hasFoundTargetConcepts = !targetKeys.getCodesByTerminologyVersion().isEmpty();
     if (!hasFoundTargetConcepts) {
@@ -152,7 +160,12 @@ public final class RelationshipTarget {
             (terminologyVersion, targetCodes) ->
                 targetInOwnVersionQuery.should(
                     getConceptsInVersionPointingToAnyCode(
-                        relationship, entriesOfType, terminologyVersion, targetCodes, operations)));
+                        relationship,
+                        entriesOfType,
+                        terminologyVersion,
+                        targetCodes,
+                        operations,
+                        terminologies)));
 
     return targetInOwnVersionQuery;
   }
@@ -166,6 +179,7 @@ public final class RelationshipTarget {
    * @param terminologyVersion the terminology version
    * @param targetCodes the target codes in that terminology version
    * @param operations the OpenSearch operations, for building the field matches
+   * @param terminologies the terminologies being searched
    * @return the query builder
    * @throws IllegalStateException if there are more target codes than one {@code terms} query
    *     accepts
@@ -175,21 +189,19 @@ public final class RelationshipTarget {
       final QueryBuilder entriesOfType,
       final ConceptKeys.TerminologyVersion terminologyVersion,
       final Set<String> targetCodes,
-      final OpenSearchOperations operations) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     checkTargetCodeCount(targetCodes.size());
 
     final FieldMatch targetCodeMatch =
-        new FieldMatch(
-            relationship.getTerminologies(),
-            relationship.getEntryFieldName(TARGET_CODE_FIELD),
-            new OneOf(targetCodes));
+        new FieldMatch(relationship.getEntryFieldName(TARGET_CODE_FIELD), new OneOf(targetCodes));
     final QueryBuilder entryConditions =
         QueryBuilders.boolQuery()
             .must(entriesOfType)
-            .must(targetCodeMatch.fetchOpenSearchQuery(operations));
+            .must(targetCodeMatch.fetchOpenSearchQuery(operations, terminologies));
 
     return relationship.getConceptsInVersionWithAnyEntryMatching(
-        terminologyVersion, entryConditions, operations);
+        terminologyVersion, entryConditions, operations, terminologies);
   }
 
   /**
@@ -220,9 +232,13 @@ public final class RelationshipTarget {
      * @param relationship the node searching the relationship list
      * @param entriesOfType the query matching an entry of the relationship's type
      * @param operations the OpenSearch operations, for running a target query
+     * @param terminologies the terminologies being searched
      * @return the query builder
      */
     QueryBuilder fetchConceptsPointingToTarget(
-        HasRelationship relationship, QueryBuilder entriesOfType, OpenSearchOperations operations);
+        HasRelationship relationship,
+        QueryBuilder entriesOfType,
+        OpenSearchOperations operations,
+        List<Terminology> terminologies);
   }
 }

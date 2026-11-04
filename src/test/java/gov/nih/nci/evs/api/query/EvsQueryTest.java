@@ -1,15 +1,26 @@
 package gov.nih.nci.evs.api.query;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import gov.nih.nci.evs.api.model.Concept;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.opensearch.data.core.OpenSearchOperations;
+import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.data.elasticsearch.core.query.Query;
 
 /**
  * Unit tests for {@link EvsQuery}'s check that every terminology it searches has a terminology and
- * version. No OpenSearch or Spring: the check runs when a node is built.
+ * version. No OpenSearch or Spring: the check runs when a node is run, before it searches, so a
+ * mocked {@link OpenSearchOperations} is enough.
  */
 @DemonstratesFieldMatch
 public class EvsQueryTest {
@@ -23,16 +34,23 @@ public class EvsQueryTest {
   /** Index name of the made-up terminologies. */
   private static final String INDEX_NAME = "concept_ncit_2512e";
 
-  /** A complete terminology builds a node without failing. */
+  /** A complete terminology runs a node without failing. */
   @Test
-  public void testCompleteTerminologyBuildsNode() {
+  public void testCompleteTerminologyRunsNode() {
     final Terminology terminology =
         QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME);
+    final OpenSearchOperations operations = mock(OpenSearchOperations.class);
+    final SearchHits<Concept> noHits = mock(SearchHits.class);
+    when(noHits.getSearchHits()).thenReturn(List.of());
+    when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
+        .thenReturn(noHits);
+    final EvsQuery conceptsWithSkinCode = new FieldMatch("code", new Exact("C12470"));
 
-    new FieldMatch(List.of(terminology), "code", new Exact("C12470"));
+    assertDoesNotThrow(
+        () -> conceptsWithSkinCode.fetchConceptKeys(operations, List.of(terminology)));
   }
 
-  /** A terminology without its terminology name fails when the node is built, naming the field. */
+  /** A terminology without its terminology name fails when the node is run, naming the field. */
   @Test
   public void testTerminologyWithoutTerminologyThrowsErrorNamingIt() {
     final Terminology terminology =
@@ -41,7 +59,7 @@ public class EvsQueryTest {
     assertMatchFailsNaming(terminology, "terminology");
   }
 
-  /** A terminology without a version fails when the node is built, naming the field. */
+  /** A terminology without a version fails when the node is run, naming the field. */
   @Test
   public void testTerminologyWithoutVersionThrowsErrorNamingIt() {
     final Terminology terminology =
@@ -51,7 +69,7 @@ public class EvsQueryTest {
   }
 
   /**
-   * Asserts that building a node over the terminology fails, and that the error names the missing
+   * Asserts that running a node over the terminology fails, and that the error names the missing
    * field.
    *
    * @param terminology the incomplete terminology
@@ -59,10 +77,12 @@ public class EvsQueryTest {
    */
   private static void assertMatchFailsNaming(
       final Terminology terminology, final String missingFieldName) {
+    final OpenSearchOperations operations = mock(OpenSearchOperations.class);
+    final EvsQuery conceptsWithSkinCode = new FieldMatch("code", new Exact("C12470"));
     final IllegalArgumentException error =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new FieldMatch(List.of(terminology), "code", new Exact("C12470")));
+            () -> conceptsWithSkinCode.fetchConceptKeys(operations, List.of(terminology)));
 
     assertTrue(
         error.getMessage().startsWith("Terminology has no " + missingFieldName + " "),

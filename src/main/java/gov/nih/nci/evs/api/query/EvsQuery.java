@@ -41,20 +41,11 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 public abstract class EvsQuery {
 
   /**
-   * Returns the terminologies.
-   *
-   * @return the terminologies
-   */
-  public List<Terminology> getTerminologies() {
-    return terminologies;
-  }
-
-  /**
    * Returns the OpenSearch query for this node. A node that depends on other concepts runs their
    * queries first (see {@link #declareDependencies}), which is why this may go to OpenSearch.
    *
-   * <p>Most nodes ignore {@code operations}. It's a parameter, rather than something nodes look up
-   * themselves, so tests can pass a mock:
+   * <p>Most nodes ignore {@code operations}, and only pass {@code terminologies} on to their
+   * children. Both are parameters, rather than something nodes look up or hold themselves:
    *
    * <ul>
    *   <li>A static lookup (e.g. {@code StaticContextAccessor.getBean}) hides which nodes search,
@@ -63,6 +54,8 @@ public abstract class EvsQuery {
    *   <li>Injecting it at construction (e.g. through a factory bean) means every tree containing a
    *       search needs {@code operations} just to be built. Taking it here keeps trees plain data
    *       that any code can build.
+   *   <li>The same tree can then run against any terminologies, and a node can run a child against
+   *       different ones.
    * </ul>
    *
    * <p>For example, a unit test can check a role target's query without OpenSearch or Spring:
@@ -73,15 +66,17 @@ public abstract class EvsQuery {
    * when(operations.search(any(), eq(Concept.class), any())).thenReturn(skinAndLungHits);
    *
    * final HasRole query =
-   *     new HasRole(terminologies, new RelationshipType(new Exact("R101")), new RelationshipTarget(skinOrLungQuery));
-   * final QueryBuilder builder = query.fetchOpenSearchQuery(operations);
+   *     new HasRole(new RelationshipType(new Exact("R101")), new RelationshipTarget(skinOrLungQuery));
+   * final QueryBuilder builder = query.fetchOpenSearchQuery(operations, terminologies);
    * // builder now matches role entries whose target is Skin or Lung
    * }</pre>
    *
    * @param operations the OpenSearch operations, for any searches the node needs to run first
+   * @param terminologies the terminologies being searched
    * @return the query builder
    */
-  public abstract QueryBuilder fetchOpenSearchQuery(OpenSearchOperations operations);
+  public abstract QueryBuilder fetchOpenSearchQuery(
+      OpenSearchOperations operations, List<Terminology> terminologies);
 
   /**
    * Runs this query and returns one page of the concepts it matches. Sorts come from {@link
@@ -90,15 +85,22 @@ public abstract class EvsQuery {
    * highlights of the fields the query matched.
    *
    * @param operations the OpenSearch operations
+   * @param terminologies the terminologies to search
    * @param page the page to return
    * @param include the fields to return for each concept, and whether to highlight matches
    * @return the page of matching concepts, with the total match count
+   * @throws IllegalArgumentException if a terminology is missing its terminology or version
    */
   public final SearchHits<Concept> fetchConcepts(
-      final OpenSearchOperations operations, final Pageable page, final IncludeParam include) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies,
+      final Pageable page,
+      final IncludeParam include) {
+    checkTerminologiesAreSearchable(terminologies);
+
     final NativeSearchQueryBuilder search =
         new NativeSearchQueryBuilder()
-            .withQuery(fetchOpenSearchQuery(operations))
+            .withQuery(fetchOpenSearchQuery(operations, terminologies))
             .withSorts(getSortsWithTieBreak())
             .withSourceFilter(
                 new FetchSourceFilter(
@@ -108,30 +110,18 @@ public abstract class EvsQuery {
     if (shouldHighlightMatches) {
       search.withHighlightFields(getHighlightFields().toArray(HighlightBuilder.Field[]::new));
     }
-    return operations.search(search.build(), Concept.class, getIndexCoordinates());
+    return operations.search(search.build(), Concept.class, getIndexCoordinates(terminologies));
   }
 
   /**
    * Returns the concept indexes of the terminologies, which {@link #fetchConcepts} searches.
    *
+   * @param terminologies the terminologies
    * @return the index coordinates
    */
-  public IndexCoordinates getIndexCoordinates() {
+  public static IndexCoordinates getIndexCoordinates(final List<Terminology> terminologies) {
     return IndexCoordinates.of(
         terminologies.stream().map(Terminology::getIndexName).toArray(String[]::new));
-  }
-
-  /** The terminologies being searched. Unmodifiable. */
-  protected final List<Terminology> terminologies;
-
-  /**
-   * Instantiates an {@link EvsQuery}.
-   *
-   * @param terminologies the terminologies being searched
-   */
-  protected EvsQuery(final List<Terminology> terminologies) {
-    terminologies.forEach(EvsQuery::checkTerminologyIsSearchable);
-    this.terminologies = List.copyOf(terminologies);
   }
 
   /**
@@ -168,13 +158,16 @@ public abstract class EvsQuery {
    * from its {@link #fetchOpenSearchQuery}.
    *
    * @param operations the OpenSearch operations
+   * @param terminologies the terminologies to search for the dependencies' concepts
    * @param dependencies the queries this node depends on
    * @return the concepts each dependency matched
    */
   protected static List<ConceptKeys> declareDependencies(
-      final OpenSearchOperations operations, final EvsQuery... dependencies) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies,
+      final EvsQuery... dependencies) {
     return Arrays.stream(dependencies)
-        .map(dependency -> dependency.fetchConceptKeys(operations))
+        .map(dependency -> dependency.fetchConceptKeys(operations, terminologies))
         .collect(Collectors.toList());
   }
 
@@ -203,22 +196,28 @@ public abstract class EvsQuery {
    *       OpenSearch reads sort values from the code's doc values, a per-field column, not the
    *       document.
    *   <li>The <b>terminology and version</b> come from the index the hit is in. Each terminology
-   *       version has its own index, and this node's {@link #terminologies} say which terminology
-   *       version each searched index holds.
+   *       version has its own index, and the searched {@code terminologies} say which terminology
+   *       version each index holds.
    * </ul>
    *
    * <p>The hits' {@link Concept} content is empty and isn't read.
    *
    * @param operations the OpenSearch operations
+   * @param terminologies the terminologies to search
    * @return the keys of the matching concepts
+   * @throws IllegalArgumentException if a terminology is missing its terminology or version
    */
-  protected ConceptKeys fetchConceptKeys(final OpenSearchOperations operations) {
-    final QueryBuilder queryBuilder = fetchOpenSearchQuery(operations);
+  protected ConceptKeys fetchConceptKeys(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
+    checkTerminologiesAreSearchable(terminologies);
+
+    final QueryBuilder queryBuilder = fetchOpenSearchQuery(operations, terminologies);
 
     final Map<ConceptKeys.TerminologyVersion, Set<String>> codesByTerminologyVersion =
         new HashMap<>();
 
-    fetchAndAddCodesFromAllPages(operations, queryBuilder, codesByTerminologyVersion);
+    fetchAndAddCodesFromAllPages(
+        operations, terminologies, queryBuilder, codesByTerminologyVersion);
 
     return ConceptKeys.of(codesByTerminologyVersion);
   }
@@ -258,9 +257,20 @@ public abstract class EvsQuery {
   private static final int FIRST_PAGE = 0;
 
   /**
+   * Fails if any terminology is missing its terminology or version. See {@link
+   * #checkTerminologyIsSearchable}.
+   *
+   * @param terminologies the terminologies
+   * @throws IllegalArgumentException if a terminology or version is missing
+   */
+  private static void checkTerminologiesAreSearchable(final List<Terminology> terminologies) {
+    terminologies.forEach(EvsQuery::checkTerminologyIsSearchable);
+  }
+
+  /**
    * Fails if a terminology is missing its terminology or version, which say which terminology
-   * version each hit came from (see {@link #fetchConceptKeys}). Checked when a node is built, so a
-   * partly set up terminology fails here, naming what's missing, rather than deep inside a later
+   * version each hit came from (see {@link #fetchConceptKeys}). Checked before each search, so a
+   * partly set up terminology fails there, naming what's missing, rather than deep inside the
    * search.
    *
    * <p>The index name isn't checked: {@link Terminology#getIndexName} is never null. Without one
@@ -317,15 +327,17 @@ public abstract class EvsQuery {
    * version.
    *
    * @param operations the OpenSearch operations
+   * @param terminologies the terminologies to search
    * @param queryToFetchBuilder the query to fetch the matches of
    * @param codesByTerminologyVersion the codes found so far, added to
    */
-  private void fetchAndAddCodesFromAllPages(
+  private static void fetchAndAddCodesFromAllPages(
       final OpenSearchOperations operations,
+      final List<Terminology> terminologies,
       final QueryBuilder queryToFetchBuilder,
       final Map<ConceptKeys.TerminologyVersion, Set<String>> codesByTerminologyVersion) {
     final Map<String, ConceptKeys.TerminologyVersion> terminologyVersionsByIndex =
-        getTerminologyVersionsByIndex();
+        getTerminologyVersionsByIndex(terminologies);
 
     // List<Object> is the shape of the page cursor that is relevant to OpenSearch
     // what is actually in it is largely irrelevant to us beyond the fact that OpenSearch
@@ -334,7 +346,8 @@ public abstract class EvsQuery {
 
     boolean hasMorePages = true;
     while (hasMorePages) {
-      final SearchHits<Concept> page = fetchKeyPage(operations, queryToFetchBuilder, pageCursor);
+      final SearchHits<Concept> page =
+          fetchKeyPage(operations, terminologies, queryToFetchBuilder, pageCursor);
 
       addPageCodes(codesByTerminologyVersion, terminologyVersionsByIndex, page);
 
@@ -350,18 +363,20 @@ public abstract class EvsQuery {
    * but that content is empty.
    *
    * @param operations the OpenSearch operations
+   * @param terminologies the terminologies to search
    * @param queryToFetchBuilder the query to fetch the matches of
    * @param pageCursor where the page starts, or null for the first page
    * @return the page
    */
-  private SearchHits<Concept> fetchKeyPage(
+  private static SearchHits<Concept> fetchKeyPage(
       final OpenSearchOperations operations,
+      final List<Terminology> terminologies,
       final QueryBuilder queryToFetchBuilder,
       final List<Object> pageCursor) {
     return operations.search(
         getConceptKeyPageQuery(queryToFetchBuilder, pageCursor),
         Concept.class,
-        getIndexCoordinates());
+        getIndexCoordinates(terminologies));
   }
 
   /**
@@ -400,7 +415,8 @@ public abstract class EvsQuery {
     final ConceptKeys.TerminologyVersion terminologyVersion =
         terminologyVersionsByIndex.get(hit.getIndex());
 
-    // The search only covers this node's indexes, so every hit should be in one of them. If not
+    // The search only covers the searched terminologies' indexes, so every hit should be in one of
+    // them. If not
     // (e.g. a terminology's indexName is an alias, and hits name the real index), the hit's
     // terminology version is unknown: fail rather than drop or mislabel its code
     final boolean isInSearchedIndex = terminologyVersion != null;
@@ -426,9 +442,11 @@ public abstract class EvsQuery {
    * Returns the terminology version of each searched index. Each terminology version has its own
    * index.
    *
+   * @param terminologies the searched terminologies
    * @return the terminology versions by index name
    */
-  private Map<String, ConceptKeys.TerminologyVersion> getTerminologyVersionsByIndex() {
+  private static Map<String, ConceptKeys.TerminologyVersion> getTerminologyVersionsByIndex(
+      final List<Terminology> terminologies) {
     final Map<String, ConceptKeys.TerminologyVersion> terminologyVersionsByIndex = new HashMap<>();
     for (final Terminology terminology : terminologies) {
       terminologyVersionsByIndex.put(

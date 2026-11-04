@@ -30,13 +30,13 @@ public final class AllQualifiers implements QualifierCondition {
   /* see superclass */
   @Override
   public QueryBuilder getPropertiesMatching(
-      final List<Terminology> terminologies,
       final String qualifierListField,
-      final OpenSearchOperations operations) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     final BoolQueryBuilder allConditionsQuery = QueryBuilders.boolQuery();
     for (final QualifierCondition condition : conditions) {
       allConditionsQuery.must(
-          condition.getPropertiesMatching(terminologies, qualifierListField, operations));
+          condition.getPropertiesMatching(qualifierListField, operations, terminologies));
     }
     return allConditionsQuery;
   }

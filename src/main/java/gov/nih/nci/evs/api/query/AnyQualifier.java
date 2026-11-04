@@ -33,9 +33,9 @@ public final class AnyQualifier implements QualifierCondition {
   /* see superclass */
   @Override
   public QueryBuilder getPropertiesMatching(
-      final List<Terminology> terminologies,
       final String qualifierListField,
-      final OpenSearchOperations operations) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     final boolean hasAlternatives = !conditions.isEmpty();
     if (!hasAlternatives) {
       return QueryBuilders.boolQuery().mustNot(QueryBuilders.matchAllQuery());
@@ -45,7 +45,7 @@ public final class AnyQualifier implements QualifierCondition {
         QueryBuilders.boolQuery().minimumShouldMatch(MINIMUM_MATCHING_CONDITIONS);
     for (final QualifierCondition condition : conditions) {
       anyConditionQuery.should(
-          condition.getPropertiesMatching(terminologies, qualifierListField, operations));
+          condition.getPropertiesMatching(qualifierListField, operations, terminologies));
     }
     return anyConditionQuery;
   }

@@ -1,5 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
+import gov.nih.nci.evs.api.model.Terminology;
+import java.util.List;
 import java.util.Objects;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
@@ -46,16 +48,18 @@ public final class RelationshipType {
    *
    * @param relationship the node searching the list
    * @param operations the OpenSearch operations, for building the field matches
+   * @param terminologies the terminologies being searched
    * @return the query builder
    */
   QueryBuilder getEntriesOfType(
-      final HasRelationship relationship, final OpenSearchOperations operations) {
+      final HasRelationship relationship,
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     final NameOrCodeMatch typeNameOrCodeMatch =
         new NameOrCodeMatch(
-            relationship.getTerminologies(),
             relationship.getEntryFieldName(TYPE_NAME_FIELD),
             relationship.getEntryFieldName(TYPE_CODE_FIELD),
             nameOrCodeMatch);
-    return typeNameOrCodeMatch.fetchOpenSearchQuery(operations);
+    return typeNameOrCodeMatch.fetchOpenSearchQuery(operations, terminologies);
   }
 }

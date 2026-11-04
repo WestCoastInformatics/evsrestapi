@@ -29,17 +29,12 @@ final class NameOrCodeMatch extends EvsQuery {
   /**
    * Instantiates a {@link NameOrCodeMatch}.
    *
-   * @param terminologies the terminologies being searched
    * @param nameField the field holding the name
    * @param codeField the field holding the code
    * @param nameOrCodeMatch how the name or code must match
    */
   NameOrCodeMatch(
-      final List<Terminology> terminologies,
-      final String nameField,
-      final String codeField,
-      final ValueMatch nameOrCodeMatch) {
-    super(terminologies);
+      final String nameField, final String codeField, final ValueMatch nameOrCodeMatch) {
     this.nameField = Objects.requireNonNull(nameField, "nameField");
     this.codeField = Objects.requireNonNull(codeField, "codeField");
     this.nameOrCodeMatch = Objects.requireNonNull(nameOrCodeMatch, "nameOrCodeMatch");
@@ -47,13 +42,14 @@ final class NameOrCodeMatch extends EvsQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
-    final FieldMatch nameMatch = new FieldMatch(terminologies, nameField, nameOrCodeMatch);
-    final FieldMatch codeMatch = new FieldMatch(terminologies, codeField, nameOrCodeMatch);
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
+    final FieldMatch nameMatch = new FieldMatch(nameField, nameOrCodeMatch);
+    final FieldMatch codeMatch = new FieldMatch(codeField, nameOrCodeMatch);
 
     return QueryBuilders.boolQuery()
-        .should(nameMatch.fetchOpenSearchQuery(operations))
-        .should(codeMatch.fetchOpenSearchQuery(operations))
+        .should(nameMatch.fetchOpenSearchQuery(operations, terminologies))
+        .should(codeMatch.fetchOpenSearchQuery(operations, terminologies))
         .minimumShouldMatch(MINIMUM_MATCHING_FIELDS);
   }
 }

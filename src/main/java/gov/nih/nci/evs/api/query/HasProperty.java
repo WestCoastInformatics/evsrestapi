@@ -55,43 +55,33 @@ public final class HasProperty extends EvsQuery {
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type, with any value.
    *
-   * @param terminologies the terminologies being searched
    * @param typeNameOrCodeMatch the match for the property's type name or code
    */
-  public HasProperty(final List<Terminology> terminologies, final ValueMatch typeNameOrCodeMatch) {
-    this(terminologies, typeNameOrCodeMatch, null, null);
+  public HasProperty(final ValueMatch typeNameOrCodeMatch) {
+    this(typeNameOrCodeMatch, null, null);
   }
 
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type with a matching
    * value.
    *
-   * @param terminologies the terminologies being searched
    * @param typeNameOrCodeMatch the match for the property's type name or code
    * @param valueMatch the match for the property's value
    */
-  public HasProperty(
-      final List<Terminology> terminologies,
-      final ValueMatch typeNameOrCodeMatch,
-      final ValueMatch valueMatch) {
-    this(
-        terminologies, typeNameOrCodeMatch, Objects.requireNonNull(valueMatch, "valueMatch"), null);
+  public HasProperty(final ValueMatch typeNameOrCodeMatch, final ValueMatch valueMatch) {
+    this(typeNameOrCodeMatch, Objects.requireNonNull(valueMatch, "valueMatch"), null);
   }
 
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type, with any value,
    * whose qualifiers meet the condition.
    *
-   * @param terminologies the terminologies being searched
    * @param typeNameOrCodeMatch the match for the property's type name or code
    * @param qualifierCondition the condition the property's qualifiers must meet
    */
   public HasProperty(
-      final List<Terminology> terminologies,
-      final ValueMatch typeNameOrCodeMatch,
-      final QualifierCondition qualifierCondition) {
+      final ValueMatch typeNameOrCodeMatch, final QualifierCondition qualifierCondition) {
     this(
-        terminologies,
         typeNameOrCodeMatch,
         null,
         Objects.requireNonNull(qualifierCondition, "qualifierCondition"));
@@ -101,17 +91,14 @@ public final class HasProperty extends EvsQuery {
    * Instantiates a {@link HasProperty} that matches a property of the given type with a matching
    * value, whose qualifiers meet the condition.
    *
-   * @param terminologies the terminologies being searched
    * @param typeNameOrCodeMatch the match for the property's type name or code
    * @param valueMatch the match for the property's value, or null for any value
    * @param qualifierCondition the condition the property's qualifiers must meet, or null for none
    */
   public HasProperty(
-      final List<Terminology> terminologies,
       final ValueMatch typeNameOrCodeMatch,
       final ValueMatch valueMatch,
       final QualifierCondition qualifierCondition) {
-    super(terminologies);
     this.typeNameOrCodeMatch = Objects.requireNonNull(typeNameOrCodeMatch, "typeNameOrCodeMatch");
     this.valueMatch = valueMatch;
     this.qualifierCondition = qualifierCondition;
@@ -119,22 +106,23 @@ public final class HasProperty extends EvsQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final NameOrCodeMatch typeMatch =
-        new NameOrCodeMatch(terminologies, TYPE_NAME_FIELD, TYPE_CODE_FIELD, typeNameOrCodeMatch);
+        new NameOrCodeMatch(TYPE_NAME_FIELD, TYPE_CODE_FIELD, typeNameOrCodeMatch);
     final BoolQueryBuilder entryConditions =
-        QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations));
+        QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations, terminologies));
 
     final boolean hasValueMatch = valueMatch != null;
     if (hasValueMatch) {
-      final FieldMatch propertyValueMatch = new FieldMatch(terminologies, VALUE_FIELD, valueMatch);
-      entryConditions.must(propertyValueMatch.fetchOpenSearchQuery(operations));
+      final FieldMatch propertyValueMatch = new FieldMatch(VALUE_FIELD, valueMatch);
+      entryConditions.must(propertyValueMatch.fetchOpenSearchQuery(operations, terminologies));
     }
 
     final boolean hasQualifierCondition = qualifierCondition != null;
     if (hasQualifierCondition) {
       entryConditions.must(
-          qualifierCondition.getPropertiesMatching(terminologies, QUALIFIERS_FIELD, operations));
+          qualifierCondition.getPropertiesMatching(QUALIFIERS_FIELD, operations, terminologies));
     }
 
     return getConceptsWithAnyPropertyMatching(entryConditions);

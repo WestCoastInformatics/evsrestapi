@@ -3,7 +3,8 @@
 ## Scope
 
 This package models a concept search as a tree of query nodes (`EvsQuery`). Each node builds its
-OpenSearch query in `fetchOpenSearchQuery(operations)`. Read `README.md` in this package before
+OpenSearch query in `fetchOpenSearchQuery(operations, terminologies)`; nodes don't hold the
+terminologies. Read `README.md` in this package before
 adding or changing a node: it covers field and value matches, `CaseInsensitive`, queries about other
 concepts (`declareDependencies`), and how to add a new node.
 

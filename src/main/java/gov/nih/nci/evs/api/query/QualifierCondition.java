@@ -24,10 +24,10 @@ import org.opensearch.index.query.QueryBuilder;
  * Condition<ConceptScope>} for concept queries and {@code Condition<QualifierScope>} for this, so
  * one {@code And<S>} serves both and the type parameter still stops a concept query (e.g. {@code
  * DescendantOf}) from being put inside a qualifier condition. It wasn't chosen yet because {@link
- * EvsQuery} also owns the terminologies, index coordinates, and dependency queries, so making the
- * logical nodes generic means refactoring every node, on top of logical nodes that are still
- * exploratory. Revisit it when a second entry-level scope needs logic, e.g. a synonym's source and
- * type: these classes then become {@code And<QualifierScope>} and so on.
+ * EvsQuery} also owns the index coordinates and dependency queries, so making the logical nodes
+ * generic means refactoring every node, on top of logical nodes that are still exploratory. Revisit
+ * it when a second entry-level scope needs logic, e.g. a synonym's source and type: these classes
+ * then become {@code And<QualifierScope>} and so on.
  */
 public interface QualifierCondition {
 
@@ -35,11 +35,11 @@ public interface QualifierCondition {
    * Returns a query matching property entries whose qualifiers meet this condition. Runs inside the
    * query over the property entries.
    *
-   * @param terminologies the terminologies being searched
    * @param qualifierListField the property entry's list of qualifiers, mapped as nested
    * @param operations the OpenSearch operations
+   * @param terminologies the terminologies being searched
    * @return the query
    */
   QueryBuilder getPropertiesMatching(
-      List<Terminology> terminologies, String qualifierListField, OpenSearchOperations operations);
+      String qualifierListField, OpenSearchOperations operations, List<Terminology> terminologies);
 }

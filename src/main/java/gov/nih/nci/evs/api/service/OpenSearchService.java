@@ -25,10 +25,11 @@ public interface OpenSearchService {
       List<Terminology> terminologies, SearchCriteria searchCriteria) throws Exception;
 
   /**
-   * Runs a typeahead query against the concept indexes of its terminologies, returning matches in
+   * Runs a typeahead query against the concept indexes of the terminologies, returning matches in
    * the order the query ranks them.
    *
    * @param typeahead the typeahead query, which decides what matches and how matches are ranked
+   * @param terminologies the terminologies to search
    * @param searchCriteria the search criteria supplying the page size and included fields, echoed
    *     back as the result parameters
    * @return the first page of matching concepts, best match first. The total counts matches only up
@@ -36,7 +37,7 @@ public interface OpenSearchService {
    *     it doesn't run a second query for the exact count, since typeahead doesn't page.
    */
   public ConceptResultList findTypeaheadConcepts(
-      Typeahead typeahead, SearchCriteria searchCriteria);
+      Typeahead typeahead, List<Terminology> terminologies, SearchCriteria searchCriteria);
 
   /**
    * search for the given search criteria in mappings.

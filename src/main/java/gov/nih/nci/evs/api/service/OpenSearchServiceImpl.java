@@ -100,12 +100,15 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   /* see superclass */
   @Override
   public ConceptResultList findTypeaheadConcepts(
-      final Typeahead typeahead, final SearchCriteria searchCriteria) {
+      final Typeahead typeahead,
+      final List<Terminology> terminologies,
+      final SearchCriteria searchCriteria) {
     // Typeahead only returns the best matches, which are on the first page
     final int bestMatchesPage = 0;
     final SearchHits<Concept> hits =
         typeahead.fetchConcepts(
             operations,
+            terminologies,
             PageRequest.of(bestMatchesPage, searchCriteria.getPageSize()),
             new IncludeParam(searchCriteria.getInclude()));
 

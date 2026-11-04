@@ -16,19 +16,19 @@ public class And extends EvsQuery {
   /**
    * Instantiates an {@link And}.
    *
-   * @param terminologies the terminologies being searched
    * @param children the queries that must all match
    */
-  public And(final List<Terminology> terminologies, final List<EvsQuery> children) {
-    super(terminologies);
+  public And(final List<EvsQuery> children) {
     this.children = List.copyOf(children);
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final BoolQueryBuilder allChildrenQuery = QueryBuilders.boolQuery();
-    children.forEach(child -> allChildrenQuery.must(child.fetchOpenSearchQuery(operations)));
+    children.forEach(
+        child -> allChildrenQuery.must(child.fetchOpenSearchQuery(operations, terminologies)));
     return allChildrenQuery;
   }
 }

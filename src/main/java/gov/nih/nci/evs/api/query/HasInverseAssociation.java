@@ -1,8 +1,5 @@
 package gov.nih.nci.evs.api.query;
 
-import gov.nih.nci.evs.api.model.Terminology;
-import java.util.List;
-
 /**
  * Matches concepts that another concept's association of the given type points to, optionally from
  * the given source: {@link HasAssociation} in the other direction. E.g. the subsets Cutaneous
@@ -24,27 +21,22 @@ public final class HasInverseAssociation extends HasRelationship {
    * Instantiates a {@link HasInverseAssociation} that matches concepts an association of the given
    * type points to, from any concept.
    *
-   * @param terminologies the terminologies being searched
    * @param associationType the association's type
    */
-  public HasInverseAssociation(
-      final List<Terminology> terminologies, final RelationshipType associationType) {
-    super(terminologies, associationType);
+  public HasInverseAssociation(final RelationshipType associationType) {
+    super(associationType);
   }
 
   /**
    * Instantiates a {@link HasInverseAssociation} that matches concepts an association of the given
    * type points to, from the given source.
    *
-   * @param terminologies the terminologies being searched
    * @param associationType the association's type
    * @param associationSource the concepts the association must come from
    */
   public HasInverseAssociation(
-      final List<Terminology> terminologies,
-      final RelationshipType associationType,
-      final RelationshipTarget associationSource) {
-    super(terminologies, associationType, associationSource);
+      final RelationshipType associationType, final RelationshipTarget associationSource) {
+    super(associationType, associationSource);
   }
 
   /* see superclass */

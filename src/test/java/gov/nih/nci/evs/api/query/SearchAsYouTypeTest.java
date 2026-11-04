@@ -108,8 +108,7 @@ public class SearchAsYouTypeTest {
   /** "chronic granu" finds both names with a word starting with "granu", and not other chronics. */
   @Test
   public void testLastWordMayBePartial() {
-    final EvsQuery query =
-        new FieldMatch(TERMINOLOGIES, NAME_FIELD, new SearchAsYouType("chronic granu"));
+    final EvsQuery query = new FieldMatch(NAME_FIELD, new SearchAsYouType("chronic granu"));
 
     assertEquals(
         Set.of("Chronic granulomatous disease", "Chronic granulocytic leukemia"),
@@ -119,8 +118,7 @@ public class SearchAsYouTypeTest {
   /** A single partial word works the same way. */
   @Test
   public void testSingleWordMayBePartial() {
-    final EvsQuery query =
-        new FieldMatch(TERMINOLOGIES, NAME_FIELD, new SearchAsYouType("lymphobl"));
+    final EvsQuery query = new FieldMatch(NAME_FIELD, new SearchAsYouType("lymphobl"));
 
     assertEquals(
         Set.of("Acute lymphoblastic leukemia", "Lymphoblastic lymphoma"),
@@ -134,8 +132,7 @@ public class SearchAsYouTypeTest {
   /** "giant subep" finds the name even though the words are reversed in it. */
   @Test
   public void testWordsMayBeInAnyOrder() {
-    final EvsQuery query =
-        new FieldMatch(TERMINOLOGIES, NAME_FIELD, new SearchAsYouType("giant subep"));
+    final EvsQuery query = new FieldMatch(NAME_FIELD, new SearchAsYouType("giant subep"));
 
     assertEquals(Set.of("Subependymal giant cell astrocytoma"), fetchMatchingNames(query));
   }
@@ -146,8 +143,7 @@ public class SearchAsYouTypeTest {
    */
   @Test
   public void testEveryWordMustAppear() {
-    final EvsQuery query =
-        new FieldMatch(TERMINOLOGIES, NAME_FIELD, new SearchAsYouType("giant astro"));
+    final EvsQuery query = new FieldMatch(NAME_FIELD, new SearchAsYouType("giant astro"));
 
     assertEquals(Set.of("Subependymal giant cell astrocytoma"), fetchMatchingNames(query));
   }
@@ -155,8 +151,7 @@ public class SearchAsYouTypeTest {
   /** A word in the middle of a name matches as well as one at the start. */
   @Test
   public void testWordMayBeMidName() {
-    final EvsQuery query =
-        new FieldMatch(TERMINOLOGIES, NAME_FIELD, new SearchAsYouType("lymphoblastic"));
+    final EvsQuery query = new FieldMatch(NAME_FIELD, new SearchAsYouType("lymphoblastic"));
 
     assertEquals(
         Set.of("Acute lymphoblastic leukemia", "Lymphoblastic lymphoma"),
@@ -173,8 +168,7 @@ public class SearchAsYouTypeTest {
    */
   @Test
   public void testEarlierWordsMustBeWhole() {
-    final EvsQuery query =
-        new FieldMatch(TERMINOLOGIES, NAME_FIELD, new SearchAsYouType("chro granu"));
+    final EvsQuery query = new FieldMatch(NAME_FIELD, new SearchAsYouType("chro granu"));
 
     assertEquals(Set.of(), fetchMatchingNames(query));
   }
@@ -182,7 +176,7 @@ public class SearchAsYouTypeTest {
   /** Words match from their start only, so "noma" does not find "Melanoma". */
   @Test
   public void testNoMatchInsideAWord() {
-    final EvsQuery query = new FieldMatch(TERMINOLOGIES, NAME_FIELD, new SearchAsYouType("noma"));
+    final EvsQuery query = new FieldMatch(NAME_FIELD, new SearchAsYouType("noma"));
 
     assertEquals(Set.of(), fetchMatchingNames(query));
   }
@@ -190,8 +184,7 @@ public class SearchAsYouTypeTest {
   /** Case is ignored, because the field's analyzer lowercases both the names and the term. */
   @Test
   public void testCaseIsIgnored() {
-    final EvsQuery query =
-        new FieldMatch(TERMINOLOGIES, NAME_FIELD, new SearchAsYouType("GIANT SUBEP"));
+    final EvsQuery query = new FieldMatch(NAME_FIELD, new SearchAsYouType("GIANT SUBEP"));
 
     assertEquals(Set.of("Subependymal giant cell astrocytoma"), fetchMatchingNames(query));
   }
@@ -203,8 +196,7 @@ public class SearchAsYouTypeTest {
   @Test
   public void testPunctuationIsIgnored() {
     for (final String incompleteTerm : new String[] {"non-hodgkin", "non hodgkin", "non-hodg"}) {
-      final EvsQuery query =
-          new FieldMatch(TERMINOLOGIES, NAME_FIELD, new SearchAsYouType(incompleteTerm));
+      final EvsQuery query = new FieldMatch(NAME_FIELD, new SearchAsYouType(incompleteTerm));
 
       assertEquals(Set.of("Non-Hodgkin lymphoma"), fetchMatchingNames(query), incompleteTerm);
     }
@@ -219,7 +211,7 @@ public class SearchAsYouTypeTest {
   private Set<String> fetchMatchingNames(final EvsQuery query) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
-            .withQuery(query.fetchOpenSearchQuery(operations))
+            .withQuery(query.fetchOpenSearchQuery(operations, TERMINOLOGIES))
             .withPageable(ALL_NAMES)
             .build();
     return operations.search(search, TypedName.class, INDEX).stream()

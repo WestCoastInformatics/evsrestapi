@@ -61,17 +61,12 @@ public abstract class HierarchyQuery extends EvsQuery {
   /**
    * Instantiates a {@link HierarchyQuery}.
    *
-   * @param terminologies the terminologies being searched
    * @param anchorQuery the query matching the anchor concepts
    * @param maxLevel the maximum distance from the anchors, at least 1, or null for any distance
    * @param isSelfIncluded whether the anchors themselves match
    */
   protected HierarchyQuery(
-      final List<Terminology> terminologies,
-      final EvsQuery anchorQuery,
-      final Integer maxLevel,
-      final boolean isSelfIncluded) {
-    super(terminologies);
+      final EvsQuery anchorQuery, final Integer maxLevel, final boolean isSelfIncluded) {
     this.anchorQuery = Objects.requireNonNull(anchorQuery, "anchorQuery");
 
     final boolean hasInvalidMaxLevel = maxLevel != null && maxLevel < MIN_MAX_LEVEL;
@@ -113,9 +108,10 @@ public abstract class HierarchyQuery extends EvsQuery {
 
   /* see superclass */
   @Override
-  public final QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public final QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final ConceptKeys anchors =
-        declareDependencies(operations, anchorQuery).get(ANCHOR_QUERY_POSITION);
+        declareDependencies(operations, terminologies, anchorQuery).get(ANCHOR_QUERY_POSITION);
 
     final List<QueryBuilder> terminologyQueries = new ArrayList<>();
     for (final Terminology terminology : terminologies) {
@@ -148,28 +144,30 @@ public abstract class HierarchyQuery extends EvsQuery {
    * can't be matched exactly.
    *
    * @param operations the OpenSearch operations
+   * @param terminology the terminology the codes are from
    * @param codes the codes
    * @return the condition
    */
-  protected QueryBuilder getCodeInQuery(
-      final OpenSearchOperations operations, final Set<String> codes) {
+  protected static QueryBuilder getCodeInQuery(
+      final OpenSearchOperations operations,
+      final Terminology terminology,
+      final Set<String> codes) {
     final boolean hasCodes = !codes.isEmpty();
     if (!hasCodes) {
       return getMatchNothingQuery();
     }
 
-    return new MatchAnyOf(terminologies, ID_FIELD, codes).fetchOpenSearchQuery(operations);
+    return new MatchAnyOf(ID_FIELD, codes).fetchOpenSearchQuery(operations, List.of(terminology));
   }
 
   /**
    * Returns a query matching one concept by code, for the code convenience constructors.
    *
-   * @param terminologies the terminologies being searched
    * @param code the code
    * @return the query
    */
-  static EvsQuery getCodeQuery(final List<Terminology> terminologies, final String code) {
-    return new FieldMatch(terminologies, ID_FIELD, new Exact(Objects.requireNonNull(code, "code")));
+  static EvsQuery getCodeQuery(final String code) {
+    return new FieldMatch(ID_FIELD, new Exact(Objects.requireNonNull(code, "code")));
   }
 
   /**
@@ -203,7 +201,8 @@ public abstract class HierarchyQuery extends EvsQuery {
 
     final QueryBuilder matchedQuery =
         isSelfIncluded
-            ? getAnyOfQuery(List.of(relativesQuery, getCodeInQuery(operations, anchorCodes)))
+            ? getAnyOfQuery(
+                List.of(relativesQuery, getCodeInQuery(operations, terminology, anchorCodes)))
             : relativesQuery;
 
     return getAllOfQuery(getInIndexQuery(operations, terminology), matchedQuery);
@@ -216,9 +215,9 @@ public abstract class HierarchyQuery extends EvsQuery {
    * @param terminology the terminology
    * @return the condition
    */
-  private QueryBuilder getInIndexQuery(
+  private static QueryBuilder getInIndexQuery(
       final OpenSearchOperations operations, final Terminology terminology) {
-    return new FieldMatch(terminologies, INDEX_FIELD, new Exact(terminology.getIndexName()))
-        .fetchOpenSearchQuery(operations);
+    return new FieldMatch(INDEX_FIELD, new Exact(terminology.getIndexName()))
+        .fetchOpenSearchQuery(operations, List.of(terminology));
   }
 }

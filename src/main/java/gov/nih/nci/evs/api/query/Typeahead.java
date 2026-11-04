@@ -138,12 +138,10 @@ public class Typeahead extends EvsQuery {
   /**
    * Instantiates a {@link Typeahead}.
    *
-   * @param terminologies the terminologies being searched
    * @param incompleteTerm the text typed so far; must contain at least one word (see {@link
    *     #getHasWordsToComplete(String)})
    */
-  public Typeahead(final List<Terminology> terminologies, final String incompleteTerm) {
-    super(terminologies);
+  public Typeahead(final String incompleteTerm) {
     final boolean hasWordsToComplete = getHasWordsToComplete(incompleteTerm);
     if (!hasWordsToComplete) {
       throw new IllegalArgumentException("Typeahead term has no words: " + incompleteTerm);
@@ -185,25 +183,26 @@ public class Typeahead extends EvsQuery {
    * @return the query builder
    */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final int eitherFieldMatches = 1;
     // Codes aren't normalized, so only surrounding whitespace is dropped before comparing
     final String typedCode = incompleteTerm.trim();
     final QueryBuilder nameQuery =
-        new FieldMatch(terminologies, NAME_TYPEAHEAD_FIELD, new SearchAsYouType(incompleteTerm))
-            .fetchOpenSearchQuery(operations);
+        new FieldMatch(NAME_TYPEAHEAD_FIELD, new SearchAsYouType(incompleteTerm))
+            .fetchOpenSearchQuery(operations, terminologies);
     // Codes are always case sensitive, so they're completed with a prefix on the code keyword,
     // not a search_as_you_type field, which lowercases what it compares
     final QueryBuilder partialCodeQuery =
-        new FieldMatch(terminologies, CODE_FIELD, new StartsWith(typedCode))
-            .fetchOpenSearchQuery(operations);
+        new FieldMatch(CODE_FIELD, new StartsWith(typedCode))
+            .fetchOpenSearchQuery(operations, terminologies);
     final QueryBuilder wholeCodeQuery =
-        new FieldMatch(terminologies, CODE_FIELD, new Exact(typedCode))
-            .fetchOpenSearchQuery(operations);
+        new FieldMatch(CODE_FIELD, new Exact(typedCode))
+            .fetchOpenSearchQuery(operations, terminologies);
     final String inactiveFlag = Boolean.toString(false);
     final QueryBuilder inactiveQuery =
-        new FieldMatch(terminologies, ACTIVE_FIELD, new Exact(inactiveFlag))
-            .fetchOpenSearchQuery(operations);
+        new FieldMatch(ACTIVE_FIELD, new Exact(inactiveFlag))
+            .fetchOpenSearchQuery(operations, terminologies);
 
     // Confirm that the ordering has not been messed up
     assert WHOLE_CODE_SCORE > NAME_MATCH_SCORE && NAME_MATCH_SCORE > CODE_MATCH_SCORE;

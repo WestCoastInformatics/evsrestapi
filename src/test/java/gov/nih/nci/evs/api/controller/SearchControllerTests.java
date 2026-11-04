@@ -21,6 +21,7 @@ import gov.nih.nci.evs.api.model.Synonym;
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.properties.ApplicationProperties;
 import gov.nih.nci.evs.api.properties.TestProperties;
+import gov.nih.nci.evs.api.query.EvsQuery;
 import gov.nih.nci.evs.api.query.Typeahead;
 import gov.nih.nci.evs.api.service.OpensearchOperationsService;
 import gov.nih.nci.evs.api.service.OpensearchQueryService;
@@ -5784,13 +5785,14 @@ public class SearchControllerTests {
   private long fetchTypeaheadMatchCount(final String incompleteTerm) throws Exception {
     final Terminology ncit =
         terminologyUtils.getIndexedTerminology("ncit", opensearchQueryService, true);
-    final Typeahead typeahead = new Typeahead(List.of(ncit), incompleteTerm);
+    final Typeahead typeahead = new Typeahead(incompleteTerm);
+    final List<Terminology> terminologies = List.of(ncit);
     final OpenSearchOperations operations = opensearchOperationsService.getOpenSearchOperations();
     final NativeSearchQuery countQuery =
         new NativeSearchQueryBuilder()
-            .withQuery(typeahead.fetchOpenSearchQuery(operations))
+            .withQuery(typeahead.fetchOpenSearchQuery(operations, terminologies))
             .build();
-    return operations.count(countQuery, Concept.class, typeahead.getIndexCoordinates());
+    return operations.count(countQuery, Concept.class, EvsQuery.getIndexCoordinates(terminologies));
   }
 
   /**

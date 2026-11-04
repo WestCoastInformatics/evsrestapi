@@ -13,8 +13,8 @@ import org.opensearch.index.query.QueryBuilder;
  * Matches concepts strictly below any concept an inner query matches, in the same terminology
  * version. For example, everything below Melanoma, or everything below any concept named "...
  * Carcinoma". The inner query can be any {@link EvsQuery}, including another hierarchy node, so
- * these nest: the descendants of the children of X is {@code new DescendantOf(t, new
- * DescendantOf(t, x, 1))}.
+ * these nest: the descendants of the children of X is {@code new DescendantOf(new DescendantOf(x,
+ * 1))}.
  *
  * <p>An optional {@code maxLevel} limits how far below: 1 means direct children. Depth is the
  * shortest distance, so a concept that is a direct child of X on one path and deeper on another
@@ -44,64 +44,54 @@ public class DescendantOf extends HierarchyQuery {
   /**
    * Instantiates a {@link DescendantOf} for everything below the concepts an inner query matches.
    *
-   * @param terminologies the terminologies being searched
    * @param ancestorQuery the query matching the anchor concepts
    */
-  public DescendantOf(final List<Terminology> terminologies, final EvsQuery ancestorQuery) {
-    super(terminologies, ancestorQuery, ANY_LEVEL, WITHOUT_SELF);
+  public DescendantOf(final EvsQuery ancestorQuery) {
+    super(ancestorQuery, ANY_LEVEL, WITHOUT_SELF);
   }
 
   /**
    * Instantiates a {@link DescendantOf} for concepts within {@code maxLevel} levels below the
    * concepts an inner query matches.
    *
-   * @param terminologies the terminologies being searched
    * @param ancestorQuery the query matching the anchor concepts
    * @param maxLevel the maximum depth below the anchors, at least 1
    */
-  public DescendantOf(
-      final List<Terminology> terminologies, final EvsQuery ancestorQuery, final int maxLevel) {
-    super(terminologies, ancestorQuery, maxLevel, WITHOUT_SELF);
+  public DescendantOf(final EvsQuery ancestorQuery, final int maxLevel) {
+    super(ancestorQuery, maxLevel, WITHOUT_SELF);
   }
 
   /**
    * Instantiates a {@link DescendantOf} for everything below one concept.
    *
-   * @param terminologies the terminologies being searched
    * @param code the anchor concept's code
    */
-  public DescendantOf(final List<Terminology> terminologies, final String code) {
-    super(terminologies, getCodeQuery(terminologies, code), ANY_LEVEL, WITHOUT_SELF);
+  public DescendantOf(final String code) {
+    super(getCodeQuery(code), ANY_LEVEL, WITHOUT_SELF);
   }
 
   /**
    * Instantiates a {@link DescendantOf} for concepts within {@code maxLevel} levels below one
    * concept.
    *
-   * @param terminologies the terminologies being searched
    * @param code the anchor concept's code
    * @param maxLevel the maximum depth below the anchor, at least 1
    */
-  public DescendantOf(
-      final List<Terminology> terminologies, final String code, final int maxLevel) {
-    super(terminologies, getCodeQuery(terminologies, code), maxLevel, WITHOUT_SELF);
+  public DescendantOf(final String code, final int maxLevel) {
+    super(getCodeQuery(code), maxLevel, WITHOUT_SELF);
   }
 
   /**
    * Instantiates a {@link DescendantOf}, optionally matching the anchors themselves. For {@link
    * DescendantOrSelfOf}.
    *
-   * @param terminologies the terminologies being searched
    * @param ancestorQuery the query matching the anchor concepts
    * @param maxLevel the maximum depth below the anchors, at least 1, or null for any depth
    * @param isSelfIncluded whether the anchors themselves match
    */
   protected DescendantOf(
-      final List<Terminology> terminologies,
-      final EvsQuery ancestorQuery,
-      final Integer maxLevel,
-      final boolean isSelfIncluded) {
-    super(terminologies, ancestorQuery, maxLevel, isSelfIncluded);
+      final EvsQuery ancestorQuery, final Integer maxLevel, final boolean isSelfIncluded) {
+    super(ancestorQuery, maxLevel, isSelfIncluded);
   }
 
   /* see superclass */
@@ -112,7 +102,7 @@ public class DescendantOf extends HierarchyQuery {
       final Set<String> anchorCodes) {
     final boolean hasAncestorFields = getHasAncestorFields(terminology);
     if (hasAncestorFields) {
-      return getBelowAnchorsQuery(operations, anchorCodes);
+      return getBelowAnchorsQuery(operations, terminology, anchorCodes);
     }
 
     // TODO: Remove the fallback once every terminology is reindexed with ancestor fields
@@ -169,20 +159,22 @@ public class DescendantOf extends HierarchyQuery {
    * Returns the condition for concepts below the anchors, using the indexed ancestor fields.
    *
    * @param operations the OpenSearch operations
+   * @param terminology the terminology the anchors are from
    * @param anchorCodes the anchor codes
    * @return the condition
    */
   private QueryBuilder getBelowAnchorsQuery(
-      final OpenSearchOperations operations, final Set<String> anchorCodes) {
+      final OpenSearchOperations operations,
+      final Terminology terminology,
+      final Set<String> anchorCodes) {
     final boolean hasLevelLimit = getMaxLevel() != null;
     if (!hasLevelLimit) {
-      return new MatchAnyOf(terminologies, ANCESTORS_FIELD, anchorCodes)
-          .fetchOpenSearchQuery(operations);
+      return new MatchAnyOf(ANCESTORS_FIELD, anchorCodes)
+          .fetchOpenSearchQuery(operations, List.of(terminology));
     }
 
-    return new MatchAnyOf(
-            terminologies, ANCESTOR_DEPTHS_FIELD, getDepthTokens(anchorCodes, getMaxLevel()))
-        .fetchOpenSearchQuery(operations);
+    return new MatchAnyOf(ANCESTOR_DEPTHS_FIELD, getDepthTokens(anchorCodes, getMaxLevel()))
+        .fetchOpenSearchQuery(operations, List.of(terminology));
   }
 
   /**
@@ -204,7 +196,7 @@ public class DescendantOf extends HierarchyQuery {
         StoredHierarchyFallback.fetchDescendantCodes(
             operations, terminology, anchorCodes, getMaxLevel());
 
-    return getCodeInQuery(operations, descendantCodes);
+    return getCodeInQuery(operations, terminology, descendantCodes);
   }
 
   /**

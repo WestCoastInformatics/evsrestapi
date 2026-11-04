@@ -1,8 +1,5 @@
 package gov.nih.nci.evs.api.query;
 
-import gov.nih.nci.evs.api.model.Terminology;
-import java.util.List;
-
 /**
  * Matches concepts that have a role of the given type, optionally pointing to the given target,
  * e.g. concepts whose primary anatomic site is Skin or anything below Skin. A {@link
@@ -16,25 +13,20 @@ public final class HasRole extends HasRelationship {
   /**
    * Instantiates a {@link HasRole} that matches a role of the given type, pointing to any concept.
    *
-   * @param terminologies the terminologies being searched
    * @param roleType the role's type
    */
-  public HasRole(final List<Terminology> terminologies, final RelationshipType roleType) {
-    super(terminologies, roleType);
+  public HasRole(final RelationshipType roleType) {
+    super(roleType);
   }
 
   /**
    * Instantiates a {@link HasRole} that matches a role of the given type pointing to the target.
    *
-   * @param terminologies the terminologies being searched
    * @param roleType the role's type
    * @param roleTarget the concepts the role must point to
    */
-  public HasRole(
-      final List<Terminology> terminologies,
-      final RelationshipType roleType,
-      final RelationshipTarget roleTarget) {
-    super(terminologies, roleType, roleTarget);
+  public HasRole(final RelationshipType roleType, final RelationshipTarget roleTarget) {
+    super(roleType, roleTarget);
   }
 
   /* see superclass */

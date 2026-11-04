@@ -1,8 +1,5 @@
 package gov.nih.nci.evs.api.query;
 
-import gov.nih.nci.evs.api.model.Terminology;
-import java.util.List;
-
 /**
  * Matches concepts that another concept points to with a role of the given type, optionally from
  * the given source, e.g. concepts that are the primary anatomic site of Melanoma or anything below
@@ -23,26 +20,21 @@ public final class HasInverseRole extends HasRelationship {
    * Instantiates a {@link HasInverseRole} that matches an inverse role of the given type, from any
    * concept.
    *
-   * @param terminologies the terminologies being searched
    * @param roleType the role's type
    */
-  public HasInverseRole(final List<Terminology> terminologies, final RelationshipType roleType) {
-    super(terminologies, roleType);
+  public HasInverseRole(final RelationshipType roleType) {
+    super(roleType);
   }
 
   /**
    * Instantiates a {@link HasInverseRole} that matches an inverse role of the given type from the
    * source.
    *
-   * @param terminologies the terminologies being searched
    * @param roleType the role's type
    * @param roleSource the concepts holding the role that points to the matched concept
    */
-  public HasInverseRole(
-      final List<Terminology> terminologies,
-      final RelationshipType roleType,
-      final RelationshipTarget roleSource) {
-    super(terminologies, roleType, roleSource);
+  public HasInverseRole(final RelationshipType roleType, final RelationshipTarget roleSource) {
+    super(roleType, roleSource);
   }
 
   /* see superclass */

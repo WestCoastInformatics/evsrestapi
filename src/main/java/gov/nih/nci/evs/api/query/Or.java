@@ -19,17 +19,16 @@ public class Or extends EvsQuery {
   /**
    * Instantiates an {@link Or}.
    *
-   * @param terminologies the terminologies being searched
    * @param children the queries of which at least one must match
    */
-  public Or(final List<Terminology> terminologies, final List<EvsQuery> children) {
-    super(terminologies);
+  public Or(final List<EvsQuery> children) {
     this.children = List.copyOf(children);
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final boolean hasAlternatives = !children.isEmpty();
     if (!hasAlternatives) {
       // A bool query with no clauses would match everything, so match nothing explicitly
@@ -38,7 +37,8 @@ public class Or extends EvsQuery {
     final int anyChildMatches = 1;
     final BoolQueryBuilder anyChildQuery =
         QueryBuilders.boolQuery().minimumShouldMatch(anyChildMatches);
-    children.forEach(child -> anyChildQuery.should(child.fetchOpenSearchQuery(operations)));
+    children.forEach(
+        child -> anyChildQuery.should(child.fetchOpenSearchQuery(operations, terminologies)));
     return anyChildQuery;
   }
 }

@@ -52,13 +52,11 @@ classDiagram
 
     class EvsQuery {
         <<abstract>>
-        #List~Terminology~ terminologies
-        +getTerminologies() List~Terminology~
-        +fetchOpenSearchQuery(OpenSearchOperations)* QueryBuilder
-        +fetchConcepts(OpenSearchOperations, Pageable, IncludeParam) SearchHits~Concept~
+        +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~)* QueryBuilder
+        +fetchConcepts(OpenSearchOperations, List~Terminology~, Pageable, IncludeParam) SearchHits~Concept~
         #getSorts() List~SortBuilder~
         #getHighlightFields() List~HighlightBuilder.Field~
-        +getIndexCoordinates() IndexCoordinates
+        +getIndexCoordinates(List~Terminology~)$ IndexCoordinates
     }
 
     class FieldMatch {
@@ -90,7 +88,7 @@ classDiagram
 
     class QualifierCondition {
         <<interface>>
-        +getPropertiesMatching(List~Terminology~, String, OpenSearchOperations) QueryBuilder
+        +getPropertiesMatching(String, OpenSearchOperations, List~Terminology~) QueryBuilder
     }
     class AllQualifiers {
         -List~QualifierCondition~ conditions
@@ -163,7 +161,7 @@ classDiagram
     class Typeahead {
         -String incompleteTerm
         +getHasWordsToComplete(String)$ boolean
-        +fetchOpenSearchQuery(OpenSearchOperations) QueryBuilder
+        +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
         +getSorts() List~SortBuilder~
     }
 
@@ -175,7 +173,7 @@ classDiagram
     class MatchAnyOf {
         -String field
         -Set~String~ values
-        +fetchOpenSearchQuery(OpenSearchOperations) TermsQueryBuilder
+        +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) TermsQueryBuilder
     }
 
     class HierarchyQuery {
@@ -183,7 +181,7 @@ classDiagram
         -EvsQuery anchorQuery
         -Integer maxLevel
         -boolean isSelfIncluded
-        +fetchOpenSearchQuery(OpenSearchOperations) QueryBuilder
+        +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
         #fetchRelativesQuery(OpenSearchOperations, Terminology, Set~String~)* QueryBuilder
     }
     class DescendantOf
@@ -244,7 +242,7 @@ classDiagram
 
 | Class | Role |
 |---|---|
-| `EvsQuery` | Base type for every node. Its contract is `fetchOpenSearchQuery(operations)`. It also holds an unmodifiable copy of the terminologies being searched, and (experimental, see [Sorting](#sorting-experimental)) contributes sorts and builds a whole search request. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
+| `EvsQuery` | Base type for every node. Its contract is `fetchOpenSearchQuery(operations, terminologies)`. Nodes don't hold the terminologies being searched: they're passed in when the tree runs (see [Why `operations` and `terminologies` are parameters](#why-operations-and-terminologies-are-parameters)). It also (experimental, see [Sorting](#sorting-experimental)) contributes sorts and builds a whole search request. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
 | `FieldMatch` | The leaf query. It pairs a concept field with a `ValueMatch` and rejects `null` for either. It only says which field; the match says how. |
 | `ValueMatch` | How one value is compared, with no field. Its contract is `getQueryBuilder(field)`. The implementations are records: plain values with no behavior beyond building their query. |
 | `SupportsIgnoringCase` | A `ValueMatch` that can also ignore case: `Exact`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
@@ -259,7 +257,7 @@ classDiagram
 | `HierarchyQuery` | Base type for hierarchy nodes. Runs the inner (anchor) query first through `declareDependencies`, then, for each terminology version, matches the anchors' relatives only in that terminology's index. Handles `maxLevel` (shortest distance, at least 1) and `isSelfIncluded`. Subclasses implement `fetchRelativesQuery`. |
 | `DescendantOf` | Matches concepts strictly below the anchors, optionally within `maxLevel` levels. Any node can supply the anchors, including another hierarchy node. Terminologies with `ancestors`/`ancestorDepths` match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
 | `DescendantOrSelfOf` | `DescendantOf` that also matches the anchors themselves (distance 0). |
-| `AncestorOf` | The upward counterpart: matches concepts strictly above the anchors, optionally within `maxLevel` levels. Reads the anchors' stored paths to root (`StoredPaths`), which every index has, so there's no fallback and nothing to remove after reindexing. Nests with `DescendantOf`, e.g. siblings-or-self is `new DescendantOf(t, new AncestorOf(t, x, 1), 1)`. |
+| `AncestorOf` | The upward counterpart: matches concepts strictly above the anchors, optionally within `maxLevel` levels. Reads the anchors' stored paths to root (`StoredPaths`), which every index has, so there's no fallback and nothing to remove after reindexing. Nests with `DescendantOf`, e.g. siblings-or-self is `new DescendantOf(new AncestorOf(x, 1), 1)`. |
 | `AncestorOrSelfOf` | `AncestorOf` that also matches the anchors themselves. |
 | `RawBoolQueries` | The raw `bool` combining helpers (`getAllOfQuery`, `getAnyOfQuery`, `getMatchNothingQuery`) used until the logical operator nodes land; each maps onto `And`, `Or`, or `Not`. |
 | `And`, `Or`, `Not`, `Boost` | Logical queries. They hold child `EvsQuery` nodes instead of a field and a match. See [Logical queries](#logical-queries). Exploratory on this branch: merged from `eas/logical-operators`, tested only by `LogicalQueryTest` and the subset lessons. |
@@ -305,8 +303,8 @@ an entry.
 ### Usage
 
 ```java
-final EvsQuery query = new FieldMatch(terminologies, "normName", new StartsWith("melan"));
-boolQuery.must(query.fetchOpenSearchQuery(operations));
+final EvsQuery query = new FieldMatch("normName", new StartsWith("melan"));
+boolQuery.must(query.fetchOpenSearchQuery(operations, terminologies));
 ```
 
 ## Logical queries
@@ -327,7 +325,7 @@ boolQuery.must(query.fetchOpenSearchQuery(operations));
 ```java
 // Finds "Melanoma", "melanoma", and "Malignant Melanoma"
 final EvsQuery query =
-    new FieldMatch(terminologies, "name", new CaseInsensitive(new Contains("MELANOMA")));
+    new FieldMatch("name", new CaseInsensitive(new Contains("MELANOMA")));
 ```
 
 Case is a property of how a value is compared, so it goes on the match, not on a query. That
@@ -417,16 +415,16 @@ document, and a role entry only stores its target's code. So
 `HasRole(type, Or(FieldMatch(code, Exact(Skin)), DescendantOf(Skin)))` can't become one OpenSearch
 query.
 
-**How it works:** building such a node runs the inner query first. `fetchOpenSearchQuery(operations)`
-takes the OpenSearch operations so it can. The node calls `declareDependencies(operations,
-dependencies...)`, which runs each dependency and pages through every matching concept with
+**How it works:** building such a node runs the inner query first. `fetchOpenSearchQuery(operations,
+terminologies)` takes the OpenSearch operations so it can. The node calls `declareDependencies(operations,
+terminologies, dependencies...)`, which runs each dependency against the same terminologies and pages through every matching concept with
 `search_after` (sorted by code, then index, so pages don't overlap). It reads no stored documents,
 which can be very large: each hit's code is its first sort value (read from doc values) and its
 terminology version is that of the index it came from. It returns one `ConceptKeys` per dependency:
 the codes found in each terminology version. The node then matches what it found, e.g. with a
 `FieldMatch` with `OneOf` the codes. The paging is done by `EvsQuery.fetchConceptKeys`, which runs the node's own
 `fetchOpenSearchQuery`, so a node is written once and works both as a search and as a dependency.
-A `RelationshipTarget` given as a query calls `declareDependencies(operations, targetQuery)`, and for
+A `RelationshipTarget` given as a query calls `declareDependencies(operations, terminologies, targetQuery)`, and for
 each terminology version it matches concepts from that terminology version with an entry whose
 `relatedCode` is `OneOf` its codes. An inner query can hold its own query about another concept, which runs first in the same
 way, to any depth. Nodes that don't hold a query about another concept ignore `operations`.
@@ -438,10 +436,20 @@ relationships on concepts from that version. `HasRelationship` filters on the ex
 (the main `terminology` and `version` fields are analyzed text). The filter sits outside the
 `nested` query on the list, because a nested query only sees the entry's own fields.
 
-**Why `operations` is a parameter:** a static lookup hides which nodes search and makes tests
-change global state; injecting it at construction means every tree containing a search needs it
-just to be built. Taking it in `fetchOpenSearchQuery` keeps trees plain data, and lets unit tests pass a
-mock (see `DeclareDependenciesTest`).
+#### Why `operations` and `terminologies` are parameters
+
+A static lookup hides which nodes search and makes tests change global state; injecting
+`operations` at construction means every tree containing a search needs it just to be built.
+Taking it in `fetchOpenSearchQuery` keeps trees plain data, and lets unit tests pass a mock (see
+`DeclareDependenciesTest`).
+
+The terminologies are passed the same way, as their own parameter. Most nodes only hand them to
+their children; the nodes that read them are the ones that search (`fetchConcepts`,
+`fetchConceptKeys`, which map each index to its terminology version), `HierarchyQuery` (which
+matches each terminology's relatives in that terminology's index, running its per-terminology
+children against just that terminology), and `InSubset` (which reads each terminology's
+`subsetMember` metadata). So the same tree can run against any terminologies, and a node can run a
+child against different ones.
 
 **Why the inner query always runs first:** handing codes between searches is cheap. On local NCIt
 25.12e, OpenSearch ran a `terms` query over about 23,000 codes in 80ms. A plan that starts from the
@@ -508,7 +516,7 @@ public record Regex(String term) implements ValueMatch {
 `getWithTermsMapped` lets a node compare against a field indexed in a transformed form: `HasSynonym`
 normalizes every match's terms the way synonym names were normalized when they were loaded.
 
-It then works everywhere a value match does: `new FieldMatch(terminologies, "code", new
+It then works everywhere a value match does: `new FieldMatch("code", new
 Regex("C12[0-9]+"))`, or a relationship's type.
 
 ### Adding a composite query
@@ -538,20 +546,19 @@ public class And extends EvsQuery {
   /**
    * Instantiates an {@link And}.
    *
-   * @param terminologies the terminologies being searched
    * @param children the queries that must all match
    */
-  public And(final List<Terminology> terminologies, final List<EvsQuery> children) {
-    super(terminologies);
+  public And(final List<EvsQuery> children) {
     this.children = List.copyOf(children);
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
     for (final EvsQuery child : children) {
-      boolQuery.must(child.fetchOpenSearchQuery(operations));
+      boolQuery.must(child.fetchOpenSearchQuery(operations, terminologies));
     }
     return boolQuery;
   }
@@ -565,20 +572,18 @@ Composites nest without any extra code:
 ```java
 final EvsQuery query =
     new And(
-        terminologies,
         List.of(
-            new FieldMatch(terminologies, "normName", new Fuzzy("melanoma")),
+            new FieldMatch("normName", new Fuzzy("melanoma")),
             new Or(
-                terminologies,
                 List.of(
-                    new FieldMatch(terminologies, "code", new Exact("C3224")),
-                    new FieldMatch(terminologies, "normName", new StartsWith("blood"))))));
+                    new FieldMatch("code", new Exact("C3224")),
+                    new FieldMatch("normName", new StartsWith("blood"))))));
 ```
 
 ### Checklist for a new query
 
 1. Name it after what it matches, and document that behavior in the class Javadoc.
-2. Build an OpenSearch query in `fetchOpenSearchQuery(operations)` (a query) or
+2. Build an OpenSearch query in `fetchOpenSearchQuery(operations, terminologies)` (a query) or
    `getQueryBuilder(field)` (a value match). Only run a search there for a query
    about another concept, through `declareDependencies` (see
    [Queries about other concepts](#queries-about-other-concepts-joins)).

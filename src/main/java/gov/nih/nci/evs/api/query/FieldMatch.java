@@ -28,13 +28,10 @@ final class FieldMatch extends EvsQuery {
   /**
    * Instantiates a {@link FieldMatch}.
    *
-   * @param terminologies the terminologies being searched
    * @param field the field to match against
    * @param match how the field's value must match
    */
-  public FieldMatch(
-      final List<Terminology> terminologies, final String field, final ValueMatch match) {
-    super(terminologies);
+  public FieldMatch(final String field, final ValueMatch match) {
     this.field = Objects.requireNonNull(field, "field");
     this.match = Objects.requireNonNull(match, "match");
   }
@@ -59,7 +56,8 @@ final class FieldMatch extends EvsQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     return match.getQueryBuilder(field);
   }
 }

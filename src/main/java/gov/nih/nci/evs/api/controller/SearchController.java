@@ -537,9 +537,9 @@ public class SearchController extends BaseController {
     final List<Terminology> terminologies =
         parseAndValidateTerminologiesFromSearchCriteria(searchCriteria, license);
 
-    final Typeahead typeahead = new Typeahead(terminologies, incompleteTerm);
+    final Typeahead typeahead = new Typeahead(incompleteTerm);
     final ConceptResultList results =
-        openSearchService.findTypeaheadConcepts(typeahead, searchCriteria);
+        openSearchService.findTypeaheadConcepts(typeahead, terminologies, searchCriteria);
     highlightConceptMatches(results);
 
     results.setTimeTaken(System.currentTimeMillis() - timerStartDate);

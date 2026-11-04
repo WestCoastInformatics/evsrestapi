@@ -30,10 +30,10 @@ public final class NoQualifier implements QualifierCondition {
   /* see superclass */
   @Override
   public QueryBuilder getPropertiesMatching(
-      final List<Terminology> terminologies,
       final String qualifierListField,
-      final OpenSearchOperations operations) {
+      final OpenSearchOperations operations,
+      final List<Terminology> terminologies) {
     return QueryBuilders.boolQuery()
-        .mustNot(condition.getPropertiesMatching(terminologies, qualifierListField, operations));
+        .mustNot(condition.getPropertiesMatching(qualifierListField, operations, terminologies));
   }
 }

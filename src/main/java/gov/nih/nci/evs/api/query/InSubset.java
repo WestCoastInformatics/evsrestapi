@@ -22,8 +22,8 @@ import org.opensearch.index.query.QueryBuilder;
  * <ul>
  *   <li>A value match on the subset's code or name, e.g. {@code new OneOf(Set.of(sdtm, send))} for
  *       members of either subset.
- *   <li>A query over the subset concepts, run first, e.g. {@code new DescendantOrSelfOf(t, cdisc)}
- *       for members of any CDISC subset, since NCIt's subsets form a hierarchy.
+ *   <li>A query over the subset concepts, run first, e.g. {@code new DescendantOrSelfOf(cdisc)} for
+ *       members of any CDISC subset, since NCIt's subsets form a hierarchy.
  * </ul>
  *
  * <p><b>Exploratory.</b> Combinations other than "any of" (in all of several subsets, in one but
@@ -36,47 +36,43 @@ import org.opensearch.index.query.QueryBuilder;
  */
 public final class InSubset extends EvsQuery {
 
-  /**
-   * The association types marking membership (e.g. A8) across every searched terminology, so one
-   * query covers them all.
-   */
-  private final Set<String> membershipTypeNamesOrCodes;
-
   private final RelationshipTarget subsets;
 
   /**
    * Instantiates an {@link InSubset} that matches members of one subset, given by its exact code.
    *
-   * @param terminologies the terminologies being searched
    * @param subsetCode the subset's code
    */
-  public InSubset(final List<Terminology> terminologies, final String subsetCode) {
-    this(
-        terminologies,
-        new RelationshipTarget(new Exact(Objects.requireNonNull(subsetCode, "subsetCode"))));
+  public InSubset(final String subsetCode) {
+    this(new RelationshipTarget(new Exact(Objects.requireNonNull(subsetCode, "subsetCode"))));
   }
 
   /**
    * Instantiates an {@link InSubset} that matches members of any of the given subsets.
    *
-   * @param terminologies the terminologies being searched
    * @param subsets the subsets, as a match on their code or name or as a query over them
-   * @throws IllegalArgumentException if no terminology has a subset membership association
    */
-  public InSubset(final List<Terminology> terminologies, final RelationshipTarget subsets) {
-    super(terminologies);
+  public InSubset(final RelationshipTarget subsets) {
     this.subsets = Objects.requireNonNull(subsets, "subsets");
-    this.membershipTypeNamesOrCodes = getMembershipTypeNamesOrCodes(terminologies);
   }
 
-  /* see superclass */
+  /**
+   * Returns the query matching members of the subsets. The association types marking membership
+   * (e.g. A8) are gathered across every searched terminology, so one query covers them all.
+   *
+   * @param operations the OpenSearch operations
+   * @param terminologies the terminologies being searched
+   * @return the query builder
+   * @throws IllegalArgumentException if no terminology has a subset membership association
+   */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final RelationshipType membershipType =
-        new RelationshipType(new OneOf(membershipTypeNamesOrCodes));
-    final HasAssociation membership = new HasAssociation(terminologies, membershipType, subsets);
+        new RelationshipType(new OneOf(getMembershipTypeNamesOrCodes(terminologies)));
+    final HasAssociation membership = new HasAssociation(membershipType, subsets);
 
-    return membership.fetchOpenSearchQuery(operations);
+    return membership.fetchOpenSearchQuery(operations, terminologies);
   }
 
   /**

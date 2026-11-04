@@ -39,7 +39,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  *   <li>A small index holds the concepts in {@link #INDEXED_CONCEPTS}, mapped exactly like a real
  *       concept index. Members point to their subsets with Concept_In_Subset associations, as in
  *       NCIt.
- *   <li>The lesson builds a query, e.g. {@code new InSubset(terminologies, SDTM)}.
+ *   <li>The lesson builds a query, e.g. {@code new InSubset(SDTM)}.
  *   <li>The query runs against the index, and the lesson checks which concept names came back.
  * </ol>
  *
@@ -155,7 +155,7 @@ public class InSubsetTest {
   /** Both SDTM members are found. "Tumor Finding" points to SDTM, but isn't a member. */
   @Test
   public void testInSubsetFindsOnlyMembers() {
-    final EvsQuery sdtmMembers = new InSubset(terminologies, SDTM);
+    final EvsQuery sdtmMembers = new InSubset(SDTM);
 
     assertEquals(Set.of("Melanoma", "Body Weight"), fetchMatchingNames(sdtmMembers));
   }
@@ -163,7 +163,7 @@ public class InSubsetTest {
   /** A subset with no members finds nothing. */
   @Test
   public void testEmptySubsetFindsNothing() {
-    final EvsQuery emptySubsetMembers = new InSubset(terminologies, EMPTY_SUBSET);
+    final EvsQuery emptySubsetMembers = new InSubset(EMPTY_SUBSET);
 
     assertEquals(Set.of(), fetchMatchingNames(emptySubsetMembers));
   }
@@ -175,8 +175,7 @@ public class InSubsetTest {
   @Test
   public void testSubsetMatchedByWordOfName() {
     final EvsQuery cellosaurusMembers =
-        new InSubset(
-            terminologies, new RelationshipTarget(new CaseInsensitive(new Exact("Cellosaurus"))));
+        new InSubset(new RelationshipTarget(new CaseInsensitive(new Exact("Cellosaurus"))));
 
     assertEquals(Set.of("Melanoma", "Nevus"), fetchMatchingNames(cellosaurusMembers));
   }
@@ -188,7 +187,7 @@ public class InSubsetTest {
   @Test
   public void testWholeMultiWordSubsetNameFindsNothing() {
     final EvsQuery cellosaurusMembersByWholeName =
-        new InSubset(terminologies, new RelationshipTarget(new Exact(CELLOSAURUS_NAME)));
+        new InSubset(new RelationshipTarget(new Exact(CELLOSAURUS_NAME)));
 
     assertEquals(Set.of(), fetchMatchingNames(cellosaurusMembersByWholeName));
   }
@@ -201,7 +200,7 @@ public class InSubsetTest {
   @Test
   public void testInAnyOfSubsets() {
     final EvsQuery sdtmOrCellosaurusMembers =
-        new InSubset(terminologies, new RelationshipTarget(new OneOf(Set.of(SDTM, CELLOSAURUS))));
+        new InSubset(new RelationshipTarget(new OneOf(Set.of(SDTM, CELLOSAURUS))));
 
     assertEquals(
         Set.of("Melanoma", "Body Weight", "Nevus"), fetchMatchingNames(sdtmOrCellosaurusMembers));
@@ -211,9 +210,7 @@ public class InSubsetTest {
   @Test
   public void testInAnyOfSubsetsWithOrMatchesOneOf() {
     final EvsQuery sdtmOrCellosaurusMembers =
-        new Or(
-            terminologies,
-            List.of(new InSubset(terminologies, SDTM), new InSubset(terminologies, CELLOSAURUS)));
+        new Or(List.of(new InSubset(SDTM), new InSubset(CELLOSAURUS)));
 
     assertEquals(
         Set.of("Melanoma", "Body Weight", "Nevus"), fetchMatchingNames(sdtmOrCellosaurusMembers));
@@ -226,9 +223,7 @@ public class InSubsetTest {
   @Test
   public void testInAllOfSubsets() {
     final EvsQuery sdtmAndCellosaurusMembers =
-        new And(
-            terminologies,
-            List.of(new InSubset(terminologies, SDTM), new InSubset(terminologies, CELLOSAURUS)));
+        new And(List.of(new InSubset(SDTM), new InSubset(CELLOSAURUS)));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(sdtmAndCellosaurusMembers));
   }
@@ -237,11 +232,7 @@ public class InSubsetTest {
   @Test
   public void testInOneSubsetButNotAnother() {
     final EvsQuery sdtmMembersOutsideSend =
-        new And(
-            terminologies,
-            List.of(
-                new InSubset(terminologies, SDTM),
-                new Not(terminologies, new InSubset(terminologies, SEND))));
+        new And(List.of(new InSubset(SDTM), new Not(new InSubset(SEND))));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(sdtmMembersOutsideSend));
   }
@@ -253,12 +244,9 @@ public class InSubsetTest {
   @Test
   public void testInSubsetTreeExceptOneSubset() {
     final EvsQuery cdiscMembers =
-        new InSubset(
-            terminologies, new RelationshipTarget(new DescendantOrSelfOf(terminologies, CDISC)));
+        new InSubset(new RelationshipTarget(new DescendantOrSelfOf(CDISC)));
     final EvsQuery cdiscMembersOutsideSend =
-        new And(
-            terminologies,
-            List.of(cdiscMembers, new Not(terminologies, new InSubset(terminologies, SEND))));
+        new And(List.of(cdiscMembers, new Not(new InSubset(SEND))));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(cdiscMembersOutsideSend));
   }
@@ -274,8 +262,8 @@ public class InSubsetTest {
    */
   @Test
   public void testInAnySubsetBelowRoot() {
-    final EvsQuery cdiscSubsets = new DescendantOrSelfOf(terminologies, CDISC);
-    final EvsQuery cdiscMembers = new InSubset(terminologies, new RelationshipTarget(cdiscSubsets));
+    final EvsQuery cdiscSubsets = new DescendantOrSelfOf(CDISC);
+    final EvsQuery cdiscMembers = new InSubset(new RelationshipTarget(cdiscSubsets));
 
     assertEquals(Set.of("Melanoma", "Body Weight"), fetchMatchingNames(cdiscMembers));
   }
@@ -291,9 +279,9 @@ public class InSubsetTest {
   @Test
   public void testMembershipTypeComesFromMetadata() {
     final List<Terminology> relatedToAsMembership = List.of(getTerminology(Set.of(RELATED_TO)));
-    final EvsQuery sdtmMembers = new InSubset(relatedToAsMembership, SDTM);
+    final EvsQuery sdtmMembers = new InSubset(SDTM);
 
-    assertEquals(Set.of("Tumor Finding"), fetchMatchingNames(sdtmMembers));
+    assertEquals(Set.of("Tumor Finding"), fetchMatchingNames(sdtmMembers, relatedToAsMembership));
   }
 
   /** A terminology without a membership association has no subsets to search. */
@@ -301,7 +289,11 @@ public class InSubsetTest {
   public void testTerminologyWithoutMembershipTypeIsRejected() {
     final List<Terminology> withoutMembershipType = List.of(getTerminology(Set.of()));
 
-    assertThrows(IllegalArgumentException.class, () -> new InSubset(withoutMembershipType, SDTM));
+    final EvsQuery sdtmMembers = new InSubset(SDTM);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> sdtmMembers.fetchOpenSearchQuery(operations, withoutMembershipType));
   }
 
   /** A subset is required. */
@@ -309,8 +301,8 @@ public class InSubsetTest {
   public void testRejectsMissingSubset() {
     final String missingCode = null;
     final RelationshipTarget missingTarget = null;
-    assertThrows(NullPointerException.class, () -> new InSubset(terminologies, missingCode));
-    assertThrows(NullPointerException.class, () -> new InSubset(terminologies, missingTarget));
+    assertThrows(NullPointerException.class, () -> new InSubset(missingCode));
+    assertThrows(NullPointerException.class, () -> new InSubset(missingTarget));
   }
 
   /**
@@ -320,7 +312,18 @@ public class InSubsetTest {
    * @return the names of the matching concepts
    */
   private Set<String> fetchMatchingNames(final EvsQuery query) {
-    return fetchMatchingNames(query.fetchOpenSearchQuery(operations));
+    return fetchMatchingNames(query, terminologies);
+  }
+
+  /**
+   * Runs the query against the tutorial index, searching the given terminologies.
+   *
+   * @param query the query to run
+   * @param searched the terminologies being searched
+   * @return the names of the matching concepts
+   */
+  private Set<String> fetchMatchingNames(final EvsQuery query, final List<Terminology> searched) {
+    return fetchMatchingNames(query.fetchOpenSearchQuery(operations, searched));
   }
 
   /**

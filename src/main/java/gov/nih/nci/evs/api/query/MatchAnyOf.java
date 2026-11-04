@@ -35,13 +35,10 @@ public class MatchAnyOf extends EvsQuery {
   /**
    * Instantiates a {@link MatchAnyOf}.
    *
-   * @param terminologies the terminologies being searched
    * @param field the field to match against
    * @param values the values, any of which the field may equal
    */
-  public MatchAnyOf(
-      final List<Terminology> terminologies, final String field, final Collection<String> values) {
-    super(terminologies);
+  public MatchAnyOf(final String field, final Collection<String> values) {
     this.field = Objects.requireNonNull(field, "field");
     this.values = new TreeSet<>(Objects.requireNonNull(values, "values"));
 
@@ -77,7 +74,8 @@ public class MatchAnyOf extends EvsQuery {
 
   /* see superclass */
   @Override
-  public QueryBuilder fetchOpenSearchQuery(final OpenSearchOperations operations) {
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
     return QueryBuilders.termsQuery(field, values);
   }
 }

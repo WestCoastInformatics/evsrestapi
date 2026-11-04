@@ -91,7 +91,6 @@ public class LogicalQueryTest {
   public void testAndNeedsEveryChild() {
     final EvsQuery query =
         new And(
-            TERMINOLOGIES,
             List.of(getNameMatching(new StartsWith("Mel")), getNameMatching(new Contains("oma"))));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(query));
@@ -100,7 +99,7 @@ public class LogicalQueryTest {
   /** With no children there's nothing to fail, so everything matches. */
   @Test
   public void testAndWithoutChildrenMatchesEverything() {
-    final EvsQuery query = new And(TERMINOLOGIES, List.of());
+    final EvsQuery query = new And(List.of());
 
     assertEquals(Set.copyOf(INDEXED_NAMES), fetchMatchingNames(query));
   }
@@ -114,7 +113,6 @@ public class LogicalQueryTest {
   public void testOrNeedsAnyChild() {
     final EvsQuery query =
         new Or(
-            TERMINOLOGIES,
             List.of(getNameMatching(new Exact("Carcinoma")), getNameMatching(new Exact("NEVUS"))));
 
     assertEquals(Set.of("Carcinoma", "NEVUS"), fetchMatchingNames(query));
@@ -126,7 +124,7 @@ public class LogicalQueryTest {
    */
   @Test
   public void testOrWithoutChildrenMatchesNothing() {
-    final EvsQuery query = new Or(TERMINOLOGIES, List.of());
+    final EvsQuery query = new Or(List.of());
 
     assertEquals(Set.of(), fetchMatchingNames(query));
   }
@@ -138,7 +136,7 @@ public class LogicalQueryTest {
   /** Every name without "elan" in it. Matching is case sensitive, so "melanoma" has it too. */
   @Test
   public void testNotFindsWhatChildDoesNot() {
-    final EvsQuery query = new Not(TERMINOLOGIES, getNameMatching(new Contains("elan")));
+    final EvsQuery query = new Not(getNameMatching(new Contains("elan")));
 
     assertEquals(Set.of("Carcinoma", "NEVUS"), fetchMatchingNames(query));
   }
@@ -160,10 +158,7 @@ public class LogicalQueryTest {
   public void testNotLeavesRankingUnchanged() {
     final EvsQuery query =
         new And(
-            TERMINOLOGIES,
-            List.of(
-                new Not(TERMINOLOGIES, getNameMatching(new Exact("NEVUS"))),
-                getCarcinomaThenMelanoQuery()));
+            List.of(new Not(getNameMatching(new Exact("NEVUS"))), getCarcinomaThenMelanoQuery()));
 
     assertEquals(List.of("Carcinoma", "Melanocyte", "Melanoma"), fetchRankedNames(query));
   }
@@ -177,10 +172,9 @@ public class LogicalQueryTest {
     final float firstTierScore = 2.0f;
     final float secondTierScore = 1.0f;
     return new Or(
-        TERMINOLOGIES,
         List.of(
-            new Boost(TERMINOLOGIES, getNameMatching(new Exact("Carcinoma")), firstTierScore),
-            new Boost(TERMINOLOGIES, getNameMatching(new StartsWith("Melano")), secondTierScore)));
+            new Boost(getNameMatching(new Exact("Carcinoma")), firstTierScore),
+            new Boost(getNameMatching(new StartsWith("Melano")), secondTierScore)));
   }
 
   /**
@@ -192,7 +186,7 @@ public class LogicalQueryTest {
    */
   @DemonstratesFieldMatch
   private static EvsQuery getNameMatching(final ValueMatch match) {
-    return new FieldMatch(TERMINOLOGIES, NAME_FIELD, match);
+    return new FieldMatch(NAME_FIELD, match);
   }
 
   /**
@@ -204,7 +198,7 @@ public class LogicalQueryTest {
   private Set<String> fetchMatchingNames(final EvsQuery query) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
-            .withQuery(query.fetchOpenSearchQuery(operations))
+            .withQuery(query.fetchOpenSearchQuery(operations, TERMINOLOGIES))
             .withPageable(ALL_NAMES)
             .build();
     return operations.search(search, IndexedName.class, INDEX).stream()
@@ -222,7 +216,7 @@ public class LogicalQueryTest {
   private List<String> fetchRankedNames(final EvsQuery query) {
     final NativeSearchQuery search =
         new NativeSearchQueryBuilder()
-            .withQuery(query.fetchOpenSearchQuery(operations))
+            .withQuery(query.fetchOpenSearchQuery(operations, TERMINOLOGIES))
             .withSorts(
                 SortBuilders.scoreSort().order(SortOrder.DESC),
                 SortBuilders.fieldSort(NAME_FIELD).order(SortOrder.ASC))
