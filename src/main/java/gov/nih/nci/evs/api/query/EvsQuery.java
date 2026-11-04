@@ -41,96 +41,6 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 public abstract class EvsQuery {
 
   /**
-   * Metadata field naming the index a hit came from. Each terminology has its own concept index, so
-   * this orders by terminology. The terminology field itself is analyzed text and can't be sorted
-   * on.
-   */
-  private static final String INDEX_FIELD = "_index";
-
-  /** Highlights every top-level field the query matched, as the main concept search does. */
-  private static final String EVERY_MATCHED_FIELD = "*";
-
-  /** Field that orders concepts within a terminology. */
-  private static final String CODE_FIELD = "code";
-
-  /** Where a hit's code is among its sort values: the key pages sort by code first. */
-  private static final int CODE_SORT_VALUE_POSITION = 0;
-
-  /**
-   * Concepts fetched per page by {@link #declareDependencies}, at OpenSearch's default page limit.
-   */
-  static final int CONCEPTS_PER_PAGE = 10_000;
-
-  /**
-   * The page number every concept page asks for. The page cursor, not the page number, moves
-   * through the pages.
-   */
-  private static final int FIRST_PAGE = 0;
-
-  /**
-   * Stored fields value that fetches none, not even {@code _source} or {@code _id}, so hits are
-   * identified from their sort values and index without reading any stored document. For
-   * efficiency: see {@link #fetchConceptKeys}.
-   */
-  static final String NO_STORED_FIELDS = "_none_";
-
-  /** The terminologies being searched. Unmodifiable. */
-  protected final List<Terminology> terminologies;
-
-  /**
-   * Instantiates an {@link EvsQuery}.
-   *
-   * @param terminologies the terminologies being searched
-   */
-  protected EvsQuery(final List<Terminology> terminologies) {
-    terminologies.forEach(EvsQuery::checkTerminologyIsSearchable);
-    this.terminologies = List.copyOf(terminologies);
-  }
-
-  /**
-   * Fails if a terminology is missing its terminology or version, which say which terminology
-   * version each hit came from (see {@link #fetchConceptKeys}). Checked when a node is built, so a
-   * partly set up terminology fails here, naming what's missing, rather than deep inside a later
-   * search.
-   *
-   * <p>The index name isn't checked: {@link Terminology#getIndexName} is never null. Without one
-   * set, it builds and caches one from the terminology and version, so it's only read after they
-   * are known to be there.
-   *
-   * @param terminology the terminology
-   * @throws IllegalArgumentException if the terminology or version is missing
-   */
-  private static void checkTerminologyIsSearchable(final Terminology terminology) {
-    Objects.requireNonNull(terminology, "terminology");
-    checkTerminologyHasField(terminology, "terminology", terminology.getTerminology());
-    checkTerminologyHasField(terminology, "version", terminology.getVersion());
-  }
-
-  /**
-   * Fails if one of a terminology's fields is missing, naming the field and showing the terminology
-   * and version it does have.
-   *
-   * @param terminology the terminology
-   * @param fieldName the name of the field
-   * @param fieldValue the field's value
-   * @throws IllegalArgumentException if the value is missing
-   */
-  private static void checkTerminologyHasField(
-      final Terminology terminology, final String fieldName, final String fieldValue) {
-    final boolean hasFieldValue = fieldValue != null;
-    if (!hasFieldValue) {
-      throw new IllegalArgumentException(
-          "Terminology has no "
-              + fieldName
-              + " (terminology = "
-              + terminology.getTerminology()
-              + ", version = "
-              + terminology.getVersion()
-              + ")");
-    }
-  }
-
-  /**
    * Returns the terminologies.
    *
    * @return the terminologies
@@ -174,20 +84,6 @@ public abstract class EvsQuery {
   public abstract QueryBuilder fetchOpenSearchQuery(OpenSearchOperations operations);
 
   /**
-   * EXPERIMENTAL: returns the sorts this node wants applied when it's the query {@link
-   * #fetchConcepts} runs, in priority order. Most nodes only match, so the default is none.
-   *
-   * <p>Composite nodes must return their own sorts first, then each child's sorts in child order. A
-   * nested node's sorts therefore only break ties left by the nodes above and before it. A node
-   * that negates its children (e.g. {@code Not}) contributes none of their sorts.
-   *
-   * @return the sorts, highest priority first
-   */
-  protected List<SortBuilder<?>> getSorts() {
-    return List.of();
-  }
-
-  /**
    * Runs this query and returns one page of the concepts it matches. Sorts come from {@link
    * #getSorts()}, with duplicates dropped, followed by terminology and code so results are stable
    * between requests. When the include asks for highlights, each hit carries OpenSearch's
@@ -216,6 +112,43 @@ public abstract class EvsQuery {
   }
 
   /**
+   * Returns the concept indexes of the terminologies, which {@link #fetchConcepts} searches.
+   *
+   * @return the index coordinates
+   */
+  public IndexCoordinates getIndexCoordinates() {
+    return IndexCoordinates.of(
+        terminologies.stream().map(Terminology::getIndexName).toArray(String[]::new));
+  }
+
+  /** The terminologies being searched. Unmodifiable. */
+  protected final List<Terminology> terminologies;
+
+  /**
+   * Instantiates an {@link EvsQuery}.
+   *
+   * @param terminologies the terminologies being searched
+   */
+  protected EvsQuery(final List<Terminology> terminologies) {
+    terminologies.forEach(EvsQuery::checkTerminologyIsSearchable);
+    this.terminologies = List.copyOf(terminologies);
+  }
+
+  /**
+   * EXPERIMENTAL: returns the sorts this node wants applied when it's the query {@link
+   * #fetchConcepts} runs, in priority order. Most nodes only match, so the default is none.
+   *
+   * <p>Composite nodes must return their own sorts first, then each child's sorts in child order. A
+   * nested node's sorts therefore only break ties left by the nodes above and before it. A node
+   * that negates its children (e.g. {@code Not}) contributes none of their sorts.
+   *
+   * @return the sorts, highest priority first
+   */
+  protected List<SortBuilder<?>> getSorts() {
+    return List.of();
+  }
+
+  /**
    * Returns the fields OpenSearch should highlight when {@link #fetchConcepts} is asked for
    * highlights. The default highlights every top-level field the query matched, as the main concept
    * search does.
@@ -227,28 +160,6 @@ public abstract class EvsQuery {
    */
   protected List<HighlightBuilder.Field> getHighlightFields() {
     return List.of(new HighlightBuilder.Field(EVERY_MATCHED_FIELD));
-  }
-
-  /**
-   * Returns the concept indexes of the terminologies, which {@link #fetchConcepts} searches.
-   *
-   * @return the index coordinates
-   */
-  public IndexCoordinates getIndexCoordinates() {
-    return IndexCoordinates.of(
-        terminologies.stream().map(Terminology::getIndexName).toArray(String[]::new));
-  }
-
-  /**
-   * Returns this node's sorts without duplicates, then the terminology and code tie-break.
-   *
-   * @return the sorts, highest priority first
-   */
-  private List<SortBuilder<?>> getSortsWithTieBreak() {
-    final List<SortBuilder<?>> sorts = new ArrayList<>(getSorts());
-    sorts.add(SortBuilders.fieldSort(INDEX_FIELD).order(SortOrder.ASC));
-    sorts.add(SortBuilders.fieldSort(CODE_FIELD).order(SortOrder.ASC));
-    return sorts.stream().distinct().collect(Collectors.toList());
   }
 
   /**
@@ -310,6 +221,95 @@ public abstract class EvsQuery {
     fetchAndAddCodesFromAllPages(operations, queryBuilder, codesByTerminologyVersion);
 
     return ConceptKeys.of(codesByTerminologyVersion);
+  }
+
+  /**
+   * Concepts fetched per page by {@link #declareDependencies}, at OpenSearch's default page limit.
+   */
+  static final int CONCEPTS_PER_PAGE = 10_000;
+
+  /**
+   * Stored fields value that fetches none, not even {@code _source} or {@code _id}, so hits are
+   * identified from their sort values and index without reading any stored document. For
+   * efficiency: see {@link #fetchConceptKeys}.
+   */
+  static final String NO_STORED_FIELDS = "_none_";
+
+  /**
+   * Metadata field naming the index a hit came from. Each terminology has its own concept index, so
+   * this orders by terminology. The terminology field itself is analyzed text and can't be sorted
+   * on.
+   */
+  private static final String INDEX_FIELD = "_index";
+
+  /** Highlights every top-level field the query matched, as the main concept search does. */
+  private static final String EVERY_MATCHED_FIELD = "*";
+
+  /** Field that orders concepts within a terminology. */
+  private static final String CODE_FIELD = "code";
+
+  /** Where a hit's code is among its sort values: the key pages sort by code first. */
+  private static final int CODE_SORT_VALUE_POSITION = 0;
+
+  /**
+   * The page number every concept page asks for. The page cursor, not the page number, moves
+   * through the pages.
+   */
+  private static final int FIRST_PAGE = 0;
+
+  /**
+   * Fails if a terminology is missing its terminology or version, which say which terminology
+   * version each hit came from (see {@link #fetchConceptKeys}). Checked when a node is built, so a
+   * partly set up terminology fails here, naming what's missing, rather than deep inside a later
+   * search.
+   *
+   * <p>The index name isn't checked: {@link Terminology#getIndexName} is never null. Without one
+   * set, it builds and caches one from the terminology and version, so it's only read after they
+   * are known to be there.
+   *
+   * @param terminology the terminology
+   * @throws IllegalArgumentException if the terminology or version is missing
+   */
+  private static void checkTerminologyIsSearchable(final Terminology terminology) {
+    Objects.requireNonNull(terminology, "terminology");
+    checkTerminologyHasField(terminology, "terminology", terminology.getTerminology());
+    checkTerminologyHasField(terminology, "version", terminology.getVersion());
+  }
+
+  /**
+   * Fails if one of a terminology's fields is missing, naming the field and showing the terminology
+   * and version it does have.
+   *
+   * @param terminology the terminology
+   * @param fieldName the name of the field
+   * @param fieldValue the field's value
+   * @throws IllegalArgumentException if the value is missing
+   */
+  private static void checkTerminologyHasField(
+      final Terminology terminology, final String fieldName, final String fieldValue) {
+    final boolean hasFieldValue = fieldValue != null;
+    if (!hasFieldValue) {
+      throw new IllegalArgumentException(
+          "Terminology has no "
+              + fieldName
+              + " (terminology = "
+              + terminology.getTerminology()
+              + ", version = "
+              + terminology.getVersion()
+              + ")");
+    }
+  }
+
+  /**
+   * Returns this node's sorts without duplicates, then the terminology and code tie-break.
+   *
+   * @return the sorts, highest priority first
+   */
+  private List<SortBuilder<?>> getSortsWithTieBreak() {
+    final List<SortBuilder<?>> sorts = new ArrayList<>(getSorts());
+    sorts.add(SortBuilders.fieldSort(INDEX_FIELD).order(SortOrder.ASC));
+    sorts.add(SortBuilders.fieldSort(CODE_FIELD).order(SortOrder.ASC));
+    return sorts.stream().distinct().collect(Collectors.toList());
   }
 
   /**
