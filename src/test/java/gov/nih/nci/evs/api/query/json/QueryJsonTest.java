@@ -292,6 +292,15 @@ public class QueryJsonTest {
     assertReadFailsMentioning(json, "terminologies");
   }
 
+  /** Terminologies in the JSON of a Boolean node fail too. */
+  @Test
+  public void testTerminologiesPropertyOnBooleanNodeFails() {
+    final String json =
+        "{'type':'not','child':{'type':'descendantOf','code':'C3262'},'terminologies':[]}";
+
+    assertReadFailsMentioning(json, "terminologies");
+  }
+
   /** A missing required property fails, naming the property. */
   @Test
   public void testMissingRequiredPropertyFailsNamingProperty() {
