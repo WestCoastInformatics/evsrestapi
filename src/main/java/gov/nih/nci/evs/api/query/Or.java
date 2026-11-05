@@ -25,6 +25,15 @@ public class Or extends EvsQuery {
     this.children = List.copyOf(children);
   }
 
+  /**
+   * Returns the queries of which at least one must match.
+   *
+   * @return the children
+   */
+  public List<EvsQuery> getChildren() {
+    return children;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder fetchOpenSearchQuery(

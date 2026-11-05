@@ -27,6 +27,15 @@ public final class AllQualifiers implements QualifierCondition {
     this.conditions = List.copyOf(Objects.requireNonNull(conditions, "conditions"));
   }
 
+  /**
+   * Returns the conditions that must all hold.
+   *
+   * @return the conditions, unmodifiable
+   */
+  public List<QualifierCondition> getConditions() {
+    return conditions;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder getPropertiesMatching(

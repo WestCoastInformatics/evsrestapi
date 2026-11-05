@@ -31,6 +31,24 @@ public class Boost extends EvsQuery {
     this.score = score;
   }
 
+  /**
+   * Returns the query whose matches are scored.
+   *
+   * @return the child
+   */
+  public EvsQuery getChild() {
+    return child;
+  }
+
+  /**
+   * Returns the score every match gets.
+   *
+   * @return the score
+   */
+  public float getScore() {
+    return score;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder fetchOpenSearchQuery(

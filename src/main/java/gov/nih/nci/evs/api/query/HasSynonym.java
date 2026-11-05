@@ -107,6 +107,42 @@ public final class HasSynonym extends EvsQuery {
     this.subSourceMatch = subSourceMatch;
   }
 
+  /**
+   * Returns the match for the synonym's name, with normalized terms.
+   *
+   * @return the normalized name match, or null to match any name
+   */
+  public ValueMatch getNormalizedNameMatch() {
+    return normalizedNameMatch;
+  }
+
+  /**
+   * Returns the match for the synonym's source.
+   *
+   * @return the source match, or null to match any source
+   */
+  public ValueMatch getSourceMatch() {
+    return sourceMatch;
+  }
+
+  /**
+   * Returns the match for the synonym's term type.
+   *
+   * @return the term type match, or null to match any term type
+   */
+  public ValueMatch getTermTypeMatch() {
+    return termTypeMatch;
+  }
+
+  /**
+   * Returns the match for the synonym's sub-source.
+   *
+   * @return the sub-source match, or null to match any sub-source
+   */
+  public ValueMatch getSubSourceMatch() {
+    return subSourceMatch;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder fetchOpenSearchQuery(

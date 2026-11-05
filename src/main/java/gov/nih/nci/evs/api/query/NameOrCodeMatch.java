@@ -40,6 +40,33 @@ final class NameOrCodeMatch extends EvsQuery {
     this.nameOrCodeMatch = Objects.requireNonNull(nameOrCodeMatch, "nameOrCodeMatch");
   }
 
+  /**
+   * Returns the field holding the name.
+   *
+   * @return the name field
+   */
+  public String getNameField() {
+    return nameField;
+  }
+
+  /**
+   * Returns the field holding the code.
+   *
+   * @return the code field
+   */
+  public String getCodeField() {
+    return codeField;
+  }
+
+  /**
+   * Returns how the name or code must match.
+   *
+   * @return the name or code match
+   */
+  public ValueMatch getNameOrCodeMatch() {
+    return nameOrCodeMatch;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder fetchOpenSearchQuery(

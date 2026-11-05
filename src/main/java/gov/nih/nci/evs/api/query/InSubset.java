@@ -52,6 +52,15 @@ public final class InSubset extends EvsQuery {
   }
 
   /**
+   * Returns how the subsets' name or code must match.
+   *
+   * @return the subset name or code match
+   */
+  public ValueMatch getSubsetNameOrCodeMatch() {
+    return subsetNameOrCodeMatch;
+  }
+
+  /**
    * Returns the query matching members of the subsets. The association types marking membership
    * (e.g. A8) are gathered across every searched terminology, so one query covers them all.
    *

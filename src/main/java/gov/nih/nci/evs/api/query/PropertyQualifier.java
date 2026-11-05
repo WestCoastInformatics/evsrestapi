@@ -61,6 +61,24 @@ public final class PropertyQualifier implements QualifierCondition {
   }
 
   /**
+   * Returns the match for the qualifier's type name or code.
+   *
+   * @return the type name or code match
+   */
+  public ValueMatch getTypeNameOrCodeMatch() {
+    return typeNameOrCodeMatch;
+  }
+
+  /**
+   * Returns the match for the qualifier's value.
+   *
+   * @return the value match, or null to match any value
+   */
+  public ValueMatch getValueMatch() {
+    return valueMatch;
+  }
+
+  /**
    * Returns a query matching property entries with at least one qualifier entry matching this
    * qualifier. Runs inside the query over the property entries.
    *

@@ -27,6 +27,15 @@ public final class NoQualifier implements QualifierCondition {
     this.condition = Objects.requireNonNull(condition, "condition");
   }
 
+  /**
+   * Returns the condition the entry must not meet.
+   *
+   * @return the condition
+   */
+  public QualifierCondition getCondition() {
+    return condition;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder getPropertiesMatching(

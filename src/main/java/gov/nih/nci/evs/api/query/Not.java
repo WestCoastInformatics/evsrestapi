@@ -29,6 +29,15 @@ public class Not extends EvsQuery {
     this.child = Objects.requireNonNull(child, "child");
   }
 
+  /**
+   * Returns the query concepts must not match.
+   *
+   * @return the child
+   */
+  public EvsQuery getChild() {
+    return child;
+  }
+
   /* see superclass */
   @Override
   public QueryBuilder fetchOpenSearchQuery(
