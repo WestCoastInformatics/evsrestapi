@@ -12,7 +12,7 @@ import gov.nih.nci.evs.api.model.Paths;
 import gov.nih.nci.evs.api.model.SearchCriteria;
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.properties.ApplicationProperties;
-import gov.nih.nci.evs.api.query.Typeahead;
+import gov.nih.nci.evs.api.query.EvsQuery;
 import gov.nih.nci.evs.api.support.es.EVSPageable;
 import gov.nih.nci.evs.api.util.ConceptUtils;
 import gov.nih.nci.evs.api.util.TerminologyUtils;
@@ -99,14 +99,14 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
   /* see superclass */
   @Override
-  public ConceptResultList findTypeaheadConcepts(
-      final Typeahead typeahead,
+  public ConceptResultList findQueryConcepts(
+      final EvsQuery query,
       final List<Terminology> terminologies,
       final SearchCriteria searchCriteria) {
-    // Typeahead only returns the best matches, which are on the first page
+    // Only the best matches are returned, which are on the first page
     final int bestMatchesPage = 0;
     final SearchHits<Concept> hits =
-        typeahead.fetchConcepts(
+        query.fetchConcepts(
             operations,
             terminologies,
             PageRequest.of(bestMatchesPage, searchCriteria.getPageSize()),
@@ -114,7 +114,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     final ConceptResultList results = new ConceptResultList();
     results.setParameters(searchCriteria);
-    // Capped at 10,000 on purpose: typeahead doesn't page, so it doesn't need the exact count
+    // Capped at 10,000 on purpose: this doesn't page, so it doesn't need the exact count
     // that findConcepts runs a second query for
     results.setTotal(hits.getTotalHits());
     results.setConcepts(

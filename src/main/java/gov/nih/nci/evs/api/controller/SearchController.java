@@ -13,6 +13,7 @@ import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.model.sparql.Bindings;
 import gov.nih.nci.evs.api.model.sparql.Sparql;
 import gov.nih.nci.evs.api.properties.GraphProperties;
+import gov.nih.nci.evs.api.query.EvsQuery;
 import gov.nih.nci.evs.api.query.Typeahead;
 import gov.nih.nci.evs.api.service.MetadataService;
 import gov.nih.nci.evs.api.service.OpenSearchService;
@@ -27,6 +28,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -539,7 +541,7 @@ public class SearchController extends BaseController {
 
     final Typeahead typeahead = new Typeahead(incompleteTerm);
     final ConceptResultList results =
-        openSearchService.findTypeaheadConcepts(typeahead, terminologies, searchCriteria);
+        openSearchService.findQueryConcepts(typeahead, terminologies, searchCriteria);
     highlightConceptMatches(results);
 
     results.setTimeTaken(System.currentTimeMillis() - timerStartDate);
@@ -573,6 +575,157 @@ public class SearchController extends BaseController {
     if (pageSize != null) {
       searchCriteria.setPageSize(pageSize);
     }
+    return searchCriteria;
+  }
+
+  /**
+   * Runs a query tree sent as JSON and returns the concepts it matches.
+   *
+   * @param query the query tree, deserialized from the request body by its "type" properties
+   * @param requestedTerminologies the names of the terminologies to search, or null for ncit
+   * @param pageSize the maximum number of concepts to return, or null for the default
+   * @param include the fields to return for each concept, or null for the default
+   * @param license the license key from the request header
+   * @return the first page of matching concepts
+   * @throws Exception the exception
+   */
+  @Operation(
+      summary = "Get the concepts matching a query tree",
+      description =
+          "Runs a query tree sent as JSON against the requested terminologies (NCI Thesaurus by"
+              + " default) and returns the concepts it matches. Each node names its kind in a"
+              + " \"type\" property, e.g. And, Or, Not, DescendantOf, HasProperty, HasSynonym, and"
+              + " each value match does too, e.g. Exact, StartsWith, Contains. Returns only the"
+              + " first page, and the total counts matches only up to 10,000.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Successfully retrieved the requested information"),
+    @ApiResponse(
+        responseCode = "400",
+        description = "Bad request",
+        content =
+            @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = RestException.class))),
+    @ApiResponse(
+        responseCode = "417",
+        description = "Expectation failed",
+        content =
+            @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = RestException.class)))
+  })
+  @Parameters({
+    @Parameter(
+        name = "terminology",
+        description =
+            "Comma-separated list of terminologies to search, e.g. 'ncit' or 'ncim' (<a"
+                + " href=\"https://github.com/NCIEVS/evsrestapi-client-SDK/blob/main/doc/TERMINOLOGIES.md\">See"
+                + " here for complete list</a>)",
+        required = false,
+        schema = @Schema(implementation = String.class),
+        example = "ncit"),
+    @Parameter(
+        name = "pageSize",
+        description = "Max number of results to return.",
+        required = false,
+        schema = @Schema(implementation = Integer.class, defaultValue = "10")),
+    @Parameter(
+        name = "include",
+        description =
+            "Indicator of how much data to return. Comma-separated list of any of the following"
+                + " values: minimal, summary, full, associations, children, definitions,"
+                + " disjointWith, highlights, history, inverseAssociations, inverseRoles, maps,"
+                + " parents, properties, roles, synonyms. <a"
+                + " href='https://github.com/NCIEVS/evsrestapi-client-SDK/blob/main/doc/INCLUDE.md'"
+                + " target='_blank'>See here for detailed information</a>.",
+        required = false,
+        schema = @Schema(implementation = String.class, defaultValue = "minimal"),
+        example = "minimal"),
+    @Parameter(
+        name = "X-EVSRESTAPI-License-Key",
+        description =
+            "Required license information for restricted terminologies. <a"
+                + " href='https://github.com/NCIEVS/evsrestapi-client-SDK/blob/main/doc/LICENSE.md'"
+                + " target='_blank'>See here for detailed information</a>.",
+        required = false,
+        schema = @Schema(implementation = String.class))
+  })
+  @RequestBody(
+      description = "The query tree, e.g. the concepts at most one level below Neoplasm (C3262)",
+      required = true,
+      content =
+          @Content(
+              mediaType = "application/json",
+              schema = @Schema(implementation = EvsQuery.class),
+              examples =
+                  @ExampleObject(
+                      value =
+                          "{\"type\": \"DescendantOf\", \"targetNameOrCodeMatch\": {\"type\":"
+                              + " \"Exact\", \"term\": \"C3262\"}, \"maxLevel\": 1}")))
+  @RecordMetric
+  @PostMapping(
+      value = "/concept/query",
+      consumes = "application/json",
+      produces = "application/json")
+  public @ResponseBody ConceptResultList searchByQuery(
+      @org.springframework.web.bind.annotation.RequestBody final EvsQuery query,
+      @RequestParam(name = "terminology", required = false)
+          final List<String> requestedTerminologies,
+      @RequestParam(name = "pageSize", required = false) final Integer pageSize,
+      @RequestParam(name = "include", required = false) final String include,
+      @RequestHeader(name = "X-EVSRESTAPI-License-Key", required = false) final String license)
+      throws Exception {
+    // SearchCriteria carries the request parameters, as for typeahead, so this reuses the
+    // existing validation methods
+    final SearchCriteria searchCriteria =
+        getQuerySearchCriteria(requestedTerminologies, pageSize, include);
+
+    final long timerStartDate = System.currentTimeMillis();
+
+    checkSearchCriteria(searchCriteria);
+    tryFallbackOnNCIT(searchCriteria);
+
+    final List<Terminology> terminologies =
+        parseAndValidateTerminologiesFromSearchCriteria(searchCriteria, license);
+
+    final ConceptResultList results =
+        openSearchService.findQueryConcepts(query, terminologies, searchCriteria);
+    highlightConceptMatches(results);
+
+    results.setTimeTaken(System.currentTimeMillis() - timerStartDate);
+    return results;
+  }
+
+  /**
+   * Builds the search criteria carrying the query request parameters.
+   *
+   * @param requestedTerminologies the names of the terminologies to search, or null to leave the
+   *     terminology unset so the ncit fallback applies
+   * @param pageSize the maximum number of concepts to return, or null for the default
+   * @param include the fields to return for each concept, or null for the default
+   * @return the search criteria
+   */
+  private SearchCriteria getQuerySearchCriteria(
+      final List<String> requestedTerminologies, final Integer pageSize, final String include) {
+    final SearchCriteria searchCriteria = new SearchCriteria();
+
+    final boolean hasRequestedTerminologies = requestedTerminologies != null;
+    if (hasRequestedTerminologies) {
+      searchCriteria.setTerminology(requestedTerminologies);
+    }
+
+    final boolean hasRequestedPageSize = pageSize != null;
+    if (hasRequestedPageSize) {
+      searchCriteria.setPageSize(pageSize);
+    }
+
+    final boolean hasRequestedInclude = include != null;
+    if (hasRequestedInclude) {
+      searchCriteria.setInclude(include);
+    }
+
     return searchCriteria;
   }
 
