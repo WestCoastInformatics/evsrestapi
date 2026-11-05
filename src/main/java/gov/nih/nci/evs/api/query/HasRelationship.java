@@ -53,10 +53,10 @@ public abstract class HasRelationship extends EvsQuery {
    * entries, each pairing a type with a target concept, and the type says how the concept relates
    * to that target.
    */
-  private ValueMatch typeNameOrCodeMatch;
+  private ValueMatch relationshipType;
 
   /** How the name or code of the concept the relationship points to must match, or null for any. */
-  private ValueMatch targetNameOrCodeMatch;
+  private ValueMatch target;
 
   /** Instantiates an empty {@link HasRelationship}. */
   protected HasRelationship() {
@@ -67,25 +67,23 @@ public abstract class HasRelationship extends EvsQuery {
    * Instantiates a {@link HasRelationship} that matches a relationship of the given type, pointing
    * to any concept.
    *
-   * @param typeNameOrCodeMatch how the relationship's type name or code must match
+   * @param relationshipType how the relationship's type name or code must match
    */
-  protected HasRelationship(final ValueMatch typeNameOrCodeMatch) {
-    this.typeNameOrCodeMatch = Objects.requireNonNull(typeNameOrCodeMatch, "typeNameOrCodeMatch");
-    this.targetNameOrCodeMatch = null;
+  protected HasRelationship(final ValueMatch relationshipType) {
+    this.relationshipType = Objects.requireNonNull(relationshipType, "relationshipType");
+    this.target = null;
   }
 
   /**
    * Instantiates a {@link HasRelationship} that matches a relationship of the given type pointing
    * to the target.
    *
-   * @param typeNameOrCodeMatch how the relationship's type name or code must match
-   * @param targetNameOrCodeMatch how the target's name or code must match
+   * @param relationshipType how the relationship's type name or code must match
+   * @param target how the target's name or code must match
    */
-  protected HasRelationship(
-      final ValueMatch typeNameOrCodeMatch, final ValueMatch targetNameOrCodeMatch) {
-    this.typeNameOrCodeMatch = Objects.requireNonNull(typeNameOrCodeMatch, "typeNameOrCodeMatch");
-    this.targetNameOrCodeMatch =
-        Objects.requireNonNull(targetNameOrCodeMatch, "targetNameOrCodeMatch");
+  protected HasRelationship(final ValueMatch relationshipType, final ValueMatch target) {
+    this.relationshipType = Objects.requireNonNull(relationshipType, "relationshipType");
+    this.target = Objects.requireNonNull(target, "target");
   }
 
   /**
@@ -99,21 +97,23 @@ public abstract class HasRelationship extends EvsQuery {
   protected abstract String getRelationshipListFieldName();
 
   /**
-   * Returns how the relationship's type name or code must match.
+   * Returns how the relationship's type name or code must match. Protected, so it isn't a JSON
+   * property: each subclass exposes it under its own name, e.g. {@code role}, since {@code type} is
+   * the JSON property naming the node.
    *
    * @return the type name or code match
    */
-  public ValueMatch getTypeNameOrCodeMatch() {
-    return typeNameOrCodeMatch;
+  protected ValueMatch getRelationshipType() {
+    return relationshipType;
   }
 
   /**
    * Sets how the relationship's type name or code must match.
    *
-   * @param typeNameOrCodeMatch the type name or code match
+   * @param relationshipType the type name or code match
    */
-  public void setTypeNameOrCodeMatch(final ValueMatch typeNameOrCodeMatch) {
-    this.typeNameOrCodeMatch = typeNameOrCodeMatch;
+  protected void setRelationshipType(final ValueMatch relationshipType) {
+    this.relationshipType = relationshipType;
   }
 
   /**
@@ -121,8 +121,8 @@ public abstract class HasRelationship extends EvsQuery {
    *
    * @return whether there is a target
    */
-  private boolean getHasTargetNameOrCodeMatch() {
-    return targetNameOrCodeMatch != null;
+  private boolean getHasTarget() {
+    return target != null;
   }
 
   /**
@@ -130,17 +130,17 @@ public abstract class HasRelationship extends EvsQuery {
    *
    * @return the target name or code match, or null for any target
    */
-  public ValueMatch getTargetNameOrCodeMatch() {
-    return targetNameOrCodeMatch;
+  public ValueMatch getTarget() {
+    return target;
   }
 
   /**
    * Sets how the target's name or code must match.
    *
-   * @param targetNameOrCodeMatch the target name or code match, or null for any target
+   * @param target the target name or code match, or null for any target
    */
-  public void setTargetNameOrCodeMatch(final ValueMatch targetNameOrCodeMatch) {
-    this.targetNameOrCodeMatch = targetNameOrCodeMatch;
+  public void setTarget(final ValueMatch target) {
+    this.target = target;
   }
 
   /**
@@ -158,21 +158,13 @@ public abstract class HasRelationship extends EvsQuery {
         QueryBuilders.boolQuery()
             .must(
                 getEntryNameOrCodeQuery(
-                    TYPE_NAME_FIELD,
-                    TYPE_CODE_FIELD,
-                    typeNameOrCodeMatch,
-                    operations,
-                    terminologies));
+                    TYPE_NAME_FIELD, TYPE_CODE_FIELD, relationshipType, operations, terminologies));
 
-    final boolean hasTarget = getHasTargetNameOrCodeMatch();
+    final boolean hasTarget = getHasTarget();
     if (hasTarget) {
       entryConditions.must(
           getEntryNameOrCodeQuery(
-              TARGET_NAME_FIELD,
-              TARGET_CODE_FIELD,
-              targetNameOrCodeMatch,
-              operations,
-              terminologies));
+              TARGET_NAME_FIELD, TARGET_CODE_FIELD, target, operations, terminologies));
     }
 
     return getConceptsWithAnyEntryMatching(entryConditions);

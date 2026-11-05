@@ -19,8 +19,8 @@ public class HasInverseAssociationEndpointTest extends AbstractQueryEndpointTest
   private static final String SUBSETS_OF_BREAST_CARCINOMA_QUERY =
       """
       {"type": "HasInverseAssociation",
-       "typeNameOrCodeMatch": {"type": "OneOf", "terms": ["A8"]},
-       "targetNameOrCodeMatch": {"type": "Exact", "term": "C4872"}}
+       "association": {"type": "OneOf", "terms": ["A8"]},
+       "target": {"type": "Exact", "term": "C4872"}}
       """;
 
   /**
@@ -48,7 +48,7 @@ public class HasInverseAssociationEndpointTest extends AbstractQueryEndpointTest
     final String termsNotInListQuery =
         """
         {"type": "HasInverseAssociation",
-         "typeNameOrCodeMatch": {"type": "OneOf", "terms": "A8"}}
+         "association": {"type": "OneOf", "terms": "A8"}}
         """;
 
     postQuery(termsNotInListQuery).andExpect(status().isBadRequest());

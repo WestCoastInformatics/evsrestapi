@@ -17,7 +17,7 @@ public class AncestorOfEndpointTest extends AbstractQueryEndpointTest {
   private static final String PARENT_OF_FEMALE_BREAST_QUERY =
       """
       {"type": "AncestorOf",
-       "targetNameOrCodeMatch": {"type": "Exact", "term": "C12851"}, "maxLevel": 1}
+       "target": {"type": "Exact", "term": "C12851"}, "maxLevel": 1}
       """;
 
   /**
@@ -40,7 +40,7 @@ public class AncestorOfEndpointTest extends AbstractQueryEndpointTest {
   public void testAncestorOfWithCodeAsTargetReturnsBadRequest() throws Exception {
     final String codeAsTargetQuery =
         """
-        {"type": "AncestorOf", "targetNameOrCodeMatch": "C12851"}
+        {"type": "AncestorOf", "target": "C12851"}
         """;
 
     postQuery(codeAsTargetQuery).andExpect(status().isBadRequest());

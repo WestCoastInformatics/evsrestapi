@@ -24,23 +24,42 @@ public final class HasInverseRole extends HasRelationship {
    * Instantiates a {@link HasInverseRole} that matches an inverse role of the given type, from any
    * concept.
    *
-   * @param roleTypeNameOrCodeMatch how the role's type name or code must match
+   * @param role how the role's type name or code must match
    */
-  public HasInverseRole(final ValueMatch roleTypeNameOrCodeMatch) {
-    super(roleTypeNameOrCodeMatch);
+  public HasInverseRole(final ValueMatch role) {
+    super(role);
   }
 
   /**
    * Instantiates a {@link HasInverseRole} that matches an inverse role of the given type from the
    * source.
    *
-   * @param roleTypeNameOrCodeMatch how the role's type name or code must match
-   * @param roleSourceNameOrCodeMatch how the name or code of the concept holding the role that
-   *     points to the matched concept
+   * @param role how the role's type name or code must match
+   * @param source how the name or code of the concept holding the role that points to the matched
+   *     concept
    */
-  public HasInverseRole(
-      final ValueMatch roleTypeNameOrCodeMatch, final ValueMatch roleSourceNameOrCodeMatch) {
-    super(roleTypeNameOrCodeMatch, roleSourceNameOrCodeMatch);
+  public HasInverseRole(final ValueMatch role, final ValueMatch source) {
+    super(role, source);
+  }
+
+  /**
+   * Returns how the name or code of the role's type, e.g. Disease_Has_Primary_Anatomic_Site (R101)
+   * must match.
+   *
+   * @return the role name or code match
+   */
+  public ValueMatch getRole() {
+    return getRelationshipType();
+  }
+
+  /**
+   * Sets how the name or code of the role's type, e.g. Disease_Has_Primary_Anatomic_Site (R101)
+   * must match.
+   *
+   * @param role the role name or code match
+   */
+  public void setRole(final ValueMatch role) {
+    setRelationshipType(role);
   }
 
   /* see superclass */

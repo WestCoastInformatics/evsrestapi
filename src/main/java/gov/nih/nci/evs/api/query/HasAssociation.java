@@ -19,24 +19,39 @@ public final class HasAssociation extends HasRelationship {
    * Instantiates a {@link HasAssociation} that matches an association of the given type, pointing
    * to any concept.
    *
-   * @param associationTypeNameOrCodeMatch how the association's type name or code must match
+   * @param association how the association's type name or code must match
    */
-  public HasAssociation(final ValueMatch associationTypeNameOrCodeMatch) {
-    super(associationTypeNameOrCodeMatch);
+  public HasAssociation(final ValueMatch association) {
+    super(association);
   }
 
   /**
    * Instantiates a {@link HasAssociation} that matches an association of the given type pointing to
    * the target.
    *
-   * @param associationTypeNameOrCodeMatch how the association's type name or code must match
-   * @param associationTargetNameOrCodeMatch how the name or code of the concept the association
-   *     must point to
+   * @param association how the association's type name or code must match
+   * @param target how the name or code of the concept the association must point to
    */
-  public HasAssociation(
-      final ValueMatch associationTypeNameOrCodeMatch,
-      final ValueMatch associationTargetNameOrCodeMatch) {
-    super(associationTypeNameOrCodeMatch, associationTargetNameOrCodeMatch);
+  public HasAssociation(final ValueMatch association, final ValueMatch target) {
+    super(association, target);
+  }
+
+  /**
+   * Returns how the name or code of the association's type, e.g. Concept_In_Subset (A8) must match.
+   *
+   * @return the association name or code match
+   */
+  public ValueMatch getAssociation() {
+    return getRelationshipType();
+  }
+
+  /**
+   * Sets how the name or code of the association's type, e.g. Concept_In_Subset (A8) must match.
+   *
+   * @param association the association name or code match
+   */
+  public void setAssociation(final ValueMatch association) {
+    setRelationshipType(association);
   }
 
   /* see superclass */

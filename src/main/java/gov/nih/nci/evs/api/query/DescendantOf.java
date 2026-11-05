@@ -50,21 +50,21 @@ public class DescendantOf extends HierarchyQuery {
   /**
    * Instantiates a {@link DescendantOf} for everything below the target concepts.
    *
-   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param target how the target concepts' name or code must match
    */
-  public DescendantOf(final ValueMatch targetNameOrCodeMatch) {
-    super(targetNameOrCodeMatch, ANY_LEVEL);
+  public DescendantOf(final ValueMatch target) {
+    super(target, ANY_LEVEL);
   }
 
   /**
    * Instantiates a {@link DescendantOf} for concepts within {@code maxLevel} levels below the
    * target concepts.
    *
-   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param target how the target concepts' name or code must match
    * @param maxLevel the maximum depth below the targets, at least 1
    */
-  public DescendantOf(final ValueMatch targetNameOrCodeMatch, final int maxLevel) {
-    super(targetNameOrCodeMatch, maxLevel);
+  public DescendantOf(final ValueMatch target, final int maxLevel) {
+    super(target, maxLevel);
   }
 
   /**

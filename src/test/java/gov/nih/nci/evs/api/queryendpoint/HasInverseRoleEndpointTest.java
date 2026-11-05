@@ -17,8 +17,8 @@ public class HasInverseRoleEndpointTest extends AbstractQueryEndpointTest {
   private static final String PRIMARY_ANATOMIC_SITE_OF_BREAST_CARCINOMA_QUERY =
       """
       {"type": "HasInverseRole",
-       "typeNameOrCodeMatch": {"type": "Exact", "term": "R101"},
-       "targetNameOrCodeMatch": {"type": "Exact", "term": "C4872"}}
+       "role": {"type": "Exact", "term": "R101"},
+       "target": {"type": "Exact", "term": "C4872"}}
       """;
 
   /**
@@ -41,7 +41,7 @@ public class HasInverseRoleEndpointTest extends AbstractQueryEndpointTest {
   public void testHasInverseRoleWithValueMatchWithoutTypeReturnsBadRequest() throws Exception {
     final String valueMatchWithoutTypeQuery =
         """
-        {"type": "HasInverseRole", "typeNameOrCodeMatch": {"term": "R101"}}
+        {"type": "HasInverseRole", "role": {"term": "R101"}}
         """;
 
     postQuery(valueMatchWithoutTypeQuery).andExpect(status().isBadRequest());

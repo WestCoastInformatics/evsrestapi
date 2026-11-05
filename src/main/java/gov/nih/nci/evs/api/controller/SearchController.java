@@ -662,7 +662,7 @@ public class SearchController extends BaseController {
               examples =
                   @ExampleObject(
                       value =
-                          "{\"type\": \"DescendantOf\", \"targetNameOrCodeMatch\": {\"type\":"
+                          "{\"type\": \"DescendantOf\", \"target\": {\"type\":"
                               + " \"Exact\", \"term\": \"C3262\"}, \"maxLevel\": 1}")))
   @RecordMetric
   @PostMapping(

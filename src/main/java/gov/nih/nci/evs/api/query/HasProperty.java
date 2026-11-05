@@ -44,13 +44,13 @@ public final class HasProperty extends EvsQuery {
   /** A property entry's list of qualifiers, mapped as nested so qualifiers can be searched. */
   private static final String QUALIFIERS_FIELD = PROPERTIES_FIELD + ".qualifiers";
 
-  private ValueMatch typeNameOrCodeMatch;
+  private ValueMatch property;
 
   /** The match for the property's value, or null to match any value. */
-  private ValueMatch valueMatch;
+  private ValueMatch value;
 
   /** The condition the property's qualifiers must meet, or null to require none. */
-  private QualifierCondition qualifierCondition;
+  private QualifierCondition qualifiers;
 
   /** Instantiates an empty {@link HasProperty}. */
   public HasProperty() {
@@ -60,53 +60,47 @@ public final class HasProperty extends EvsQuery {
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type, with any value.
    *
-   * @param typeNameOrCodeMatch the match for the property's type name or code
+   * @param property the match for the property's type name or code
    */
-  public HasProperty(final ValueMatch typeNameOrCodeMatch) {
-    this(typeNameOrCodeMatch, null, null);
+  public HasProperty(final ValueMatch property) {
+    this(property, null, null);
   }
 
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type with a matching
    * value.
    *
-   * @param typeNameOrCodeMatch the match for the property's type name or code
-   * @param valueMatch the match for the property's value
+   * @param property the match for the property's type name or code
+   * @param value the match for the property's value
    */
-  public HasProperty(final ValueMatch typeNameOrCodeMatch, final ValueMatch valueMatch) {
-    this(typeNameOrCodeMatch, Objects.requireNonNull(valueMatch, "valueMatch"), null);
+  public HasProperty(final ValueMatch property, final ValueMatch value) {
+    this(property, Objects.requireNonNull(value, "value"), null);
   }
 
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type, with any value,
    * whose qualifiers meet the condition.
    *
-   * @param typeNameOrCodeMatch the match for the property's type name or code
-   * @param qualifierCondition the condition the property's qualifiers must meet
+   * @param property the match for the property's type name or code
+   * @param qualifiers the condition the property's qualifiers must meet
    */
-  public HasProperty(
-      final ValueMatch typeNameOrCodeMatch, final QualifierCondition qualifierCondition) {
-    this(
-        typeNameOrCodeMatch,
-        null,
-        Objects.requireNonNull(qualifierCondition, "qualifierCondition"));
+  public HasProperty(final ValueMatch property, final QualifierCondition qualifiers) {
+    this(property, null, Objects.requireNonNull(qualifiers, "qualifiers"));
   }
 
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type with a matching
    * value, whose qualifiers meet the condition.
    *
-   * @param typeNameOrCodeMatch the match for the property's type name or code
-   * @param valueMatch the match for the property's value, or null for any value
-   * @param qualifierCondition the condition the property's qualifiers must meet, or null for none
+   * @param property the match for the property's type name or code
+   * @param value the match for the property's value, or null for any value
+   * @param qualifiers the condition the property's qualifiers must meet, or null for none
    */
   public HasProperty(
-      final ValueMatch typeNameOrCodeMatch,
-      final ValueMatch valueMatch,
-      final QualifierCondition qualifierCondition) {
-    this.typeNameOrCodeMatch = Objects.requireNonNull(typeNameOrCodeMatch, "typeNameOrCodeMatch");
-    this.valueMatch = valueMatch;
-    this.qualifierCondition = qualifierCondition;
+      final ValueMatch property, final ValueMatch value, final QualifierCondition qualifiers) {
+    this.property = Objects.requireNonNull(property, "property");
+    this.value = value;
+    this.qualifiers = qualifiers;
   }
 
   /**
@@ -114,17 +108,17 @@ public final class HasProperty extends EvsQuery {
    *
    * @return the type name or code match
    */
-  public ValueMatch getTypeNameOrCodeMatch() {
-    return typeNameOrCodeMatch;
+  public ValueMatch getProperty() {
+    return property;
   }
 
   /**
    * Sets the match for the property's type name or code.
    *
-   * @param typeNameOrCodeMatch the type name or code match
+   * @param property the type name or code match
    */
-  public void setTypeNameOrCodeMatch(final ValueMatch typeNameOrCodeMatch) {
-    this.typeNameOrCodeMatch = typeNameOrCodeMatch;
+  public void setProperty(final ValueMatch property) {
+    this.property = property;
   }
 
   /**
@@ -132,17 +126,17 @@ public final class HasProperty extends EvsQuery {
    *
    * @return the value match, or null to match any value
    */
-  public ValueMatch getValueMatch() {
-    return valueMatch;
+  public ValueMatch getValue() {
+    return value;
   }
 
   /**
    * Sets the match for the property's value.
    *
-   * @param valueMatch the value match, or null to match any value
+   * @param value the value match, or null to match any value
    */
-  public void setValueMatch(final ValueMatch valueMatch) {
-    this.valueMatch = valueMatch;
+  public void setValue(final ValueMatch value) {
+    this.value = value;
   }
 
   /**
@@ -150,17 +144,17 @@ public final class HasProperty extends EvsQuery {
    *
    * @return the qualifier condition, or null to require none
    */
-  public QualifierCondition getQualifierCondition() {
-    return qualifierCondition;
+  public QualifierCondition getQualifiers() {
+    return qualifiers;
   }
 
   /**
    * Sets the condition the property's qualifiers must meet.
    *
-   * @param qualifierCondition the qualifier condition, or null to require none
+   * @param qualifiers the qualifier condition, or null to require none
    */
-  public void setQualifierCondition(final QualifierCondition qualifierCondition) {
-    this.qualifierCondition = qualifierCondition;
+  public void setQualifiers(final QualifierCondition qualifiers) {
+    this.qualifiers = qualifiers;
   }
 
   /* see superclass */
@@ -168,20 +162,20 @@ public final class HasProperty extends EvsQuery {
   public QueryBuilder fetchOpenSearchQuery(
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final NameOrCodeMatch typeMatch =
-        new NameOrCodeMatch(TYPE_NAME_FIELD, TYPE_CODE_FIELD, typeNameOrCodeMatch);
+        new NameOrCodeMatch(TYPE_NAME_FIELD, TYPE_CODE_FIELD, property);
     final BoolQueryBuilder entryConditions =
         QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations, terminologies));
 
-    final boolean hasValueMatch = valueMatch != null;
+    final boolean hasValueMatch = value != null;
     if (hasValueMatch) {
-      final FieldMatch propertyValueMatch = new FieldMatch(VALUE_FIELD, valueMatch);
+      final FieldMatch propertyValueMatch = new FieldMatch(VALUE_FIELD, value);
       entryConditions.must(propertyValueMatch.fetchOpenSearchQuery(operations, terminologies));
     }
 
-    final boolean hasQualifierCondition = qualifierCondition != null;
+    final boolean hasQualifierCondition = qualifiers != null;
     if (hasQualifierCondition) {
       entryConditions.must(
-          qualifierCondition.getPropertiesMatching(QUALIFIERS_FIELD, operations, terminologies));
+          qualifiers.getPropertiesMatching(QUALIFIERS_FIELD, operations, terminologies));
     }
 
     return getConceptsWithAnyPropertyMatching(entryConditions);

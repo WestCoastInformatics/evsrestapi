@@ -26,24 +26,39 @@ public final class HasInverseAssociation extends HasRelationship {
    * Instantiates a {@link HasInverseAssociation} that matches concepts an association of the given
    * type points to, from any concept.
    *
-   * @param associationTypeNameOrCodeMatch how the association's type name or code must match
+   * @param association how the association's type name or code must match
    */
-  public HasInverseAssociation(final ValueMatch associationTypeNameOrCodeMatch) {
-    super(associationTypeNameOrCodeMatch);
+  public HasInverseAssociation(final ValueMatch association) {
+    super(association);
   }
 
   /**
    * Instantiates a {@link HasInverseAssociation} that matches concepts an association of the given
    * type points to, from the given source.
    *
-   * @param associationTypeNameOrCodeMatch how the association's type name or code must match
-   * @param associationSourceNameOrCodeMatch how the name or code of the concept the association
-   *     must come from
+   * @param association how the association's type name or code must match
+   * @param source how the name or code of the concept the association must come from
    */
-  public HasInverseAssociation(
-      final ValueMatch associationTypeNameOrCodeMatch,
-      final ValueMatch associationSourceNameOrCodeMatch) {
-    super(associationTypeNameOrCodeMatch, associationSourceNameOrCodeMatch);
+  public HasInverseAssociation(final ValueMatch association, final ValueMatch source) {
+    super(association, source);
+  }
+
+  /**
+   * Returns how the name or code of the association's type, e.g. Concept_In_Subset (A8) must match.
+   *
+   * @return the association name or code match
+   */
+  public ValueMatch getAssociation() {
+    return getRelationshipType();
+  }
+
+  /**
+   * Sets how the name or code of the association's type, e.g. Concept_In_Subset (A8) must match.
+   *
+   * @param association the association name or code match
+   */
+  public void setAssociation(final ValueMatch association) {
+    setRelationshipType(association);
   }
 
   /* see superclass */

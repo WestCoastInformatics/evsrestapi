@@ -28,19 +28,19 @@ public class HasPropertyEndpointTest extends AbstractQueryEndpointTest {
   private static final String REPAIR_ANNOTATION_WITHOUT_TAS_OR_NR_QUERY =
       """
       {"type": "HasProperty",
-       "typeNameOrCodeMatch": {"type": "Exact", "term": "P211"},
-       "valueMatch": {"type": "Exact", "term": "nucleotide-excision repair"},
-       "qualifierCondition": {"type": "AllQualifiers", "conditions": [
+       "property": {"type": "Exact", "term": "P211"},
+       "value": {"type": "Exact", "term": "nucleotide-excision repair"},
+       "qualifiers": {"type": "AllQualifiers", "conditions": [
          {"type": "PropertyQualifier",
-          "typeNameOrCodeMatch": {"type": "Exact", "term": "P387"},
-          "valueMatch": {"type": "OneOf", "terms": ["GO:0006289"]}},
+          "qualifier": {"type": "Exact", "term": "P387"},
+          "value": {"type": "OneOf", "terms": ["GO:0006289"]}},
          {"type": "NoQualifier", "condition": {"type": "AnyQualifier", "conditions": [
            {"type": "PropertyQualifier",
-            "typeNameOrCodeMatch": {"type": "Exact", "term": "P389"},
-            "valueMatch": {"type": "Exact", "term": "TAS"}},
+            "qualifier": {"type": "Exact", "term": "P389"},
+            "value": {"type": "Exact", "term": "TAS"}},
            {"type": "PropertyQualifier",
-            "typeNameOrCodeMatch": {"type": "Exact", "term": "P389"},
-            "valueMatch": {"type": "Exact", "term": "NR"}}]}}]}}
+            "qualifier": {"type": "Exact", "term": "P389"},
+            "value": {"type": "Exact", "term": "NR"}}]}}]}}
       """;
 
   /**
@@ -67,8 +67,8 @@ public class HasPropertyEndpointTest extends AbstractQueryEndpointTest {
     final String misspelledQualifierTypeQuery =
         """
         {"type": "HasProperty",
-         "typeNameOrCodeMatch": {"type": "Exact", "term": "P211"},
-         "qualifierCondition": {"type": "AllQualifier", "conditions": []}}
+         "property": {"type": "Exact", "term": "P211"},
+         "qualifiers": {"type": "AllQualifier", "conditions": []}}
         """;
 
     postQuery(misspelledQualifierTypeQuery).andExpect(status().isBadRequest());

@@ -21,9 +21,9 @@ public class OrEndpointTest extends AbstractQueryEndpointTest {
       """
       {"type": "Or", "children": [
         {"type": "DescendantOf",
-         "targetNameOrCodeMatch": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
+         "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
         {"type": "AncestorOf",
-         "targetNameOrCodeMatch": {"type": "Exact", "term": "C12851"}, "maxLevel": 1}]}
+         "target": {"type": "Exact", "term": "C12851"}, "maxLevel": 1}]}
       """;
 
   /**
@@ -48,7 +48,7 @@ public class OrEndpointTest extends AbstractQueryEndpointTest {
     final String childrenNotInListQuery =
         """
         {"type": "Or", "children":
-          {"type": "HasRole", "typeNameOrCodeMatch": {"type": "Exact", "term": "R101"}}}
+          {"type": "HasRole", "role": {"type": "Exact", "term": "R101"}}}
         """;
 
     postQuery(childrenNotInListQuery).andExpect(status().isBadRequest());

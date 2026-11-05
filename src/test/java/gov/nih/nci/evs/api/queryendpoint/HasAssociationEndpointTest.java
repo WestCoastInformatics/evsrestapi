@@ -17,8 +17,8 @@ public class HasAssociationEndpointTest extends AbstractQueryEndpointTest {
   private static final String MEMBERS_OF_BREAST_CARCINOMA_ONLY_SUBSET_QUERY =
       """
       {"type": "HasAssociation",
-       "typeNameOrCodeMatch": {"type": "Exact", "term": "A8"},
-       "targetNameOrCodeMatch": {"type": "Exact", "term": "C103042"}}
+       "association": {"type": "Exact", "term": "A8"},
+       "target": {"type": "Exact", "term": "C103042"}}
       """;
 
   /**
@@ -43,7 +43,7 @@ public class HasAssociationEndpointTest extends AbstractQueryEndpointTest {
   public void testHasAssociationWithTermsOnExactReturnsBadRequest() throws Exception {
     final String termsOnExactQuery =
         """
-        {"type": "HasAssociation", "typeNameOrCodeMatch": {"type": "Exact", "terms": ["A8"]}}
+        {"type": "HasAssociation", "association": {"type": "Exact", "terms": ["A8"]}}
         """;
 
     postQuery(termsOnExactQuery).andExpect(status().isBadRequest());

@@ -17,7 +17,7 @@ public class AncestorOrSelfOfEndpointTest extends AbstractQueryEndpointTest {
   private static final String FEMALE_BREAST_AND_PARENT_QUERY =
       """
       {"type": "AncestorOrSelfOf",
-       "targetNameOrCodeMatch": {"type": "Exact", "term": "C12851"}, "maxLevel": 1}
+       "target": {"type": "Exact", "term": "C12851"}, "maxLevel": 1}
       """;
 
   /**
@@ -42,7 +42,7 @@ public class AncestorOrSelfOfEndpointTest extends AbstractQueryEndpointTest {
     final String unsupportedFuzzinessQuery =
         """
         {"type": "AncestorOrSelfOf",
-         "targetNameOrCodeMatch": {"type": "Fuzzy", "term": "C12851", "fuzziness": "THREE"}}
+         "target": {"type": "Fuzzy", "term": "C12851", "fuzziness": "THREE"}}
         """;
 
     postQuery(unsupportedFuzzinessQuery).andExpect(status().isBadRequest());

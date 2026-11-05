@@ -17,7 +17,7 @@ public class DescendantOfEndpointTest extends AbstractQueryEndpointTest {
   private static final String CHILDREN_OF_BREAST_QUERY =
       """
       {"type": "DescendantOf",
-       "targetNameOrCodeMatch": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}
+       "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}
       """;
 
   /**
@@ -41,7 +41,7 @@ public class DescendantOfEndpointTest extends AbstractQueryEndpointTest {
     final String nonNumericMaxLevelQuery =
         """
         {"type": "DescendantOf",
-         "targetNameOrCodeMatch": {"type": "Exact", "term": "C12971"}, "maxLevel": "one"}
+         "target": {"type": "Exact", "term": "C12971"}, "maxLevel": "one"}
         """;
 
     postQuery(nonNumericMaxLevelQuery).andExpect(status().isBadRequest());

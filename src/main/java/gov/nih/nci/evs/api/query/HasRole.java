@@ -18,21 +18,40 @@ public final class HasRole extends HasRelationship {
   /**
    * Instantiates a {@link HasRole} that matches a role of the given type, pointing to any concept.
    *
-   * @param roleTypeNameOrCodeMatch how the role's type name or code must match
+   * @param role how the role's type name or code must match
    */
-  public HasRole(final ValueMatch roleTypeNameOrCodeMatch) {
-    super(roleTypeNameOrCodeMatch);
+  public HasRole(final ValueMatch role) {
+    super(role);
   }
 
   /**
    * Instantiates a {@link HasRole} that matches a role of the given type pointing to the target.
    *
-   * @param roleTypeNameOrCodeMatch how the role's type name or code must match
-   * @param roleTargetNameOrCodeMatch how the name or code of the concept the role must point to
+   * @param role how the role's type name or code must match
+   * @param target how the name or code of the concept the role must point to
    */
-  public HasRole(
-      final ValueMatch roleTypeNameOrCodeMatch, final ValueMatch roleTargetNameOrCodeMatch) {
-    super(roleTypeNameOrCodeMatch, roleTargetNameOrCodeMatch);
+  public HasRole(final ValueMatch role, final ValueMatch target) {
+    super(role, target);
+  }
+
+  /**
+   * Returns how the name or code of the role's type, e.g. Disease_Has_Primary_Anatomic_Site (R101)
+   * must match.
+   *
+   * @return the role name or code match
+   */
+  public ValueMatch getRole() {
+    return getRelationshipType();
+  }
+
+  /**
+   * Sets how the name or code of the role's type, e.g. Disease_Has_Primary_Anatomic_Site (R101)
+   * must match.
+   *
+   * @param role the role name or code match
+   */
+  public void setRole(final ValueMatch role) {
+    setRelationshipType(role);
   }
 
   /* see superclass */

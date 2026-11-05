@@ -41,21 +41,21 @@ public class AncestorOf extends HierarchyQuery {
   /**
    * Instantiates an {@link AncestorOf} for everything above the target concepts.
    *
-   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param target how the target concepts' name or code must match
    */
-  public AncestorOf(final ValueMatch targetNameOrCodeMatch) {
-    super(targetNameOrCodeMatch, ANY_LEVEL);
+  public AncestorOf(final ValueMatch target) {
+    super(target, ANY_LEVEL);
   }
 
   /**
    * Instantiates an {@link AncestorOf} for concepts within {@code maxLevel} levels above the target
    * concepts.
    *
-   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param target how the target concepts' name or code must match
    * @param maxLevel the maximum distance above the targets, at least 1
    */
-  public AncestorOf(final ValueMatch targetNameOrCodeMatch, final int maxLevel) {
-    super(targetNameOrCodeMatch, maxLevel);
+  public AncestorOf(final ValueMatch target, final int maxLevel) {
+    super(target, maxLevel);
   }
 
   /**
@@ -87,8 +87,7 @@ public class AncestorOf extends HierarchyQuery {
       return fetchRelativesOfTargetCodesQuery(operations, terminologies);
     }
 
-    return new NameOrCodeMatch(
-            DESCENDANT_NAME_FIELD, DESCENDANT_CODE_FIELD, getTargetNameOrCodeMatch())
+    return new NameOrCodeMatch(DESCENDANT_NAME_FIELD, DESCENDANT_CODE_FIELD, getTarget())
         .fetchOpenSearchQuery(operations, terminologies);
   }
 

@@ -20,7 +20,7 @@ public class BoostEndpointTest extends AbstractQueryEndpointTest {
       """
       {"type": "Boost", "score": 2.0, "child":
         {"type": "DescendantOf",
-         "targetNameOrCodeMatch": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}}
+         "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}}
       """;
 
   /**
@@ -44,7 +44,7 @@ public class BoostEndpointTest extends AbstractQueryEndpointTest {
     final String nonNumericScoreQuery =
         """
         {"type": "Boost", "score": "high", "child":
-          {"type": "HasRole", "typeNameOrCodeMatch": {"type": "Exact", "term": "R101"}}}
+          {"type": "HasRole", "role": {"type": "Exact", "term": "R101"}}}
         """;
 
     postQuery(nonNumericScoreQuery).andExpect(status().isBadRequest());

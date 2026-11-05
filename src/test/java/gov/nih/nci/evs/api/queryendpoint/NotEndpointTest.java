@@ -20,10 +20,10 @@ public class NotEndpointTest extends AbstractQueryEndpointTest {
       """
       {"type": "And", "children": [
         {"type": "DescendantOrSelfOf",
-         "targetNameOrCodeMatch": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
+         "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
         {"type": "Not", "child":
           {"type": "DescendantOf",
-           "targetNameOrCodeMatch": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}}]}
+           "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}}]}
       """;
 
   /**

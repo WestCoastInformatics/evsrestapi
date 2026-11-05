@@ -23,9 +23,9 @@ public class AndEndpointTest extends AbstractQueryEndpointTest {
       """
       {"type": "And", "children": [
         {"type": "DescendantOf",
-         "targetNameOrCodeMatch": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
+         "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
         {"type": "HasSynonym",
-         "normalizedNameMatch": {"type": "StartsWith", "term": "left"}}]}
+         "name": {"type": "StartsWith", "term": "left"}}]}
       """;
 
   /**
@@ -50,7 +50,7 @@ public class AndEndpointTest extends AbstractQueryEndpointTest {
     final String misspelledChildrenQuery =
         """
         {"type": "And", "child": [
-          {"type": "HasRole", "typeNameOrCodeMatch": {"type": "Exact", "term": "R101"}}]}
+          {"type": "HasRole", "role": {"type": "Exact", "term": "R101"}}]}
         """;
 
     postQuery(misspelledChildrenQuery).andExpect(status().isBadRequest());

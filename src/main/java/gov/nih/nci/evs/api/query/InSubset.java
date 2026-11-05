@@ -30,7 +30,7 @@ import org.opensearch.index.query.QueryBuilder;
 public final class InSubset extends EvsQuery {
 
   /** How the subsets' name or code must match. */
-  private ValueMatch subsetNameOrCodeMatch;
+  private ValueMatch subset;
 
   /** Instantiates an empty {@link InSubset}. */
   public InSubset() {
@@ -49,11 +49,10 @@ public final class InSubset extends EvsQuery {
   /**
    * Instantiates an {@link InSubset} that matches members of any of the given subsets.
    *
-   * @param subsetNameOrCodeMatch how the subsets' name or code must match
+   * @param subset how the subsets' name or code must match
    */
-  public InSubset(final ValueMatch subsetNameOrCodeMatch) {
-    this.subsetNameOrCodeMatch =
-        Objects.requireNonNull(subsetNameOrCodeMatch, "subsetNameOrCodeMatch");
+  public InSubset(final ValueMatch subset) {
+    this.subset = Objects.requireNonNull(subset, "subset");
   }
 
   /**
@@ -61,17 +60,17 @@ public final class InSubset extends EvsQuery {
    *
    * @return the subset name or code match
    */
-  public ValueMatch getSubsetNameOrCodeMatch() {
-    return subsetNameOrCodeMatch;
+  public ValueMatch getSubset() {
+    return subset;
   }
 
   /**
    * Sets how the subsets' name or code must match.
    *
-   * @param subsetNameOrCodeMatch the subset name or code match
+   * @param subset the subset name or code match
    */
-  public void setSubsetNameOrCodeMatch(final ValueMatch subsetNameOrCodeMatch) {
-    this.subsetNameOrCodeMatch = subsetNameOrCodeMatch;
+  public void setSubset(final ValueMatch subset) {
+    this.subset = subset;
   }
 
   /**
@@ -86,10 +85,8 @@ public final class InSubset extends EvsQuery {
   @Override
   public QueryBuilder fetchOpenSearchQuery(
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
-    final OneOf membershipTypeNameOrCodeMatch =
-        new OneOf(getMembershipTypeNamesOrCodes(terminologies));
-    final HasAssociation membership =
-        new HasAssociation(membershipTypeNameOrCodeMatch, subsetNameOrCodeMatch);
+    final OneOf membershipAssociation = new OneOf(getMembershipTypeNamesOrCodes(terminologies));
+    final HasAssociation membership = new HasAssociation(membershipAssociation, subset);
 
     return membership.fetchOpenSearchQuery(operations, terminologies);
   }

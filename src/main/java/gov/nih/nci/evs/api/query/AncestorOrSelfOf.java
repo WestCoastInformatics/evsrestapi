@@ -23,21 +23,21 @@ public class AncestorOrSelfOf extends AncestorOf {
   /**
    * Instantiates an {@link AncestorOrSelfOf} for the target concepts and everything above them.
    *
-   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param target how the target concepts' name or code must match
    */
-  public AncestorOrSelfOf(final ValueMatch targetNameOrCodeMatch) {
-    super(targetNameOrCodeMatch);
+  public AncestorOrSelfOf(final ValueMatch target) {
+    super(target);
   }
 
   /**
    * Instantiates an {@link AncestorOrSelfOf} for the target concepts and those within {@code
    * maxLevel} levels above them.
    *
-   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param target how the target concepts' name or code must match
    * @param maxLevel the maximum distance above the targets, at least 1
    */
-  public AncestorOrSelfOf(final ValueMatch targetNameOrCodeMatch, final int maxLevel) {
-    super(targetNameOrCodeMatch, maxLevel);
+  public AncestorOrSelfOf(final ValueMatch target, final int maxLevel) {
+    super(target, maxLevel);
   }
 
   /**

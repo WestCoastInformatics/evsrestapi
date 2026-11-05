@@ -25,8 +25,8 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 /**
  * Base type for nodes that match concepts related through the hierarchy to the target concepts:
  * {@link DescendantOf} below them, {@link AncestorOf} above them. The targets are the concepts
- * whose name or code matches {@code targetNameOrCodeMatch}, a {@link ValueMatch}, so these don't
- * nest other queries.
+ * whose name or code matches {@code target}, a {@link ValueMatch}, so these don't nest other
+ * queries.
  *
  * <p>Some cases can't be answered from the concept's own fields yet, and look up the target codes
  * first ({@link #fetchTargetCodes}). Codes are only unique within one terminology version, and each
@@ -79,7 +79,7 @@ public abstract class HierarchyQuery extends EvsQuery {
   private static final int FIRST_PAGE = 0;
 
   /** How the target concepts' name or code must match. */
-  private ValueMatch targetNameOrCodeMatch;
+  private ValueMatch target;
 
   /** The maximum distance from the targets, or null for any distance. */
   private Integer maxLevel;
@@ -92,12 +92,11 @@ public abstract class HierarchyQuery extends EvsQuery {
   /**
    * Instantiates a {@link HierarchyQuery}.
    *
-   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param target how the target concepts' name or code must match
    * @param maxLevel the maximum distance from the targets, at least 1, or null for any distance
    */
-  protected HierarchyQuery(final ValueMatch targetNameOrCodeMatch, final Integer maxLevel) {
-    this.targetNameOrCodeMatch =
-        Objects.requireNonNull(targetNameOrCodeMatch, "targetNameOrCodeMatch");
+  protected HierarchyQuery(final ValueMatch target, final Integer maxLevel) {
+    this.target = Objects.requireNonNull(target, "target");
 
     final boolean hasInvalidMaxLevel = maxLevel != null && maxLevel < MIN_MAX_LEVEL;
     if (hasInvalidMaxLevel) {
@@ -113,17 +112,17 @@ public abstract class HierarchyQuery extends EvsQuery {
    *
    * @return the target name or code match
    */
-  public ValueMatch getTargetNameOrCodeMatch() {
-    return targetNameOrCodeMatch;
+  public ValueMatch getTarget() {
+    return target;
   }
 
   /**
    * Sets how the target concepts' name or code must match.
    *
-   * @param targetNameOrCodeMatch the target name or code match
+   * @param target the target name or code match
    */
-  public void setTargetNameOrCodeMatch(final ValueMatch targetNameOrCodeMatch) {
-    this.targetNameOrCodeMatch = targetNameOrCodeMatch;
+  public void setTarget(final ValueMatch target) {
+    this.target = target;
   }
 
   /**
@@ -190,7 +189,7 @@ public abstract class HierarchyQuery extends EvsQuery {
    */
   protected final QueryBuilder getTargetsQuery(
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
-    return new NameOrCodeMatch(NAME_FIELD, CODE_FIELD, targetNameOrCodeMatch)
+    return new NameOrCodeMatch(NAME_FIELD, CODE_FIELD, target)
         .fetchOpenSearchQuery(operations, terminologies);
   }
 

@@ -103,7 +103,7 @@ public class HierarchyQueryLimitsTest {
   private static final String MAX_LEVEL_MESSAGE = "maxLevel " + LEVELS_OVER_LIMIT;
 
   /** The argument named when the target match is null. */
-  private static final String TARGET_MATCH_ARGUMENT = "targetNameOrCodeMatch";
+  private static final String TARGET_MATCH_ARGUMENT = "target";
 
   /** The argument named when the code is null. */
   private static final String CODE_ARGUMENT = "code";
@@ -223,7 +223,7 @@ public class HierarchyQueryLimitsTest {
     assertTrue(e.getMessage().contains(MAX_LEVEL_MESSAGE), e.getMessage());
   }
 
-  /** A null target match on DescendantOf throws an error naming targetNameOrCodeMatch. */
+  /** A null target match on DescendantOf throws an error naming target. */
   @Test
   public void testDescendantOfWithNullTargetMatchThrowsErrorNamingTargetMatch() {
     final NullPointerException e =
@@ -232,7 +232,7 @@ public class HierarchyQueryLimitsTest {
     assertEquals(TARGET_MATCH_ARGUMENT, e.getMessage());
   }
 
-  /** A null target match on AncestorOrSelfOf throws an error naming targetNameOrCodeMatch. */
+  /** A null target match on AncestorOrSelfOf throws an error naming target. */
   @Test
   public void testAncestorOrSelfOfWithNullTargetMatchThrowsErrorNamingTargetMatch() {
     final NullPointerException e =

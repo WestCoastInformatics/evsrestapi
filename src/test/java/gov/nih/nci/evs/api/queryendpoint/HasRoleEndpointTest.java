@@ -19,8 +19,8 @@ public class HasRoleEndpointTest extends AbstractQueryEndpointTest {
   private static final String PRIMARY_ANATOMIC_SITE_BREAST_QUERY =
       """
       {"type": "HasRole",
-       "typeNameOrCodeMatch": {"type": "Exact", "term": "R101"},
-       "targetNameOrCodeMatch": {"type": "Exact", "term": "C12971"}}
+       "role": {"type": "Exact", "term": "R101"},
+       "target": {"type": "Exact", "term": "C12971"}}
       """;
 
   /**
@@ -49,7 +49,7 @@ public class HasRoleEndpointTest extends AbstractQueryEndpointTest {
   public void testHasRoleWithoutTypeReturnsBadRequest() throws Exception {
     final String withoutTypeQuery =
         """
-        {"typeNameOrCodeMatch": {"type": "Exact", "term": "R101"}}
+        {"role": {"type": "Exact", "term": "R101"}}
         """;
 
     postQuery(withoutTypeQuery).andExpect(status().isBadRequest());

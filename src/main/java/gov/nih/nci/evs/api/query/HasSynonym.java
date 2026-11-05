@@ -22,10 +22,10 @@ import org.opensearch.index.query.QueryBuilders;
  *
  * <p>The name is compared to the synonym's normalized name: lowercased, with punctuation turned
  * into spaces and leading punctuation removed ({@link ConceptUtils#normalize}). The name match's
- * terms are normalized the same way first, so {@code Exact("MELANOMA, MALIGNANT")} finds the
- * synonym "Melanoma, Malignant". Matching therefore ignores case and punctuation, and a term's
- * surrounding spaces are trimmed (so {@code StartsWith("lung ")} is {@code StartsWith("lung")}).
- * Source, term type, and sub-source are compared as given.
+ * terms are normalized the same way when the query is built, so {@code Exact("MELANOMA,
+ * MALIGNANT")} finds the synonym "Melanoma, Malignant". Matching therefore ignores case and
+ * punctuation, and a term's surrounding spaces are trimmed (so {@code StartsWith("lung ")} is
+ * {@code StartsWith("lung")}). Source, term type, and sub-source are compared as given.
  *
  * <p>Combine synonym nodes with the concept-level {@code And}/{@code Or}/{@code Not}: {@code Or} of
  * two nodes is a synonym matching either, {@code And} is a concept having both (possibly on
@@ -51,17 +51,20 @@ public final class HasSynonym extends EvsQuery {
   /** A synonym entry's sub-source, e.g. "NCI-GLOSS". */
   private static final String SUB_SOURCE_FIELD = SYNONYMS_FIELD + ".subSource";
 
-  /** The match for the synonym's name, with normalized terms, or null to match any name. */
-  private ValueMatch normalizedNameMatch;
+  /**
+   * The match for the synonym's name, as given, or null to match any name. Its terms are normalized
+   * when the query is built, so clients can send the name as written.
+   */
+  private ValueMatch name;
 
   /** The match for the synonym's source, or null to match any source. */
-  private ValueMatch sourceMatch;
+  private ValueMatch source;
 
   /** The match for the synonym's term type, or null to match any term type. */
-  private ValueMatch termTypeMatch;
+  private ValueMatch termType;
 
   /** The match for the synonym's sub-source, or null to match any sub-source. */
-  private ValueMatch subSourceMatch;
+  private ValueMatch subSource;
 
   /** Instantiates an empty {@link HasSynonym}. */
   public HasSynonym() {
@@ -71,63 +74,60 @@ public final class HasSynonym extends EvsQuery {
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with a matching name, from any source.
    *
-   * @param nameMatch the match for the synonym's name
+   * @param name the match for the synonym's name
    */
-  public HasSynonym(final ValueMatch nameMatch) {
-    this(Objects.requireNonNull(nameMatch, "nameMatch"), null, null, null);
+  public HasSynonym(final ValueMatch name) {
+    this(Objects.requireNonNull(name, "name"), null, null, null);
   }
 
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with a matching name, source, and term
    * type, from any sub-source.
    *
-   * @param nameMatch the match for the synonym's name, or null for any name
-   * @param sourceMatch the match for the synonym's source, or null for any source
-   * @param termTypeMatch the match for the synonym's term type, or null for any term type
+   * @param name the match for the synonym's name, or null for any name
+   * @param source the match for the synonym's source, or null for any source
+   * @param termType the match for the synonym's term type, or null for any term type
    */
-  public HasSynonym(
-      final ValueMatch nameMatch, final ValueMatch sourceMatch, final ValueMatch termTypeMatch) {
-    this(nameMatch, sourceMatch, termTypeMatch, null);
+  public HasSynonym(final ValueMatch name, final ValueMatch source, final ValueMatch termType) {
+    this(name, source, termType, null);
   }
 
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with a matching name, source, term
    * type, and sub-source.
    *
-   * @param nameMatch the match for the synonym's name, or null for any name
-   * @param sourceMatch the match for the synonym's source, or null for any source
-   * @param termTypeMatch the match for the synonym's term type, or null for any term type
-   * @param subSourceMatch the match for the synonym's sub-source, or null for any sub-source
+   * @param name the match for the synonym's name, or null for any name
+   * @param source the match for the synonym's source, or null for any source
+   * @param termType the match for the synonym's term type, or null for any term type
+   * @param subSource the match for the synonym's sub-source, or null for any sub-source
    */
   public HasSynonym(
-      final ValueMatch nameMatch,
-      final ValueMatch sourceMatch,
-      final ValueMatch termTypeMatch,
-      final ValueMatch subSourceMatch) {
-    final boolean hasNameMatch = nameMatch != null;
-    this.normalizedNameMatch =
-        hasNameMatch ? nameMatch.getWithTermsMapped(ConceptUtils::normalize) : null;
-    this.sourceMatch = sourceMatch;
-    this.termTypeMatch = termTypeMatch;
-    this.subSourceMatch = subSourceMatch;
+      final ValueMatch name,
+      final ValueMatch source,
+      final ValueMatch termType,
+      final ValueMatch subSource) {
+    this.name = name;
+    this.source = source;
+    this.termType = termType;
+    this.subSource = subSource;
   }
 
   /**
-   * Returns the match for the synonym's name, with normalized terms.
+   * Returns the match for the synonym's name, as given.
    *
-   * @return the normalized name match, or null to match any name
+   * @return the name match, or null to match any name
    */
-  public ValueMatch getNormalizedNameMatch() {
-    return normalizedNameMatch;
+  public ValueMatch getName() {
+    return name;
   }
 
   /**
-   * Sets the match for the synonym's name, with normalized terms.
+   * Sets the match for the synonym's name, as given.
    *
-   * @param normalizedNameMatch the normalized name match, or null to match any name
+   * @param name the name match, or null to match any name
    */
-  public void setNormalizedNameMatch(final ValueMatch normalizedNameMatch) {
-    this.normalizedNameMatch = normalizedNameMatch;
+  public void setName(final ValueMatch name) {
+    this.name = name;
   }
 
   /**
@@ -135,17 +135,17 @@ public final class HasSynonym extends EvsQuery {
    *
    * @return the source match, or null to match any source
    */
-  public ValueMatch getSourceMatch() {
-    return sourceMatch;
+  public ValueMatch getSource() {
+    return source;
   }
 
   /**
    * Sets the match for the synonym's source.
    *
-   * @param sourceMatch the source match, or null to match any source
+   * @param source the source match, or null to match any source
    */
-  public void setSourceMatch(final ValueMatch sourceMatch) {
-    this.sourceMatch = sourceMatch;
+  public void setSource(final ValueMatch source) {
+    this.source = source;
   }
 
   /**
@@ -153,17 +153,17 @@ public final class HasSynonym extends EvsQuery {
    *
    * @return the term type match, or null to match any term type
    */
-  public ValueMatch getTermTypeMatch() {
-    return termTypeMatch;
+  public ValueMatch getTermType() {
+    return termType;
   }
 
   /**
    * Sets the match for the synonym's term type.
    *
-   * @param termTypeMatch the term type match, or null to match any term type
+   * @param termType the term type match, or null to match any term type
    */
-  public void setTermTypeMatch(final ValueMatch termTypeMatch) {
-    this.termTypeMatch = termTypeMatch;
+  public void setTermType(final ValueMatch termType) {
+    this.termType = termType;
   }
 
   /**
@@ -171,17 +171,28 @@ public final class HasSynonym extends EvsQuery {
    *
    * @return the sub-source match, or null to match any sub-source
    */
-  public ValueMatch getSubSourceMatch() {
-    return subSourceMatch;
+  public ValueMatch getSubSource() {
+    return subSource;
   }
 
   /**
    * Sets the match for the synonym's sub-source.
    *
-   * @param subSourceMatch the sub-source match, or null to match any sub-source
+   * @param subSource the sub-source match, or null to match any sub-source
    */
-  public void setSubSourceMatch(final ValueMatch subSourceMatch) {
-    this.subSourceMatch = subSourceMatch;
+  public void setSubSource(final ValueMatch subSource) {
+    this.subSource = subSource;
+  }
+
+  /**
+   * Returns the name match with its terms normalized the way synonym names were when they were
+   * indexed, to compare against the normalized name field.
+   *
+   * @return the normalized name match, or null to match any name
+   */
+  private ValueMatch getNormalizedName() {
+    final boolean hasName = name != null;
+    return hasName ? name.getWithTermsMapped(ConceptUtils::normalize) : null;
   }
 
   /* see superclass */
@@ -190,10 +201,10 @@ public final class HasSynonym extends EvsQuery {
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final BoolQueryBuilder entryConditions = QueryBuilders.boolQuery();
     addFieldCondition(
-        entryConditions, NORMALIZED_NAME_FIELD, normalizedNameMatch, operations, terminologies);
-    addFieldCondition(entryConditions, SOURCE_FIELD, sourceMatch, operations, terminologies);
-    addFieldCondition(entryConditions, TERM_TYPE_FIELD, termTypeMatch, operations, terminologies);
-    addFieldCondition(entryConditions, SUB_SOURCE_FIELD, subSourceMatch, operations, terminologies);
+        entryConditions, NORMALIZED_NAME_FIELD, getNormalizedName(), operations, terminologies);
+    addFieldCondition(entryConditions, SOURCE_FIELD, source, operations, terminologies);
+    addFieldCondition(entryConditions, TERM_TYPE_FIELD, termType, operations, terminologies);
+    addFieldCondition(entryConditions, SUB_SOURCE_FIELD, subSource, operations, terminologies);
 
     return QueryBuilders.nestedQuery(SYNONYMS_FIELD, entryConditions, ScoreMode.None);
   }

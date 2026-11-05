@@ -66,19 +66,20 @@ classDiagram
 
     class HasRelationship {
         <<abstract>>
-        -ValueMatch typeNameOrCodeMatch
-        -ValueMatch targetNameOrCodeMatch
+        -ValueMatch relationshipType
+        -ValueMatch target
+        #getRelationshipType() ValueMatch
         #getRelationshipListFieldName()* String
     }
 
     class InSubset {
-        -ValueMatch subsetNameOrCodeMatch
+        -ValueMatch subset
     }
 
     class HasProperty {
-        -ValueMatch typeNameOrCodeMatch
-        -ValueMatch valueMatch
-        -QualifierCondition qualifierCondition
+        -ValueMatch property
+        -ValueMatch value
+        -QualifierCondition qualifiers
     }
 
     class QualifierCondition {
@@ -95,8 +96,8 @@ classDiagram
         -QualifierCondition condition
     }
     class PropertyQualifier {
-        -ValueMatch typeNameOrCodeMatch
-        -ValueMatch valueMatch
+        -ValueMatch qualifier
+        -ValueMatch value
     }
 
     class And {
@@ -166,7 +167,7 @@ classDiagram
 
     class HierarchyQuery {
         <<abstract>>
-        -ValueMatch targetNameOrCodeMatch
+        -ValueMatch target
         -Integer maxLevel
         #fetchTargetCodes(OpenSearchOperations, Terminology) Set~String~
         #fetchRelativesQuery(OpenSearchOperations, Terminology, Set~String~)* QueryBuilder
@@ -234,14 +235,14 @@ classDiagram
 | `ValueMatch` | How one value is compared, with no field. Its contract is `getQueryBuilder(field)`. The implementations are plain values, compared by value, with no behavior beyond building their query. |
 | `SupportsIgnoringCase` | A `ValueMatch` that can also ignore case: `Exact`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper match. It runs the wrapped match ignoring case by calling `getCaseInsensitiveQueryBuilder(field)`. The wrapped match is not changed. |
-| `HasRelationship` | Matches concepts by a relationship's type and target, each a `ValueMatch` on a name or code (see [Relationships](#relationships)). |
+| `HasRelationship` | Matches concepts by a relationship's type and target, each a `ValueMatch` on a name or code (see [Relationships](#relationships)). In JSON the type is `role` (`HasRole`, `HasInverseRole`) or `association` (`HasAssociation`, `HasInverseAssociation`), since `type` names the node. |
 | `InSubset` | Matches members of subsets. A subset is a concept, and membership is an association to it (NCIt's Concept_In_Subset, A8, read from the terminology's `subsetMember` metadata), so it builds a `HasAssociation`. The subsets are a `ValueMatch` on the subset's name or code: a code, or `OneOf` codes for any of several. All-of and but-not combine `InSubset`s per concept. Exploratory: drops the current search's CDISC grouper special case. |
 | `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions. |
 | `HasSynonym` | Matches concepts with a synonym whose name, and optionally source, term type, and sub-source, match on the same synonym entry. Searches the remodeled `synonyms` list. The name is compared to the synonym's `normName`, with the match's terms normalized the same way (`ConceptUtils.normalize`) through `ValueMatch.getWithTermsMapped`, so matching ignores case and punctuation. Combine nodes with the concept-level `And`/`Or`/`Not`; OR or NOT between fields of one synonym isn't supported yet. |
 | `QualifierCondition` | A condition on one property entry's qualifiers, checked inside `HasProperty`'s nested query on that entry. `AllQualifiers`, `AnyQualifier`, and `NoQualifier` combine conditions (`bool` `must`, `should`, `must_not`). They're separate from the concept-level `And`/`Or`/`Not`, which combine sets of concepts and so can't keep qualifiers on one entry; the Javadoc explains the choice and the generic alternative. |
 | `PropertyQualifier` | The leaf `QualifierCondition`: a qualifier a `HasProperty` property must have, a type name or code, optionally with a matching value, on one qualifier entry of that same property. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
 | `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `FieldMatch` with `Exact`. Overlaps `OneOf`; kept as is from the hierarchy branch. Rejects more than 65,536 values, OpenSearch's default limit. |
-| `HierarchyQuery` | Base type for hierarchy nodes. The targets are the concepts whose name or code matches `targetNameOrCodeMatch`. When the concept's own fields can't answer the query yet, it looks up the target codes first (`fetchTargetCodes`), then, for each terminology version, matches the targets' relatives only in that terminology's index (see [Hierarchy queries](#hierarchy-queries)). Handles `maxLevel` (shortest distance, at least 1). Subclasses implement `fetchRelativesQuery`. |
+| `HierarchyQuery` | Base type for hierarchy nodes. The targets are the concepts whose name or code matches `target`. When the concept's own fields can't answer the query yet, it looks up the target codes first (`fetchTargetCodes`), then, for each terminology version, matches the targets' relatives only in that terminology's index (see [Hierarchy queries](#hierarchy-queries)). Handles `maxLevel` (shortest distance, at least 1). Subclasses implement `fetchRelativesQuery`. |
 | `DescendantOf` | Matches concepts strictly below the targets, optionally within `maxLevel` levels. `ancestors` holds codes only, so it always looks up the target codes first. Terminologies with `ancestors`/`ancestorDepths` then match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
 | `DescendantOrSelfOf` | `DescendantOf` that also matches the targets themselves (distance 0): it ORs `DescendantOf`'s query with a match on the concept's own name or code. |
 | `AncestorOf` | The upward counterpart: matches concepts strictly above the targets, optionally within `maxLevel` levels. Without `maxLevel` it's one query on the concept's stored `descendants` names and codes. With `maxLevel` it looks up the target codes and reads their stored paths to root (`StoredPaths`). |

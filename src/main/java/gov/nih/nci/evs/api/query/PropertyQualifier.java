@@ -32,10 +32,10 @@ public final class PropertyQualifier implements QualifierCondition {
   /** Separates the qualifier list field from a qualifier entry's field. */
   private static final String ENTRY_FIELD_SEPARATOR = ".";
 
-  private ValueMatch typeNameOrCodeMatch;
+  private ValueMatch qualifier;
 
   /** The match for the qualifier's value, or null to match any value. */
-  private ValueMatch valueMatch;
+  private ValueMatch value;
 
   /** Instantiates an empty {@link PropertyQualifier}. */
   public PropertyQualifier() {
@@ -46,23 +46,23 @@ public final class PropertyQualifier implements QualifierCondition {
    * Instantiates a {@link PropertyQualifier} that matches a qualifier of the given type, with any
    * value.
    *
-   * @param typeNameOrCodeMatch the match for the qualifier's type name or code
+   * @param qualifier the match for the qualifier's type name or code
    */
-  public PropertyQualifier(final ValueMatch typeNameOrCodeMatch) {
-    this.typeNameOrCodeMatch = Objects.requireNonNull(typeNameOrCodeMatch, "typeNameOrCodeMatch");
-    this.valueMatch = null;
+  public PropertyQualifier(final ValueMatch qualifier) {
+    this.qualifier = Objects.requireNonNull(qualifier, "qualifier");
+    this.value = null;
   }
 
   /**
    * Instantiates a {@link PropertyQualifier} that matches a qualifier of the given type with a
    * matching value.
    *
-   * @param typeNameOrCodeMatch the match for the qualifier's type name or code
-   * @param valueMatch the match for the qualifier's value
+   * @param qualifier the match for the qualifier's type name or code
+   * @param value the match for the qualifier's value
    */
-  public PropertyQualifier(final ValueMatch typeNameOrCodeMatch, final ValueMatch valueMatch) {
-    this.typeNameOrCodeMatch = Objects.requireNonNull(typeNameOrCodeMatch, "typeNameOrCodeMatch");
-    this.valueMatch = Objects.requireNonNull(valueMatch, "valueMatch");
+  public PropertyQualifier(final ValueMatch qualifier, final ValueMatch value) {
+    this.qualifier = Objects.requireNonNull(qualifier, "qualifier");
+    this.value = Objects.requireNonNull(value, "value");
   }
 
   /**
@@ -70,17 +70,17 @@ public final class PropertyQualifier implements QualifierCondition {
    *
    * @return the type name or code match
    */
-  public ValueMatch getTypeNameOrCodeMatch() {
-    return typeNameOrCodeMatch;
+  public ValueMatch getQualifier() {
+    return qualifier;
   }
 
   /**
    * Sets the match for the qualifier's type name or code.
    *
-   * @param typeNameOrCodeMatch the type name or code match
+   * @param qualifier the type name or code match
    */
-  public void setTypeNameOrCodeMatch(final ValueMatch typeNameOrCodeMatch) {
-    this.typeNameOrCodeMatch = typeNameOrCodeMatch;
+  public void setQualifier(final ValueMatch qualifier) {
+    this.qualifier = qualifier;
   }
 
   /**
@@ -88,17 +88,17 @@ public final class PropertyQualifier implements QualifierCondition {
    *
    * @return the value match, or null to match any value
    */
-  public ValueMatch getValueMatch() {
-    return valueMatch;
+  public ValueMatch getValue() {
+    return value;
   }
 
   /**
    * Sets the match for the qualifier's value.
    *
-   * @param valueMatch the value match, or null to match any value
+   * @param value the value match, or null to match any value
    */
-  public void setValueMatch(final ValueMatch valueMatch) {
-    this.valueMatch = valueMatch;
+  public void setValue(final ValueMatch value) {
+    this.value = value;
   }
 
   /**
@@ -119,14 +119,14 @@ public final class PropertyQualifier implements QualifierCondition {
         new NameOrCodeMatch(
             getEntryFieldName(qualifierListField, TYPE_NAME_FIELD),
             getEntryFieldName(qualifierListField, TYPE_CODE_FIELD),
-            typeNameOrCodeMatch);
+            qualifier);
     final BoolQueryBuilder entryConditions =
         QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations, terminologies));
 
-    final boolean hasValueMatch = valueMatch != null;
+    final boolean hasValueMatch = value != null;
     if (hasValueMatch) {
       final FieldMatch qualifierValueMatch =
-          new FieldMatch(getEntryFieldName(qualifierListField, VALUE_FIELD), valueMatch);
+          new FieldMatch(getEntryFieldName(qualifierListField, VALUE_FIELD), value);
       entryConditions.must(qualifierValueMatch.fetchOpenSearchQuery(operations, terminologies));
     }
 

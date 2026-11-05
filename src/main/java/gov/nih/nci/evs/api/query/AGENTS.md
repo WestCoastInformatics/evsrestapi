@@ -12,7 +12,7 @@ queries, and how to add a new node.
 
 - Only the logical nodes (`And`, `Or`, `Not`, `Boost`) hold other `EvsQuery` nodes. Every other node
   holds only `ValueMatch`es on fields stored on the concept, e.g. a relationship's
-  `targetNameOrCodeMatch`. Don't add nodes that nest queries.
+  `target`. Don't add nodes that nest queries.
 - The hierarchy nodes call the target "target", not "anchor". They look up target codes first
   (`HierarchyQuery.fetchTargetCodes`) only until ancestors and descendants are reindexed as nested
   entries. Don't add other searches that run before the main query.

@@ -23,21 +23,21 @@ public class DescendantOrSelfOf extends DescendantOf {
   /**
    * Instantiates a {@link DescendantOrSelfOf} for the target concepts and everything below them.
    *
-   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param target how the target concepts' name or code must match
    */
-  public DescendantOrSelfOf(final ValueMatch targetNameOrCodeMatch) {
-    super(targetNameOrCodeMatch);
+  public DescendantOrSelfOf(final ValueMatch target) {
+    super(target);
   }
 
   /**
    * Instantiates a {@link DescendantOrSelfOf} for the target concepts and those within {@code
    * maxLevel} levels below them.
    *
-   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param target how the target concepts' name or code must match
    * @param maxLevel the maximum depth below the targets, at least 1
    */
-  public DescendantOrSelfOf(final ValueMatch targetNameOrCodeMatch, final int maxLevel) {
-    super(targetNameOrCodeMatch, maxLevel);
+  public DescendantOrSelfOf(final ValueMatch target, final int maxLevel) {
+    super(target, maxLevel);
   }
 
   /**

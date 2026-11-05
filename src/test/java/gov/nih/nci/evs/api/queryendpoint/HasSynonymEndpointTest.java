@@ -18,9 +18,9 @@ public class HasSynonymEndpointTest extends AbstractQueryEndpointTest {
   private static final String MELANOMA_PREFERRED_TERM_QUERY =
       """
       {"type": "HasSynonym",
-       "normalizedNameMatch": {"type": "Exact", "term": "melanoma"},
-       "sourceMatch": {"type": "CaseInsensitive", "match": {"type": "Exact", "term": "nci"}},
-       "termTypeMatch": {"type": "Exact", "term": "PT"}}
+       "name": {"type": "Exact", "term": "melanoma"},
+       "source": {"type": "CaseInsensitive", "match": {"type": "Exact", "term": "nci"}},
+       "termType": {"type": "Exact", "term": "PT"}}
       """;
 
   /**
@@ -45,7 +45,7 @@ public class HasSynonymEndpointTest extends AbstractQueryEndpointTest {
     final String caseInsensitiveFuzzyQuery =
         """
         {"type": "HasSynonym",
-         "normalizedNameMatch":
+         "name":
            {"type": "CaseInsensitive", "match": {"type": "Fuzzy", "term": "melanoma"}}}
         """;
 
