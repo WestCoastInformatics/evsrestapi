@@ -64,21 +64,11 @@ public class HasInverseRoleTest {
   /** A throwaway index used only by this tutorial. */
   private static final String INDEX_NAME = "evs_has_inverse_role_tutorial";
 
-  /**
-   * A second throwaway index, standing in for the next version of the same terminology. It reuses
-   * Skin's code for a concept named "Integument", so codes alone can't tell the versions apart.
-   */
-  private static final String NEXT_VERSION_INDEX_NAME =
-      "evs_has_inverse_role_tutorial_next_version";
-
   /** Terminology of every tutorial concept. */
   private static final String TERMINOLOGY = "ncit";
 
   /** Version of the concepts in the tutorial index. */
   private static final String VERSION = "25.12e";
-
-  /** Version of the concepts in {@link #NEXT_VERSION_INDEX_NAME}. */
-  private static final String NEXT_VERSION = "26.01a";
 
   /** One page large enough to hold every indexed concept. */
   private static final Pageable ALL_CONCEPTS = PageRequest.of(0, 100);
@@ -182,28 +172,6 @@ public class HasInverseRoleTest {
               getConcept(LIVER, "Liver"),
               getConcept(BODY_SURFACE, "Body Surface")));
 
-  /**
-   * The concepts in {@link #NEXT_VERSION_INDEX_NAME}. Skin's code now names "Integument", whose
-   * primary site points back to "Melanoma of Integument", reusing Cutaneous Melanoma's code.
-   * "Integument Ulcer" reuses Skin Ulcer's code and is a complication of it.
-   */
-  private static final List<Concept> NEXT_VERSION_CONCEPTS =
-      getConceptsWithInverseRoles(
-          List.of(
-              getConcept(SKIN, "Integument"),
-              getConcept(
-                  CUTANEOUS_MELANOMA,
-                  "Melanoma of Integument",
-                  getRole(PRIMARY_SITE, PRIMARY_SITE_CODE, SKIN, "Integument")),
-              getConcept(
-                  SKIN_ULCER,
-                  "Integument Ulcer",
-                  getRole(
-                      COMPLICATION_OF,
-                      COMPLICATION_OF_CODE,
-                      CUTANEOUS_MELANOMA,
-                      "Melanoma of Integument"))));
-
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
   @Autowired private OpensearchOperationsService operationsService;
 
@@ -213,29 +181,20 @@ public class HasInverseRoleTest {
   /** The terminology whose concept index is the tutorial index. */
   private List<Terminology> terminologies;
 
-  /** Both versions: the tutorial index and {@link #NEXT_VERSION_INDEX_NAME}. */
-  private List<Terminology> bothVersions;
-
-  /** Creates both indexes, mapped like concept indexes, and loads their concepts. */
+  /** Creates the index, mapped like a concept index, and loads its concepts. */
   @BeforeAll
-  public void setUpIndexes() {
+  public void setUpIndex() {
     operations = operationsService.getOpenSearchOperations();
     createIndex(INDEX_NAME, VERSION, INDEXED_CONCEPTS);
-    createIndex(NEXT_VERSION_INDEX_NAME, NEXT_VERSION, NEXT_VERSION_CONCEPTS);
 
-    final Terminology currentVersion =
-        QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME);
-    final Terminology nextVersion =
-        QueryTestTerminologies.getTerminology(TERMINOLOGY, NEXT_VERSION, NEXT_VERSION_INDEX_NAME);
-    terminologies = List.of(currentVersion);
-    bothVersions = List.of(currentVersion, nextVersion);
+    terminologies =
+        List.of(QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME));
   }
 
-  /** Removes both indexes. */
+  /** Removes the index. */
   @AfterAll
-  public void tearDownIndexes() {
+  public void tearDownIndex() {
     operations.indexOps(IndexCoordinates.of(INDEX_NAME)).delete();
-    operations.indexOps(IndexCoordinates.of(NEXT_VERSION_INDEX_NAME)).delete();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -291,8 +250,7 @@ public class HasInverseRoleTest {
    */
   @Test
   public void testRoleTypeWithoutSourceFindsAnyConceptPointedTo() {
-    final EvsQuery primarySitesOfAnyDisease =
-        new HasInverseRole(new RelationshipType(new Exact(PRIMARY_SITE)));
+    final EvsQuery primarySitesOfAnyDisease = new HasInverseRole(new Exact(PRIMARY_SITE));
 
     assertEquals(Set.of("Skin", "Lung"), fetchMatchingNames(primarySitesOfAnyDisease));
   }
@@ -304,133 +262,13 @@ public class HasInverseRoleTest {
    */
   @Test
   public void testInverseRoleFindsOtherEndOfRole() {
-    final EvsQuery diseasesWithComplications =
-        new HasInverseRole(new RelationshipType(new Exact(COMPLICATION_OF)));
+    final EvsQuery diseasesWithComplications = new HasInverseRole(new Exact(COMPLICATION_OF));
 
     assertEquals(Set.of("Cutaneous Melanoma"), fetchMatchingNames(diseasesWithComplications));
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 3: a source is a query, run before the inverse role query.
-  // ---------------------------------------------------------------------------------------------
-
-  /**
-   * The source query runs first: diseases whose primary site is Lung (Lung Carcinoma, Lung
-   * Adenocarcinoma). Then the outer query: anything that is any kind of site of one of them. Lung
-   * is the primary site of both. Skin is Lung Carcinoma's associated site.
-   */
-  @Test
-  public void testHasRoleAsSourceFindsSitesOfMatchingDiseases() {
-    final EvsQuery diseasesWithPrimarySiteLung =
-        new HasRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)), new RelationshipTarget(new Exact(LUNG)));
-    final EvsQuery sitesOfLungDiseases =
-        new HasInverseRole(
-            new RelationshipType(new CaseInsensitive(new Contains("site"))),
-            new RelationshipTarget(diseasesWithPrimarySiteLung));
-
-    assertEquals(Set.of("Lung", "Skin"), fetchMatchingNames(sitesOfLungDiseases));
-  }
-
-  /**
-   * A source query can be a HasInverseRole too. Diseases that have a complication: Cutaneous
-   * Melanoma. Their primary sites: Skin.
-   */
-  @Test
-  public void testSourceCanHaveItsOwnInverseRoleSource() {
-    final EvsQuery diseasesWithComplications =
-        new HasInverseRole(new RelationshipType(new Exact(COMPLICATION_OF)));
-    final EvsQuery primarySitesOfDiseasesWithComplications =
-        new HasInverseRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(diseasesWithComplications));
-
-    assertEquals(Set.of("Skin"), fetchMatchingNames(primarySitesOfDiseasesWithComplications));
-  }
-
-  /**
-   * HasInverseRole can be the target query of a HasRole. Sites that are some disease's associated
-   * site: Skin. Diseases whose primary site is one of them: Cutaneous Melanoma and Basal Cell
-   * Carcinoma of Skin. Lung Carcinoma points to Skin only as its associated site, so it doesn't
-   * match.
-   */
-  @Test
-  public void testHasInverseRoleAsTargetOfHasRole() {
-    final EvsQuery associatedSites =
-        new HasInverseRole(new RelationshipType(new Exact(ASSOCIATED_SITE)));
-    final EvsQuery diseasesWithPrimarySiteThatIsAnAssociatedSite =
-        new HasRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)), new RelationshipTarget(associatedSites));
-
-    assertEquals(
-        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
-        fetchMatchingNames(diseasesWithPrimarySiteThatIsAnAssociatedSite));
-  }
-
-  /**
-   * A source query matching no concepts finds nothing, rather than matching any source. Nothing is
-   * a complication of Lung Carcinoma, so nothing is the primary site of such a complication.
-   */
-  @Test
-  public void testSourceMatchingNothingFindsNothing() {
-    final EvsQuery complicationsOfLungCarcinoma =
-        new HasRole(
-            new RelationshipType(new Exact(COMPLICATION_OF)),
-            new RelationshipTarget(new Exact(LUNG_CARCINOMA)));
-    final EvsQuery primarySitesOfComplicationsOfLungCarcinoma =
-        new HasInverseRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(complicationsOfLungCarcinoma));
-
-    assertEquals(Set.of(), fetchMatchingNames(primarySitesOfComplicationsOfLungCarcinoma));
-  }
-
-  // ---------------------------------------------------------------------------------------------
-  // Lesson 4: a source only matches inverse roles in the terminology version it was found in.
-  // ---------------------------------------------------------------------------------------------
-
-  /**
-   * Searching both versions, the source "diseases with a complication whose name has the word skin"
-   * is only found in the first version: Cutaneous Melanoma, a complication of which is Skin Ulcer.
-   * In the next version, Integument is the primary site of the same code, but there that code's
-   * complication is Integument Ulcer, so Integument doesn't match.
-   */
-  @Test
-  public void testSourceFoundInOneVersionOnlyMatchesInverseRolesInThatVersion() {
-    final EvsQuery diseasesWithComplicationNamedSkin =
-        new HasInverseRole(
-            new RelationshipType(new Exact(COMPLICATION_OF)),
-            new RelationshipTarget(new CaseInsensitive(new Exact("skin"))));
-    final EvsQuery primarySitesOfThoseDiseases =
-        new HasInverseRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(diseasesWithComplicationNamedSkin));
-
-    assertEquals(Set.of("Skin"), fetchMatchingNames(primarySitesOfThoseDiseases, bothVersions));
-  }
-
-  /**
-   * The source "diseases with a complication whose code is Skin Ulcer's" is found in both versions,
-   * Cutaneous Melanoma's code in each, so its primary site matches in both.
-   */
-  @Test
-  public void testSourceFoundInBothVersionsMatchesInverseRolesInBoth() {
-    final EvsQuery diseasesWithComplicationOfSkinUlcerCode =
-        new HasInverseRole(
-            new RelationshipType(new Exact(COMPLICATION_OF)),
-            new RelationshipTarget(new Exact(SKIN_ULCER)));
-    final EvsQuery primarySitesOfThoseDiseases =
-        new HasInverseRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(diseasesWithComplicationOfSkinUlcerCode));
-
-    assertEquals(
-        Set.of("Skin", "Integument"),
-        fetchMatchingNames(primarySitesOfThoseDiseases, bothVersions));
-  }
-
-  // ---------------------------------------------------------------------------------------------
-  // Lesson 5: the role type and a source match work as in HasRole.
+  // Lesson 3: the role type and a source match work as in HasRole.
   // ---------------------------------------------------------------------------------------------
 
   /** The role's code finds the same concepts as its name. */
@@ -446,7 +284,7 @@ public class HasInverseRoleTest {
   @Test
   public void testPartialRoleNameFindsNothing() {
     final EvsQuery conceptsPointedToByRoleNamedAnatomicSite =
-        new HasInverseRole(new RelationshipType(new Exact("Anatomic_Site")));
+        new HasInverseRole(new Exact("Anatomic_Site"));
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsPointedToByRoleNamedAnatomicSite));
   }
@@ -463,8 +301,7 @@ public class HasInverseRoleTest {
   /** With its match wrapped in CaseInsensitive, the role type matches whatever its case. */
   @Test
   public void testCaseInsensitiveRoleTypeMatchesAnyCase() {
-    final RelationshipType roleType =
-        new RelationshipType(new CaseInsensitive(new Exact(PRIMARY_SITE.toLowerCase())));
+    final ValueMatch roleType = new CaseInsensitive(new Exact(PRIMARY_SITE.toLowerCase()));
     final EvsQuery anyCasePrimarySitesOfCutaneousMelanoma =
         getHasInverseRole(roleType, CUTANEOUS_MELANOMA);
 
@@ -474,8 +311,7 @@ public class HasInverseRoleTest {
   /** CaseInsensitive also works on a role code. */
   @Test
   public void testCaseInsensitiveRoleCode() {
-    final RelationshipType roleType =
-        new RelationshipType(new CaseInsensitive(new Exact(PRIMARY_SITE_CODE.toLowerCase())));
+    final ValueMatch roleType = new CaseInsensitive(new Exact(PRIMARY_SITE_CODE.toLowerCase()));
     final EvsQuery anyCasePrimarySiteCodeOfCutaneousMelanoma =
         getHasInverseRole(roleType, CUTANEOUS_MELANOMA);
 
@@ -489,7 +325,7 @@ public class HasInverseRoleTest {
    */
   @Test
   public void testRoleTypeMatchedByContains() {
-    final RelationshipType roleType = new RelationshipType(new Contains("Anatomic_Site"));
+    final ValueMatch roleType = new Contains("Anatomic_Site");
     final EvsQuery anyAnatomicSiteOfLungCarcinoma = getHasInverseRole(roleType, LUNG_CARCINOMA);
 
     assertEquals(Set.of("Lung", "Skin"), fetchMatchingNames(anyAnatomicSiteOfLungCarcinoma));
@@ -499,9 +335,7 @@ public class HasInverseRoleTest {
   @Test
   public void testSourceMatchedByCode() {
     final EvsQuery primarySitesOfLungAdenocarcinoma =
-        new HasInverseRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(new Exact(LUNG_ADENOCARCINOMA)));
+        new HasInverseRole(new Exact(PRIMARY_SITE), new Exact(LUNG_ADENOCARCINOMA));
 
     assertEquals(Set.of("Lung"), fetchMatchingNames(primarySitesOfLungAdenocarcinoma));
   }
@@ -515,9 +349,7 @@ public class HasInverseRoleTest {
   @Test
   public void testSourceMatchedByCodePrefixFindsAnyOfThem() {
     final EvsQuery anatomicConceptsPointedToByDiseases =
-        new HasInverseRole(
-            new RelationshipType(new Contains("Anatomic")),
-            new RelationshipTarget(new StartsWith(DISEASE_CODE_PREFIX)));
+        new HasInverseRole(new Contains("Anatomic"), new StartsWith(DISEASE_CODE_PREFIX));
 
     assertEquals(Set.of("Skin", "Lung"), fetchMatchingNames(anatomicConceptsPointedToByDiseases));
   }
@@ -526,9 +358,7 @@ public class HasInverseRoleTest {
   @Test
   public void testUnmatchedSourceNameOrCodeFindsNothing() {
     final EvsQuery primarySitesOfDiseaseNamedExactlyLiver =
-        new HasInverseRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(new Exact("Liver")));
+        new HasInverseRole(new Exact(PRIMARY_SITE), new Exact("Liver"));
 
     assertEquals(Set.of(), fetchMatchingNames(primarySitesOfDiseaseNamedExactlyLiver));
   }
@@ -540,9 +370,7 @@ public class HasInverseRoleTest {
   @Test
   public void testSourceMatchedByFuzzyName() {
     final EvsQuery primarySitesOfDiseaseNamedLikeMelanomma =
-        new HasInverseRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)),
-            new RelationshipTarget(new Fuzzy("melanomma")));
+        new HasInverseRole(new Exact(PRIMARY_SITE), new Fuzzy("melanomma"));
 
     assertEquals(Set.of("Skin"), fetchMatchingNames(primarySitesOfDiseaseNamedLikeMelanomma));
   }
@@ -556,14 +384,13 @@ public class HasInverseRoleTest {
   public void testTypeAndSourceMatchedByCaseInsensitiveContains() {
     final EvsQuery sitesOfDiseasesNamedLung =
         new HasInverseRole(
-            new RelationshipType(new CaseInsensitive(new Contains("site"))),
-            new RelationshipTarget(new CaseInsensitive(new Contains("lung"))));
+            new CaseInsensitive(new Contains("site")), new CaseInsensitive(new Contains("lung")));
 
     assertEquals(Set.of("Lung", "Skin"), fetchMatchingNames(sitesOfDiseasesNamedLung));
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 6: HasInverseRole combines with other queries.
+  // Lesson 4: HasInverseRole combines with other queries.
   // ---------------------------------------------------------------------------------------------
 
   /**
@@ -573,12 +400,8 @@ public class HasInverseRoleTest {
    */
   @Test
   public void testCombinesWithHasRole() {
-    final EvsQuery isAPrimarySite =
-        new HasInverseRole(new RelationshipType(new Exact(PRIMARY_SITE)));
-    final EvsQuery isPartOfBodySurface =
-        new HasRole(
-            new RelationshipType(new Exact(PART_OF)),
-            new RelationshipTarget(new Exact(BODY_SURFACE)));
+    final EvsQuery isAPrimarySite = new HasInverseRole(new Exact(PRIMARY_SITE));
+    final EvsQuery isPartOfBodySurface = new HasRole(new Exact(PART_OF), new Exact(BODY_SURFACE));
     final QueryBuilder primarySitesOnBodySurface =
         QueryBuilders.boolQuery()
             .must(isAPrimarySite.fetchOpenSearchQuery(operations, terminologies))
@@ -601,7 +424,7 @@ public class HasInverseRoleTest {
    * @return the query
    */
   private HasInverseRole getHasInverseRole(final String roleNameOrCode, final String sourceCode) {
-    return getHasInverseRole(new RelationshipType(new Exact(roleNameOrCode)), sourceCode);
+    return getHasInverseRole(new Exact(roleNameOrCode), sourceCode);
   }
 
   /**
@@ -611,9 +434,8 @@ public class HasInverseRoleTest {
    * @param sourceCode the code of the concept holding the role
    * @return the query
    */
-  private HasInverseRole getHasInverseRole(
-      final RelationshipType roleType, final String sourceCode) {
-    return new HasInverseRole(roleType, new RelationshipTarget(new Exact(sourceCode)));
+  private HasInverseRole getHasInverseRole(final ValueMatch roleType, final String sourceCode) {
+    return new HasInverseRole(roleType, new Exact(sourceCode));
   }
 
   /**

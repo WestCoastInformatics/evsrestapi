@@ -9,10 +9,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.opensearch.data.core.OpenSearchOperations;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.Query;
@@ -34,6 +37,12 @@ public class EvsQueryTest {
   /** Index name of the made-up terminologies. */
   private static final String INDEX_NAME = "concept_ncit_2512e";
 
+  /** The page of results asked for; the mock ignores it. */
+  private static final Pageable FIRST_PAGE = PageRequest.of(0, 10);
+
+  /** The fields returned for each concept; the mock ignores them. */
+  private static final IncludeParam MINIMAL_FIELDS = new IncludeParam("minimal");
+
   /** A complete terminology runs a node without failing. */
   @Test
   public void testCompleteTerminologyRunsNode() {
@@ -47,7 +56,9 @@ public class EvsQueryTest {
     final EvsQuery conceptsWithSkinCode = new FieldMatch("code", new Exact("C12470"));
 
     assertDoesNotThrow(
-        () -> conceptsWithSkinCode.fetchConceptKeys(operations, List.of(terminology)));
+        () ->
+            conceptsWithSkinCode.fetchConcepts(
+                operations, List.of(terminology), FIRST_PAGE, MINIMAL_FIELDS));
   }
 
   /** A terminology without its terminology name fails when the node is run, naming the field. */
@@ -82,7 +93,9 @@ public class EvsQueryTest {
     final IllegalArgumentException error =
         assertThrows(
             IllegalArgumentException.class,
-            () -> conceptsWithSkinCode.fetchConceptKeys(operations, List.of(terminology)));
+            () ->
+                conceptsWithSkinCode.fetchConcepts(
+                    operations, List.of(terminology), FIRST_PAGE, MINIMAL_FIELDS));
 
     assertTrue(
         error.getMessage().startsWith("Terminology has no " + missingFieldName + " "),

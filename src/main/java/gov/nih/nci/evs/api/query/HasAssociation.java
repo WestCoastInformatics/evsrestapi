@@ -14,22 +14,24 @@ public final class HasAssociation extends HasRelationship {
    * Instantiates a {@link HasAssociation} that matches an association of the given type, pointing
    * to any concept.
    *
-   * @param associationType the association's type
+   * @param associationTypeNameOrCodeMatch how the association's type name or code must match
    */
-  public HasAssociation(final RelationshipType associationType) {
-    super(associationType);
+  public HasAssociation(final ValueMatch associationTypeNameOrCodeMatch) {
+    super(associationTypeNameOrCodeMatch);
   }
 
   /**
    * Instantiates a {@link HasAssociation} that matches an association of the given type pointing to
    * the target.
    *
-   * @param associationType the association's type
-   * @param associationTarget the concepts the association must point to
+   * @param associationTypeNameOrCodeMatch how the association's type name or code must match
+   * @param associationTargetNameOrCodeMatch how the name or code of the concept the association
+   *     must point to
    */
   public HasAssociation(
-      final RelationshipType associationType, final RelationshipTarget associationTarget) {
-    super(associationType, associationTarget);
+      final ValueMatch associationTypeNameOrCodeMatch,
+      final ValueMatch associationTargetNameOrCodeMatch) {
+    super(associationTypeNameOrCodeMatch, associationTargetNameOrCodeMatch);
   }
 
   /* see superclass */

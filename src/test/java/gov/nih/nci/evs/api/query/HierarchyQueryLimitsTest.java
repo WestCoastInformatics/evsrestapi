@@ -40,7 +40,8 @@ import org.springframework.data.elasticsearch.core.query.Query;
 /**
  * Unit tests for the limits and batching of the hierarchy query nodes: sets too large for one
  * {@code terms} query are rejected with a clear message, missing arguments fail fast, and lookups
- * of many anchors are split into batches.
+ * of many anchors are split into batches. The anchors of the stored hierarchy lookups are the
+ * hierarchy nodes' targets.
  *
  * <p>No OpenSearch or Spring: a mocked {@link OpenSearchOperations} returns made-up concepts. That
  * makes it cheap to return tens of thousands of descendants or ancestors, which {@link
@@ -66,38 +67,43 @@ public class HierarchyQueryLimitsTest {
   /** A max level of one: direct children or parents. */
   private static final int ONE_LEVEL = 1;
 
-  /** Code of the anchor in the descendant tests. */
-  private static final String DESCENDANT_ANCHOR_CODE = "R";
+  /** Code of the target in the descendant tests. */
+  private static final String DESCENDANT_TARGET_CODE = "R";
 
-  /** Code of the anchor in the ancestor tests. */
-  private static final String ANCESTOR_ANCHOR_CODE = "G";
+  /** Code of the target in the ancestor tests. */
+  private static final String ANCESTOR_TARGET_CODE = "G";
 
-  /** Code of the concept the mocked inner query matches. */
-  private static final String MATCHED_ANCHOR_CODE = "anchor";
+  /** Code of the concept the mocked target code lookup matches. */
+  private static final String MATCHED_TARGET_CODE = "target";
 
-  /** Code of the single anchor in the depth token tests. */
-  private static final String DEPTH_ANCHOR_CODE = "C1";
+  /** Code of the single target in the depth token tests. */
+  private static final String DEPTH_TARGET_CODE = "C1";
 
-  /** Max level in the one-anchor depth token test. */
-  private static final int ONE_ANCHOR_MAX_LEVEL = 2;
+  /** Max level in the one-target depth token test. */
+  private static final int ONE_TARGET_MAX_LEVEL = 2;
 
-  /** Max level whose anchors times levels exactly reach the limit. */
+  /** Max level whose targets times levels exactly reach the limit. */
   private static final int LEVELS_AT_LIMIT = 4;
 
-  /** Anchors that alone are over the limit, with a max level of one. */
-  private static final int ANCHORS_OVER_LIMIT = 70_000;
+  /** Targets that alone are over the limit, with a max level of one. */
+  private static final int TARGETS_OVER_LIMIT = 70_000;
 
-  /** Anchors that are over the limit only once multiplied by {@link #LEVELS_OVER_LIMIT}. */
-  private static final int ANCHORS_UNDER_LIMIT = 10_000;
+  /** Targets that are over the limit only once multiplied by {@link #LEVELS_OVER_LIMIT}. */
+  private static final int TARGETS_UNDER_LIMIT = 10_000;
 
-  /** Max level that pushes {@link #ANCHORS_UNDER_LIMIT} anchors over the limit. */
+  /** Max level that pushes {@link #TARGETS_UNDER_LIMIT} targets over the limit. */
   private static final int LEVELS_OVER_LIMIT = 7;
+
+  /**
+   * A max level far enough above the target to reach every one of its {@link #TOO_MANY} ancestors.
+   */
+  private static final int LEVELS_REACHING_EVERY_ANCESTOR = TOO_MANY;
 
   /** The message fragment naming the max level of an over-limit set of depth tokens. */
   private static final String MAX_LEVEL_MESSAGE = "maxLevel " + LEVELS_OVER_LIMIT;
 
-  /** The argument named when the anchor query is null. */
-  private static final String ANCHOR_QUERY_ARGUMENT = "anchorQuery";
+  /** The argument named when the target match is null. */
+  private static final String TARGET_MATCH_ARGUMENT = "targetNameOrCodeMatch";
 
   /** The argument named when the code is null. */
   private static final String CODE_ARGUMENT = "code";
@@ -175,65 +181,65 @@ public class HierarchyQueryLimitsTest {
     assertTrue(e.getMessage().contains(String.valueOf(TOO_MANY)), e.getMessage());
   }
 
-  /** One anchor gives one depth token per level up to the max level. */
+  /** One target gives one depth token per level up to the max level. */
   @Test
-  public void testDepthTokensForOneAnchorGivesOneTokenPerDepth() {
+  public void testDepthTokensForOneTargetGivesOneTokenPerDepth() {
     final List<String> expectedTokens =
         List.of(
-            DEPTH_ANCHOR_CODE + DescendantOf.DEPTH_SEPARATOR + 1,
-            DEPTH_ANCHOR_CODE + DescendantOf.DEPTH_SEPARATOR + 2);
+            DEPTH_TARGET_CODE + DescendantOf.DEPTH_SEPARATOR + 1,
+            DEPTH_TARGET_CODE + DescendantOf.DEPTH_SEPARATOR + 2);
 
     assertEquals(
         expectedTokens,
-        DescendantOf.getDepthTokens(List.of(DEPTH_ANCHOR_CODE), ONE_ANCHOR_MAX_LEVEL));
+        DescendantOf.getDepthTokens(List.of(DEPTH_TARGET_CODE), ONE_TARGET_MAX_LEVEL));
   }
 
   /** Depth tokens that exactly reach the limit are accepted. */
   @Test
   public void testDepthTokensAtLimitAreAccepted() {
-    final int anchorsAtLimit = MatchAnyOf.MAX_VALUES / LEVELS_AT_LIMIT;
+    final int targetsAtLimit = MatchAnyOf.MAX_VALUES / LEVELS_AT_LIMIT;
 
     assertEquals(
         MatchAnyOf.MAX_VALUES,
-        DescendantOf.getDepthTokens(getCodes(anchorsAtLimit), LEVELS_AT_LIMIT).size());
+        DescendantOf.getDepthTokens(getCodes(targetsAtLimit), LEVELS_AT_LIMIT).size());
   }
 
-  /** Too many anchors for the limit, even at a max level of one, throws an error. */
+  /** Too many targets for the limit, even at a max level of one, throws an error. */
   @Test
-  public void testDepthTokensWithTooManyAnchorsThrowsError() {
+  public void testDepthTokensWithTooManyTargetsThrowsError() {
     assertThrows(
         IllegalArgumentException.class,
-        () -> DescendantOf.getDepthTokens(getCodes(ANCHORS_OVER_LIMIT), ONE_LEVEL));
+        () -> DescendantOf.getDepthTokens(getCodes(TARGETS_OVER_LIMIT), ONE_LEVEL));
   }
 
-  /** Anchors times max level over the limit throws an error naming the max level. */
+  /** Targets times max level over the limit throws an error naming the max level. */
   @Test
   public void testDepthTokensOverLimitThroughMaxLevelThrowsErrorNamingMaxLevel() {
     final IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> DescendantOf.getDepthTokens(getCodes(ANCHORS_UNDER_LIMIT), LEVELS_OVER_LIMIT));
+            () -> DescendantOf.getDepthTokens(getCodes(TARGETS_UNDER_LIMIT), LEVELS_OVER_LIMIT));
 
     assertTrue(e.getMessage().contains(MAX_LEVEL_MESSAGE), e.getMessage());
   }
 
-  /** A null anchor query on DescendantOf throws an error naming anchorQuery. */
+  /** A null target match on DescendantOf throws an error naming targetNameOrCodeMatch. */
   @Test
-  public void testDescendantOfWithNullAnchorQueryThrowsErrorNamingAnchorQuery() {
+  public void testDescendantOfWithNullTargetMatchThrowsErrorNamingTargetMatch() {
     final NullPointerException e =
-        assertThrows(NullPointerException.class, () -> new DescendantOf((EvsQuery) null));
+        assertThrows(NullPointerException.class, () -> new DescendantOf((ValueMatch) null));
 
-    assertEquals(ANCHOR_QUERY_ARGUMENT, e.getMessage());
+    assertEquals(TARGET_MATCH_ARGUMENT, e.getMessage());
   }
 
-  /** A null anchor query on AncestorOrSelfOf throws an error naming anchorQuery. */
+  /** A null target match on AncestorOrSelfOf throws an error naming targetNameOrCodeMatch. */
   @Test
-  public void testAncestorOrSelfOfWithNullAnchorQueryThrowsErrorNamingAnchorQuery() {
+  public void testAncestorOrSelfOfWithNullTargetMatchThrowsErrorNamingTargetMatch() {
     final NullPointerException e =
         assertThrows(
-            NullPointerException.class, () -> new AncestorOrSelfOf((EvsQuery) null, ONE_LEVEL));
+            NullPointerException.class, () -> new AncestorOrSelfOf((ValueMatch) null, ONE_LEVEL));
 
-    assertEquals(ANCHOR_QUERY_ARGUMENT, e.getMessage());
+    assertEquals(TARGET_MATCH_ARGUMENT, e.getMessage());
   }
 
   /** A null code on AncestorOf throws an error naming code. */
@@ -262,8 +268,8 @@ public class HierarchyQueryLimitsTest {
   @Test
   public void testFallbackWithTooManyDescendantsThrowsErrorAskingToReindex() {
     stubSearch(
-        anchor -> {
-          final Concept concept = getConcept(anchor);
+        target -> {
+          final Concept concept = getConcept(target);
           concept.setDescendants(getCodes(TOO_MANY).stream().map(Concept::new).toList());
           return concept;
         });
@@ -272,7 +278,7 @@ public class HierarchyQueryLimitsTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                new DescendantOf(DESCENDANT_ANCHOR_CODE)
+                new DescendantOf(DESCENDANT_TARGET_CODE)
                     .fetchOpenSearchQuery(operations, terminologies));
 
     assertTrue(e.getMessage().contains(REINDEX_MESSAGE), e.getMessage());
@@ -282,8 +288,8 @@ public class HierarchyQueryLimitsTest {
   @Test
   public void testFallbackWithMaxLevelAndTooManyChildrenThrowsError() {
     stubSearch(
-        anchor -> {
-          final Concept concept = getConcept(anchor);
+        target -> {
+          final Concept concept = getConcept(target);
           concept.setChildren(getCodes(TOO_MANY).stream().map(Concept::new).toList());
           return concept;
         });
@@ -291,20 +297,24 @@ public class HierarchyQueryLimitsTest {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            new DescendantOf(DESCENDANT_ANCHOR_CODE, ONE_LEVEL)
+            new DescendantOf(DESCENDANT_TARGET_CODE, ONE_LEVEL)
                 .fetchOpenSearchQuery(operations, terminologies));
   }
 
-  /** An anchor with more ancestors than fit in one query throws an error. */
+  /**
+   * A level-limited AncestorOf whose target has more ancestors within the limit than fit in one
+   * query throws an error. Without a limit, AncestorOf matches on the stored descendants and reads
+   * no paths, so only a limited one can hit this.
+   */
   @Test
-  public void testAncestorOfWithTooManyAncestorsThrowsErrorNamingTooManyAncestors() {
-    stubSearch(anchor -> getConceptWithAncestorCount(anchor, TOO_MANY));
+  public void testAncestorOfMaxLevelWithTooManyAncestorsThrowsErrorNamingTooManyAncestors() {
+    stubSearch(target -> getConceptWithAncestorCount(target, TOO_MANY));
 
     final IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                new AncestorOf(ANCESTOR_ANCHOR_CODE)
+                new AncestorOf(ANCESTOR_TARGET_CODE, LEVELS_REACHING_EVERY_ANCESTOR)
                     .fetchOpenSearchQuery(operations, terminologies));
 
     assertTrue(e.getMessage().contains(TOO_MANY_ANCESTORS_MESSAGE), e.getMessage());
@@ -384,8 +394,8 @@ public class HierarchyQueryLimitsTest {
 
   /**
    * Stubs the mock: a lookup by ids returns one concept per id, built by {@code byCode}; any other
-   * search (the inner query, run through {@link EvsQuery#declareDependencies}) returns one page
-   * with the matched anchor.
+   * search (the target code lookup, {@link HierarchyQuery#fetchTargetCodes}) returns one page with
+   * the matched target.
    *
    * @param byCode builds the stored concept for a code
    */
@@ -395,9 +405,9 @@ public class HierarchyQueryLimitsTest {
             invocation -> {
               final NativeSearchQuery search = invocation.getArgument(0);
 
-              // The inner query matched the anchor by code; the mock ignores which code
+              // The target code lookup matched the target by code; the mock ignores which code
               if (!(search.getQuery() instanceof IdsQueryBuilder ids)) {
-                return getPage(List.of(getConcept(MATCHED_ANCHOR_CODE)));
+                return getPage(List.of(getConcept(MATCHED_TARGET_CODE)));
               }
 
               return getPage(ids.ids().stream().map(byCode).toList());
@@ -481,8 +491,8 @@ public class HierarchyQueryLimitsTest {
   }
 
   /**
-   * Builds one page of hits holding the given concepts, sorted like the real concept-key page
-   * search.
+   * Builds one page of hits holding the given concepts, sorted by code like the real target code
+   * page search.
    *
    * @param concepts the concepts
    * @return the page
@@ -490,7 +500,7 @@ public class HierarchyQueryLimitsTest {
   private static SearchHits<Concept> getPage(final Collection<Concept> concepts) {
     final List<SearchHit<Concept>> hits = new ArrayList<>();
     for (final Concept concept : concepts) {
-      final Object[] sortValues = {concept.getCode(), INDEX_NAME};
+      final Object[] sortValues = {concept.getCode()};
       hits.add(
           new SearchHit<>(
               INDEX_NAME,

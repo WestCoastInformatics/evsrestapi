@@ -66,18 +66,13 @@ classDiagram
 
     class HasRelationship {
         <<abstract>>
-        -RelationshipType relationshipType
-        -RelationshipTarget relationshipTarget
+        -ValueMatch typeNameOrCodeMatch
+        -ValueMatch targetNameOrCodeMatch
         #getRelationshipListFieldName()* String
     }
 
-    class RelationshipType {
-        -ValueMatch match
-    }
-
-    class RelationshipTarget {
-        +RelationshipTarget(ValueMatch nameOrCodeMatch)
-        +RelationshipTarget(EvsQuery query)
+    class InSubset {
+        -ValueMatch subsetNameOrCodeMatch
     }
 
     class HasProperty {
@@ -178,16 +173,19 @@ classDiagram
 
     class HierarchyQuery {
         <<abstract>>
-        -EvsQuery anchorQuery
+        -ValueMatch targetNameOrCodeMatch
         -Integer maxLevel
-        -boolean isSelfIncluded
-        +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
+        #fetchTargetCodes(OpenSearchOperations, Terminology) Set~String~
         #fetchRelativesQuery(OpenSearchOperations, Terminology, Set~String~)* QueryBuilder
     }
     class DescendantOf
-    class DescendantOrSelfOf
+    class DescendantOrSelfOf {
+        +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
+    }
     class AncestorOf
-    class AncestorOrSelfOf
+    class AncestorOrSelfOf {
+        +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
+    }
 
     EvsQuery <|-- And
     EvsQuery <|-- Or
@@ -200,14 +198,13 @@ classDiagram
     HasRelationship <|-- HasInverseAssociation
     EvsQuery <|-- InSubset
     InSubset ..> HasAssociation : builds
-    InSubset o-- RelationshipTarget : subsets
+    InSubset o-- ValueMatch : subsets
     And o-- EvsQuery : children
     Or o-- EvsQuery : children
     Not o-- EvsQuery : child
     Boost o-- EvsQuery : child
     FieldMatch o-- ValueMatch : match
-    HasRelationship o-- RelationshipType
-    HasRelationship o-- RelationshipTarget
+    HasRelationship o-- ValueMatch : type, target
     HasProperty o-- ValueMatch : type, value
     HasProperty o-- QualifierCondition : qualifiers
     QualifierCondition <|.. PropertyQualifier
@@ -218,9 +215,6 @@ classDiagram
     AnyQualifier o-- QualifierCondition : conditions
     NoQualifier o-- QualifierCondition : condition
     PropertyQualifier o-- ValueMatch : type, value
-    RelationshipType o-- ValueMatch : match
-    RelationshipTarget o-- ValueMatch : or
-    RelationshipTarget o-- EvsQuery : or
 
     ValueMatch <|-- SupportsIgnoringCase
     ValueMatch <|.. CaseInsensitive
@@ -237,7 +231,7 @@ classDiagram
     HierarchyQuery <|-- AncestorOf
     DescendantOf <|-- DescendantOrSelfOf
     AncestorOf <|-- AncestorOrSelfOf
-    HierarchyQuery o-- EvsQuery : anchorQuery
+    HierarchyQuery o-- ValueMatch : target
 ```
 
 | Class | Role |
@@ -247,18 +241,18 @@ classDiagram
 | `ValueMatch` | How one value is compared, with no field. Its contract is `getQueryBuilder(field)`. The implementations are records: plain values with no behavior beyond building their query. |
 | `SupportsIgnoringCase` | A `ValueMatch` that can also ignore case: `Exact`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper match. It runs the wrapped match ignoring case by calling `getCaseInsensitiveQueryBuilder(field)`. The wrapped match is not changed. |
-| `HasRelationship` | Matches concepts by a relationship's type and target (see [Queries about other concepts](#queries-about-other-concepts-joins)). |
-| `InSubset` | Matches members of subsets. A subset is a concept, and membership is an association to it (NCIt's Concept_In_Subset, A8, read from the terminology's `subsetMember` metadata), so it builds a `HasAssociation`. The subsets are a `RelationshipTarget`: a code, `OneOf` codes for any of several, or a query such as `DescendantOrSelfOf` a subset root. All-of and but-not combine `InSubset`s per concept. Exploratory: drops the current search's CDISC grouper special case. |
+| `HasRelationship` | Matches concepts by a relationship's type and target, each a `ValueMatch` on a name or code (see [Relationships](#relationships)). |
+| `InSubset` | Matches members of subsets. A subset is a concept, and membership is an association to it (NCIt's Concept_In_Subset, A8, read from the terminology's `subsetMember` metadata), so it builds a `HasAssociation`. The subsets are a `ValueMatch` on the subset's name or code: a code, or `OneOf` codes for any of several. All-of and but-not combine `InSubset`s per concept. Exploratory: drops the current search's CDISC grouper special case. |
 | `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions. |
 | `HasSynonym` | Matches concepts with a synonym whose name, and optionally source, term type, and sub-source, match on the same synonym entry. Searches the remodeled `synonyms` list. The name is compared to the synonym's `normName`, with the match's terms normalized the same way (`ConceptUtils.normalize`) through `ValueMatch.getWithTermsMapped`, so matching ignores case and punctuation. Combine nodes with the concept-level `And`/`Or`/`Not`; OR or NOT between fields of one synonym isn't supported yet. |
 | `QualifierCondition` | A condition on one property entry's qualifiers, checked inside `HasProperty`'s nested query on that entry. `AllQualifiers`, `AnyQualifier`, and `NoQualifier` combine conditions (`bool` `must`, `should`, `must_not`). They're separate from the concept-level `And`/`Or`/`Not`, which combine sets of concepts and so can't keep qualifiers on one entry; the Javadoc explains the choice and the generic alternative. |
 | `PropertyQualifier` | The leaf `QualifierCondition`: a qualifier a `HasProperty` property must have, a type name or code, optionally with a matching value, on one qualifier entry of that same property. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
 | `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `FieldMatch` with `Exact`. Overlaps `OneOf`; kept as is from the hierarchy branch. Rejects more than 65,536 values, OpenSearch's default limit. |
-| `HierarchyQuery` | Base type for hierarchy nodes. Runs the inner (anchor) query first through `declareDependencies`, then, for each terminology version, matches the anchors' relatives only in that terminology's index. Handles `maxLevel` (shortest distance, at least 1) and `isSelfIncluded`. Subclasses implement `fetchRelativesQuery`. |
-| `DescendantOf` | Matches concepts strictly below the anchors, optionally within `maxLevel` levels. Any node can supply the anchors, including another hierarchy node. Terminologies with `ancestors`/`ancestorDepths` match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
-| `DescendantOrSelfOf` | `DescendantOf` that also matches the anchors themselves (distance 0). |
-| `AncestorOf` | The upward counterpart: matches concepts strictly above the anchors, optionally within `maxLevel` levels. Reads the anchors' stored paths to root (`StoredPaths`), which every index has, so there's no fallback and nothing to remove after reindexing. Nests with `DescendantOf`, e.g. siblings-or-self is `new DescendantOf(new AncestorOf(x, 1), 1)`. |
-| `AncestorOrSelfOf` | `AncestorOf` that also matches the anchors themselves. |
+| `HierarchyQuery` | Base type for hierarchy nodes. The targets are the concepts whose name or code matches `targetNameOrCodeMatch`. When the concept's own fields can't answer the query yet, it looks up the target codes first (`fetchTargetCodes`), then, for each terminology version, matches the targets' relatives only in that terminology's index (see [Hierarchy queries](#hierarchy-queries)). Handles `maxLevel` (shortest distance, at least 1). Subclasses implement `fetchRelativesQuery`. |
+| `DescendantOf` | Matches concepts strictly below the targets, optionally within `maxLevel` levels. `ancestors` holds codes only, so it always looks up the target codes first. Terminologies with `ancestors`/`ancestorDepths` then match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
+| `DescendantOrSelfOf` | `DescendantOf` that also matches the targets themselves (distance 0): it ORs `DescendantOf`'s query with a match on the concept's own name or code. |
+| `AncestorOf` | The upward counterpart: matches concepts strictly above the targets, optionally within `maxLevel` levels. Without `maxLevel` it's one query on the concept's stored `descendants` names and codes. With `maxLevel` it looks up the target codes and reads their stored paths to root (`StoredPaths`). |
+| `AncestorOrSelfOf` | `AncestorOf` that also matches the targets themselves, the same way as `DescendantOrSelfOf`. |
 | `RawBoolQueries` | The raw `bool` combining helpers (`getAllOfQuery`, `getAnyOfQuery`, `getMatchNothingQuery`) used until the logical operator nodes land; each maps onto `And`, `Or`, or `Not`. |
 | `And`, `Or`, `Not`, `Boost` | Logical queries. They hold child `EvsQuery` nodes instead of a field and a match. See [Logical queries](#logical-queries). Exploratory on this branch: merged from `eas/logical-operators`, tested only by `LogicalQueryTest` and the subset lessons. |
 | `Typeahead` | The query behind `/concept/typeahead`. Builds `FieldMatch`es: preferred names with `SearchAsYouType` (on `name.search_as_you_type`), and codes case sensitively with `Exact` (whole code) and `StartsWith` (partial code) on `code`, leaving out concepts with `active: false`, and overrides `getSorts()` to sort matches into tiers (a whole typed code, then name matches, then code-only matches) and rank general concepts with short names first within a tier. It ranks on the `descendantCount` field stored at load time, falling back to counting `descendants.leaf` on indexes loaded before that field existed. The count is the size of the stored `descendants`, so the SNOMED root (`138875005`), whose descendants the loader skips, has a count of 0 and ranks like a leaf. `Typeahead.getHasWordsToComplete(term)` says whether a term has anything to complete; the constructor rejects terms that don't. The endpoint's `total` stops at 10,000 (OpenSearch's default count limit): typeahead doesn't page, so unlike search it doesn't run a second query for the exact count. `SearchControllerTests.testTypeaheadTotalCapsAtCountedHitLimit` pins this. Highlighting is optional: the endpoint takes an `include` parameter like search (default `minimal`). With `include=minimal,highlights`, `fetchConcepts` asks OpenSearch to highlight the matched fields, and the endpoint returns OpenSearch's highlight of each suggestion's name (or of its code, if only the code matched). OpenSearch marks whole words: `lung ca` gives `<em>Lung</em> <em>Carcinoma</em>`. Typeahead overrides `getHighlightFields()` to highlight the main `name` field with a `match_bool_prefix` highlight query, because highlighting the `search_as_you_type` subfield it matched never marks the partial last word (and `*` doesn't reach subfields at all). `TypeaheadTest` lesson 10, `SearchControllerTests.testTypeaheadNameMatchHighlightsTypedWords`, `...testTypeaheadCodeMatchHighlightsCode`, `...testTypeaheadEndpointDefaultIncludeReturnsNoHighlights`, and `...testTypeaheadEndpointHighlightsIncludeReturnsHighlights` pin this. |
@@ -374,98 +368,83 @@ Known limits:
 - **Sorts can't blend.** A higher-priority sort always wins outright. Blending relevance across
   branches needs ranking through the score instead.
 
-## Queries about other concepts (joins)
-
-Some nodes hold a query that describes a *different* concept from the one being matched:
-
-- `HasRelationship`'s target, e.g. `HasRole`'s: "primary site is Skin or anything below Skin" (spec 1.4),
-  or `HasAssociation`'s: "in a subset of the CTRP Terminology" (spec 1.5)
-- Planned: `Reachable`'s seeds and hops (1.11)
+## Relationships
 
 **Roles and associations share one node.** A concept's `roles` and `associations` are both lists of
 entries pairing a type (name and code) with a related concept's code and name, so `HasRelationship` searches
 either. It's abstract: each subclass says which list it searches by overriding
 `getRelationshipListFieldName()`; `HasRole` returns `roles`, `HasInverseRole` returns `inverseRoles`,
 `HasAssociation` returns `associations`, and `HasInverseAssociation` returns `inverseAssociations`.
-`HasRelationship` owns the list: the nested query on it and the terminology version filter.
-`RelationshipType` and `RelationshipTarget` own which entry fields they compare (`type` and `code`;
-`relatedName` and `relatedCode`) and build their `FieldMatch`es on them, with the list's name in
-front (`roles.type`, ...). `roles`, `inverseRoles`, `associations`, and `inverseAssociations` are
-all mapped as nested.
+`HasRelationship` owns the list, the nested query on it, and which entry fields it compares
+(`type` and `code`; `relatedName` and `relatedCode`), with the list's name in front (`roles.type`,
+...). `roles`, `inverseRoles`, `associations`, and `inverseAssociations` are all mapped as nested.
 
 **Direction is a list, not a flag.** An `inverseAssociations` entry mirrors another concept's
 association: same type, with that other concept as the related concept. So
-`HasInverseAssociation` is the same search on a different list, and its `RelationshipTarget` is the
+`HasInverseAssociation` is the same search on a different list, and its target is the
 association's source. "The subsets Cutaneous Melanoma is in" is
-`HasInverseAssociation(Exact("Concept_In_Subset"), RelationshipTarget(Exact("C01")))`. A subset
+`HasInverseAssociation(Exact("Concept_In_Subset"), Exact("C01"))`. A subset
 concept holds one inverse entry per member (about 32,000 for the CDISC Terminology), past
 OpenSearch's default of 10,000 nested entries per document, so indexes are created with a higher
 `index.mapping.nested_objects.limit`.
 
-**The type is a value match; the target is a value match or a query.** A `RelationshipType` takes a `ValueMatch`
-and applies it to both the entry's type name and its type code, so the caller picks how the type
-is matched without naming the entry's fields: `new RelationshipType(new StartsWith("Disease_Has"))`.
-There's no default: an exact type is `new RelationshipType(new Exact("R101"))`. A
-`RelationshipTarget` takes either a `ValueMatch`, compared directly against the entry's target name
-or target code the same way (the name is analyzed text, so the match compares its words), or a
-query over concepts, which runs first and whose codes are then matched exactly.
+**The type and the target are value matches.** Each `ValueMatch` is applied to both the entry's
+name and its code, so the caller picks how it's matched without naming the entry's fields:
+`new HasRole(new StartsWith("Disease_Has"))`. There's no default: an exact type is
+`new HasRole(new Exact("R101"))`. The target name is analyzed text, so a match compares its words.
+Both are stored on the entry itself, so no other search runs.
 
-OpenSearch can't join across documents. A nested query only reaches inside the same concept
-document, and a role entry only stores its target's code. So
-`HasRole(type, Or(FieldMatch(code, Exact(Skin)), DescendantOf(Skin)))` can't become one OpenSearch
-query.
+**Targets aren't queries.** Only the logical queries (`And`, `Or`, `Not`, `Boost`) hold other
+queries. "Primary site is Skin or anything below Skin" would need the codes below Skin first,
+because a role entry only stores its target's code and name; that's left to the caller, who can run
+one query and pass its codes back as `OneOf`.
 
-**How it works:** building such a node runs the inner query first. `fetchOpenSearchQuery(operations,
-terminologies)` takes the OpenSearch operations so it can. The node calls `declareDependencies(operations,
-terminologies, dependencies...)`, which runs each dependency against the same terminologies and pages through every matching concept with
-`search_after` (sorted by code, then index, so pages don't overlap). It reads no stored documents,
-which can be very large: each hit's code is its first sort value (read from doc values) and its
-terminology version is that of the index it came from. It returns one `ConceptKeys` per dependency:
-the codes found in each terminology version. The node then matches what it found, e.g. with a
-`FieldMatch` with `OneOf` the codes. The paging is done by `EvsQuery.fetchConceptKeys`, which runs the node's own
-`fetchOpenSearchQuery`, so a node is written once and works both as a search and as a dependency.
-A `RelationshipTarget` given as a query calls `declareDependencies(operations, terminologies, targetQuery)`, and for
-each terminology version it matches concepts from that terminology version with an entry whose
-`relatedCode` is `OneOf` its codes. An inner query can hold its own query about another concept, which runs first in the same
-way, to any depth. Nodes that don't hold a query about another concept ignore `operations`.
+## Hierarchy queries
 
-**Why codes are matched per terminology version:** a code alone doesn't identify a concept. Two
-versions of a terminology share codes, and a relationship's target code refers to a concept in the
-relationship's own terminology version. So a target found in one version must only match
-relationships on concepts from that version. `HasRelationship` filters on the exact `terminology.keyword` and `version.keyword` subfields
-(the main `terminology` and `version` fields are analyzed text). The filter sits outside the
-`nested` query on the list, because a nested query only sees the entry's own fields.
+The hierarchy nodes take a `ValueMatch` on the target concepts' name or code, not an inner query.
+Some cases can't be answered from the concept's own fields yet, so `HierarchyQuery.fetchTargetCodes`
+looks the target codes up first, one terminology at a time:
+
+| Node | Without `maxLevel` | With `maxLevel` |
+|---|---|---|
+| `DescendantOf` | looks up target codes, then `ancestors` (or `StoredHierarchyFallback` on older indexes) | looks up target codes, then `ancestorDepths` tokens |
+| `AncestorOf` | one query on `descendants.name` / `descendants.code` | looks up target codes, then `StoredPaths` |
+
+`ancestors` holds codes only, so a name match needs the lookup. `descendants` entries hold names
+and codes, but they're mapped as `object`, so an entry's level isn't tied to its code, and the level
+is the depth-first discovery depth rather than the shortest distance.
+
+The lookup pages through every matching concept with `search_after`, sorted by code. It reads no
+stored documents, which can be very large: each hit's code is its sort value, read from doc values.
+The node then matches each terminology's relatives only in that terminology's index, because codes
+are only unique within one terminology version.
+
+TODO: remove the lookup once ancestors and descendants are indexed as nested `{code, name, level}`
+entries.
 
 #### Why `operations` and `terminologies` are parameters
 
 A static lookup hides which nodes search and makes tests change global state; injecting
 `operations` at construction means every tree containing a search needs it just to be built.
 Taking it in `fetchOpenSearchQuery` keeps trees plain data, and lets unit tests pass a mock (see
-`DeclareDependenciesTest`).
+`HierarchyQueryTargetCodesTest`).
 
 The terminologies are passed the same way, as their own parameter. Most nodes only hand them to
-their children; the nodes that read them are the ones that search (`fetchConcepts`,
-`fetchConceptKeys`, which map each index to its terminology version), `HierarchyQuery` (which
-matches each terminology's relatives in that terminology's index, running its per-terminology
-children against just that terminology), and `InSubset` (which reads each terminology's
+their children; the nodes that read them are `fetchConcepts` (which searches their indexes),
+`HierarchyQuery` (which looks up targets and matches each terminology's relatives in that
+terminology's index), and `InSubset` (which reads each terminology's
 `subsetMember` metadata). So the same tree can run against any terminologies, and a node can run a
 child against different ones.
 
-**Why the inner query always runs first:** handing codes between searches is cheap. On local NCIt
-25.12e, OpenSearch ran a `terms` query over about 23,000 codes in 80ms. A plan that starts from the
-other side of the join could sometimes pass fewer codes, but it isn't worth a planner. The
-benchmark, and the SPARQL (Fuseki) comparison, is written up under 1.4 Role in the project notes.
-
 **Limit:** one `terms` query accepts at most 65,536 codes (OpenSearch's default
-`index.max_terms_count`). A relationship target matching more concepts in one terminology version fails with
-an `IllegalStateException`, instead of cutting the codes short and silently returning wrong results.
+`index.max_terms_count`). A hierarchy lookup finding more targets or relatives than that fails,
+instead of cutting the codes short and silently returning wrong results.
 
-**Reindex:** `terminology.keyword` and `version.keyword` are new subfields, and `roles`,
-`inverseRoles`, `associations`, and `inverseAssociations` are now nested. Existing concept indexes
-have none of these, so `HasRole`, `HasInverseRole`, `HasAssociation`, `HasInverseAssociation` (and
-any `HasRelationship`) need a reindex. Each nested entry is its own hidden document, so NCIt's many
-associations (e.g. `Concept_In_Subset`) grow the index, and the inverse lists roughly double that
-growth.
+**Reindex:** `roles`, `inverseRoles`, `associations`, and `inverseAssociations` are nested.
+Concept indexes loaded before that mapping need a reindex for `HasRole`, `HasInverseRole`,
+`HasAssociation`, `HasInverseAssociation` (and any `HasRelationship`). Each nested entry is its own
+hidden document, so NCIt's many associations (e.g. `Concept_In_Subset`) grow the index, and the
+inverse lists roughly double that growth.
 
 ## Extending
 
@@ -584,9 +563,9 @@ final EvsQuery query =
 
 1. Name it after what it matches, and document that behavior in the class Javadoc.
 2. Build an OpenSearch query in `fetchOpenSearchQuery(operations, terminologies)` (a query) or
-   `getQueryBuilder(field)` (a value match). Only run a search there for a query
-   about another concept, through `declareDependencies` (see
-   [Queries about other concepts](#queries-about-other-concepts-joins)).
+   `getQueryBuilder(field)` (a value match). Don't run a search there: only the hierarchy nodes
+   do, until the reindex (see [Hierarchy queries](#hierarchy-queries)). A new node holds value
+   matches, not other queries, unless it's a logical query.
 3. Escape any characters in the term that are syntax for the OpenSearch query you use (see
    `Contains.escapeWildcards`).
 4. If a value match's OpenSearch query supports ignoring case, implement `SupportsIgnoringCase`.

@@ -5,24 +5,25 @@ import gov.nih.nci.evs.api.model.TerminologyMetadata;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 
 /**
- * Matches concepts strictly below any concept an inner query matches, in the same terminology
- * version. For example, everything below Melanoma, or everything below any concept named "...
- * Carcinoma". The inner query can be any {@link EvsQuery}, including another hierarchy node, so
- * these nest: the descendants of the children of X is {@code new DescendantOf(new DescendantOf(x,
- * 1))}.
+ * Matches concepts strictly below any target concept, in the same terminology version. A target is
+ * a concept whose name or code matches the {@link ValueMatch}. For example, everything below
+ * Melanoma ({@code new DescendantOf("C3224")}), or everything below any concept named "...
+ * Carcinoma".
  *
  * <p>An optional {@code maxLevel} limits how far below: 1 means direct children. Depth is the
  * shortest distance, so a concept that is a direct child of X on one path and deeper on another
  * counts as depth 1.
  *
- * <p>Terminologies indexed with ancestor fields match with one query on {@code ancestors} (or
- * {@code ancestorDepths} for a depth limit). Older indexes fall back to reading the stored
- * hierarchy (see {@link StoredHierarchyFallback}).
+ * <p>The {@code ancestors} field only holds codes, so the target codes are looked up first (see
+ * {@link HierarchyQuery#fetchTargetCodes}). Terminologies indexed with ancestor fields then match
+ * with one query on {@code ancestors} (or {@code ancestorDepths} for a depth limit). Older indexes
+ * fall back to reading the stored hierarchy (see {@link StoredHierarchyFallback}).
  *
  * @see DescendantOrSelfOf
  * @see AncestorOf
@@ -38,60 +39,54 @@ public class DescendantOf extends HierarchyQuery {
   /** Separator between code and depth in {@link #ANCESTOR_DEPTHS_FIELD}. */
   static final String DEPTH_SEPARATOR = "|";
 
-  /** The first depth below an anchor: its direct children. */
+  /** The first depth below a target: its direct children. */
   private static final int FIRST_DEPTH = 1;
 
   /**
-   * Instantiates a {@link DescendantOf} for everything below the concepts an inner query matches.
+   * Instantiates a {@link DescendantOf} for everything below the target concepts.
    *
-   * @param ancestorQuery the query matching the anchor concepts
+   * @param targetNameOrCodeMatch how the target concepts' name or code must match
    */
-  public DescendantOf(final EvsQuery ancestorQuery) {
-    super(ancestorQuery, ANY_LEVEL, WITHOUT_SELF);
+  public DescendantOf(final ValueMatch targetNameOrCodeMatch) {
+    super(targetNameOrCodeMatch, ANY_LEVEL);
   }
 
   /**
    * Instantiates a {@link DescendantOf} for concepts within {@code maxLevel} levels below the
-   * concepts an inner query matches.
+   * target concepts.
    *
-   * @param ancestorQuery the query matching the anchor concepts
-   * @param maxLevel the maximum depth below the anchors, at least 1
+   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param maxLevel the maximum depth below the targets, at least 1
    */
-  public DescendantOf(final EvsQuery ancestorQuery, final int maxLevel) {
-    super(ancestorQuery, maxLevel, WITHOUT_SELF);
+  public DescendantOf(final ValueMatch targetNameOrCodeMatch, final int maxLevel) {
+    super(targetNameOrCodeMatch, maxLevel);
   }
 
   /**
    * Instantiates a {@link DescendantOf} for everything below one concept.
    *
-   * @param code the anchor concept's code
+   * @param code the target concept's code
    */
   public DescendantOf(final String code) {
-    super(getCodeQuery(code), ANY_LEVEL, WITHOUT_SELF);
+    this(new Exact(Objects.requireNonNull(code, "code")));
   }
 
   /**
    * Instantiates a {@link DescendantOf} for concepts within {@code maxLevel} levels below one
    * concept.
    *
-   * @param code the anchor concept's code
-   * @param maxLevel the maximum depth below the anchor, at least 1
+   * @param code the target concept's code
+   * @param maxLevel the maximum depth below the target, at least 1
    */
   public DescendantOf(final String code, final int maxLevel) {
-    super(getCodeQuery(code), maxLevel, WITHOUT_SELF);
+    this(new Exact(Objects.requireNonNull(code, "code")), maxLevel);
   }
 
-  /**
-   * Instantiates a {@link DescendantOf}, optionally matching the anchors themselves. For {@link
-   * DescendantOrSelfOf}.
-   *
-   * @param ancestorQuery the query matching the anchor concepts
-   * @param maxLevel the maximum depth below the anchors, at least 1, or null for any depth
-   * @param isSelfIncluded whether the anchors themselves match
-   */
-  protected DescendantOf(
-      final EvsQuery ancestorQuery, final Integer maxLevel, final boolean isSelfIncluded) {
-    super(ancestorQuery, maxLevel, isSelfIncluded);
+  /* see superclass */
+  @Override
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
+    return fetchRelativesOfTargetCodesQuery(operations, terminologies);
   }
 
   /* see superclass */
@@ -99,54 +94,54 @@ public class DescendantOf extends HierarchyQuery {
   protected QueryBuilder fetchRelativesQuery(
       final OpenSearchOperations operations,
       final Terminology terminology,
-      final Set<String> anchorCodes) {
+      final Set<String> targetCodes) {
     final boolean hasAncestorFields = getHasAncestorFields(terminology);
     if (hasAncestorFields) {
-      return getBelowAnchorsQuery(operations, terminology, anchorCodes);
+      return getBelowTargetsQuery(operations, terminology, targetCodes);
     }
 
     // TODO: Remove the fallback once every terminology is reindexed with ancestor fields
-    return fetchBelowAnchorsFallbackQuery(operations, terminology, anchorCodes);
+    return fetchBelowTargetsFallbackQuery(operations, terminology, targetCodes);
   }
 
   /**
-   * Returns "code|depth" tokens for every anchor and every depth from 1 to {@code maxLevel}, which
+   * Returns "code|depth" tokens for every target and every depth from 1 to {@code maxLevel}, which
    * match {@link #ANCESTOR_DEPTHS_FIELD}. For example C3262 with depth 2 gives C3262|1 and C3262|2.
    *
-   * @param anchorCodes the anchor codes
+   * @param targetCodes the target codes
    * @param maxLevel the maximum depth
    * @return the tokens
    */
-  static List<String> getDepthTokens(final Collection<String> anchorCodes, final int maxLevel) {
-    final long tokenCount = (long) anchorCodes.size() * maxLevel;
+  static List<String> getDepthTokens(final Collection<String> targetCodes, final int maxLevel) {
+    final long tokenCount = (long) targetCodes.size() * maxLevel;
     final boolean hasTooManyTokens = tokenCount > MatchAnyOf.MAX_VALUES;
     if (hasTooManyTokens) {
       throw new IllegalArgumentException(
-          "Too many anchors for maxLevel "
+          "Too many targets for maxLevel "
               + maxLevel
               + ": "
-              + anchorCodes.size()
-              + " anchors gives more than "
+              + targetCodes.size()
+              + " targets gives more than "
               + MatchAnyOf.MAX_VALUES
               + " depth tokens");
     }
 
     final List<String> tokens = new ArrayList<>();
-    for (final String code : anchorCodes) {
-      tokens.addAll(getAnchorDepthTokens(code, maxLevel));
+    for (final String code : targetCodes) {
+      tokens.addAll(getTargetDepthTokens(code, maxLevel));
     }
 
     return tokens;
   }
 
   /**
-   * Returns the "code|depth" tokens for one anchor and every depth from 1 to {@code maxLevel}.
+   * Returns the "code|depth" tokens for one target and every depth from 1 to {@code maxLevel}.
    *
-   * @param code the anchor code
+   * @param code the target code
    * @param maxLevel the maximum depth
    * @return the tokens
    */
-  private static List<String> getAnchorDepthTokens(final String code, final int maxLevel) {
+  private static List<String> getTargetDepthTokens(final String code, final int maxLevel) {
     final List<String> tokens = new ArrayList<>();
     for (int depth = FIRST_DEPTH; depth <= maxLevel; depth++) {
       tokens.add(code + DEPTH_SEPARATOR + depth);
@@ -156,45 +151,45 @@ public class DescendantOf extends HierarchyQuery {
   }
 
   /**
-   * Returns the condition for concepts below the anchors, using the indexed ancestor fields.
+   * Returns the condition for concepts below the targets, using the indexed ancestor fields.
    *
    * @param operations the OpenSearch operations
-   * @param terminology the terminology the anchors are from
-   * @param anchorCodes the anchor codes
+   * @param terminology the terminology the targets are from
+   * @param targetCodes the target codes
    * @return the condition
    */
-  private QueryBuilder getBelowAnchorsQuery(
+  private QueryBuilder getBelowTargetsQuery(
       final OpenSearchOperations operations,
       final Terminology terminology,
-      final Set<String> anchorCodes) {
+      final Set<String> targetCodes) {
     final boolean hasLevelLimit = getMaxLevel() != null;
     if (!hasLevelLimit) {
-      return new MatchAnyOf(ANCESTORS_FIELD, anchorCodes)
+      return new MatchAnyOf(ANCESTORS_FIELD, targetCodes)
           .fetchOpenSearchQuery(operations, List.of(terminology));
     }
 
-    return new MatchAnyOf(ANCESTOR_DEPTHS_FIELD, getDepthTokens(anchorCodes, getMaxLevel()))
+    return new MatchAnyOf(ANCESTOR_DEPTHS_FIELD, getDepthTokens(targetCodes, getMaxLevel()))
         .fetchOpenSearchQuery(operations, List.of(terminology));
   }
 
   /**
-   * Returns the condition for concepts below the anchors in an index without ancestor fields, by
-   * expanding the anchors from the stored hierarchy.
+   * Returns the condition for concepts below the targets in an index without ancestor fields, by
+   * expanding the targets from the stored hierarchy.
    *
    * <p>TODO: Remove once every terminology is reindexed with ancestor fields.
    *
    * @param operations the OpenSearch operations
    * @param terminology the terminology
-   * @param anchorCodes the anchor codes
+   * @param targetCodes the target codes
    * @return the condition
    */
-  private QueryBuilder fetchBelowAnchorsFallbackQuery(
+  private QueryBuilder fetchBelowTargetsFallbackQuery(
       final OpenSearchOperations operations,
       final Terminology terminology,
-      final Set<String> anchorCodes) {
+      final Set<String> targetCodes) {
     final Set<String> descendantCodes =
         StoredHierarchyFallback.fetchDescendantCodes(
-            operations, terminology, anchorCodes, getMaxLevel());
+            operations, terminology, targetCodes, getMaxLevel());
 
     return getCodeInQuery(operations, terminology, descendantCodes);
   }

@@ -2,8 +2,8 @@ package gov.nih.nci.evs.api.query;
 
 /**
  * Matches concepts that have a role of the given type, optionally pointing to the given target,
- * e.g. concepts whose primary anatomic site is Skin or anything below Skin. A {@link
- * HasRelationship} on the concept's {@code roles}: see it for how matching works.
+ * e.g. concepts whose primary anatomic site is Skin. A {@link HasRelationship} on the concept's
+ * {@code roles}: see it for how matching works.
  */
 public final class HasRole extends HasRelationship {
 
@@ -13,20 +13,21 @@ public final class HasRole extends HasRelationship {
   /**
    * Instantiates a {@link HasRole} that matches a role of the given type, pointing to any concept.
    *
-   * @param roleType the role's type
+   * @param roleTypeNameOrCodeMatch how the role's type name or code must match
    */
-  public HasRole(final RelationshipType roleType) {
-    super(roleType);
+  public HasRole(final ValueMatch roleTypeNameOrCodeMatch) {
+    super(roleTypeNameOrCodeMatch);
   }
 
   /**
    * Instantiates a {@link HasRole} that matches a role of the given type pointing to the target.
    *
-   * @param roleType the role's type
-   * @param roleTarget the concepts the role must point to
+   * @param roleTypeNameOrCodeMatch how the role's type name or code must match
+   * @param roleTargetNameOrCodeMatch how the name or code of the concept the role must point to
    */
-  public HasRole(final RelationshipType roleType, final RelationshipTarget roleTarget) {
-    super(roleType, roleTarget);
+  public HasRole(
+      final ValueMatch roleTypeNameOrCodeMatch, final ValueMatch roleTargetNameOrCodeMatch) {
+    super(roleTypeNameOrCodeMatch, roleTargetNameOrCodeMatch);
   }
 
   /* see superclass */

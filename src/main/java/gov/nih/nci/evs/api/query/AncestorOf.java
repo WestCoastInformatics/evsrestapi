@@ -1,80 +1,90 @@
 package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Terminology;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 
 /**
- * Matches concepts strictly above any concept an inner query matches, in the same terminology
- * version: the upward counterpart of {@link DescendantOf}. For example, everything above Breast
- * Carcinoma, or the parents of any concept named "... Melanoma". The inner query can be any {@link
- * EvsQuery}, including another hierarchy node, so these nest with each other and with {@link
- * DescendantOf}: the ancestors of X's children is {@code new AncestorOf(new DescendantOf(x, 1))}.
+ * Matches concepts strictly above any target concept, in the same terminology version: the upward
+ * counterpart of {@link DescendantOf}. A target is a concept whose name or code matches the {@link
+ * ValueMatch}. For example, everything above Breast Carcinoma, or the parents of any concept named
+ * "... Melanoma".
+ *
+ * <p>Without a level limit, this is one query: each concept stores its descendants' names and codes
+ * in {@code descendants}, so a concept is an ancestor of a target when one of its descendants
+ * matches.
  *
  * <p>An optional {@code maxLevel} limits how far above: 1 means direct parents. Distance is the
  * shortest, so a concept that is a direct parent of X on one path and further up on another counts
- * as 1.
- *
- * <p>The ancestors come from the anchors' stored paths to root, which every index has, so unlike
- * {@link DescendantOf} there is no separate path for older indexes and nothing to remove after
- * reindexing.
+ * as 1. The {@code descendants} entries can't answer that yet (their levels aren't tied to their
+ * codes, and aren't the shortest distance), so the target codes are looked up first (see {@link
+ * HierarchyQuery#fetchTargetCodes}) and the ancestors come from the targets' stored paths to root.
  *
  * @see AncestorOrSelfOf
  */
 public class AncestorOf extends HierarchyQuery {
 
+  /** Field holding a descendant's name, on each of the concept's descendants. Analyzed text. */
+  static final String DESCENDANT_NAME_FIELD = "descendants.name";
+
+  /** Field holding a descendant's code, on each of the concept's descendants. */
+  static final String DESCENDANT_CODE_FIELD = "descendants.code";
+
   /**
-   * Instantiates an {@link AncestorOf} for everything above the concepts an inner query matches.
+   * Instantiates an {@link AncestorOf} for everything above the target concepts.
    *
-   * @param descendantQuery the query matching the anchor concepts
+   * @param targetNameOrCodeMatch how the target concepts' name or code must match
    */
-  public AncestorOf(final EvsQuery descendantQuery) {
-    super(descendantQuery, ANY_LEVEL, WITHOUT_SELF);
+  public AncestorOf(final ValueMatch targetNameOrCodeMatch) {
+    super(targetNameOrCodeMatch, ANY_LEVEL);
   }
 
   /**
-   * Instantiates an {@link AncestorOf} for concepts within {@code maxLevel} levels above the
-   * concepts an inner query matches.
+   * Instantiates an {@link AncestorOf} for concepts within {@code maxLevel} levels above the target
+   * concepts.
    *
-   * @param descendantQuery the query matching the anchor concepts
-   * @param maxLevel the maximum distance above the anchors, at least 1
+   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param maxLevel the maximum distance above the targets, at least 1
    */
-  public AncestorOf(final EvsQuery descendantQuery, final int maxLevel) {
-    super(descendantQuery, maxLevel, WITHOUT_SELF);
+  public AncestorOf(final ValueMatch targetNameOrCodeMatch, final int maxLevel) {
+    super(targetNameOrCodeMatch, maxLevel);
   }
 
   /**
    * Instantiates an {@link AncestorOf} for everything above one concept.
    *
-   * @param code the anchor concept's code
+   * @param code the target concept's code
    */
   public AncestorOf(final String code) {
-    super(getCodeQuery(code), ANY_LEVEL, WITHOUT_SELF);
+    this(new Exact(Objects.requireNonNull(code, "code")));
   }
 
   /**
    * Instantiates an {@link AncestorOf} for concepts within {@code maxLevel} levels above one
    * concept.
    *
-   * @param code the anchor concept's code
-   * @param maxLevel the maximum distance above the anchor, at least 1
+   * @param code the target concept's code
+   * @param maxLevel the maximum distance above the target, at least 1
    */
   public AncestorOf(final String code, final int maxLevel) {
-    super(getCodeQuery(code), maxLevel, WITHOUT_SELF);
+    this(new Exact(Objects.requireNonNull(code, "code")), maxLevel);
   }
 
-  /**
-   * Instantiates an {@link AncestorOf}, optionally matching the anchors themselves. For {@link
-   * AncestorOrSelfOf}.
-   *
-   * @param descendantQuery the query matching the anchor concepts
-   * @param maxLevel the maximum distance above the anchors, at least 1, or null for any distance
-   * @param isSelfIncluded whether the anchors themselves match
-   */
-  protected AncestorOf(
-      final EvsQuery descendantQuery, final Integer maxLevel, final boolean isSelfIncluded) {
-    super(descendantQuery, maxLevel, isSelfIncluded);
+  /* see superclass */
+  @Override
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
+    final boolean hasLevelLimit = getMaxLevel() != null;
+    if (hasLevelLimit) {
+      return fetchRelativesOfTargetCodesQuery(operations, terminologies);
+    }
+
+    return new NameOrCodeMatch(
+            DESCENDANT_NAME_FIELD, DESCENDANT_CODE_FIELD, getTargetNameOrCodeMatch())
+        .fetchOpenSearchQuery(operations, terminologies);
   }
 
   /* see superclass */
@@ -82,9 +92,9 @@ public class AncestorOf extends HierarchyQuery {
   protected QueryBuilder fetchRelativesQuery(
       final OpenSearchOperations operations,
       final Terminology terminology,
-      final Set<String> anchorCodes) {
+      final Set<String> targetCodes) {
     final Set<String> ancestorCodes =
-        StoredPaths.fetchAncestorCodes(operations, terminology, anchorCodes, getMaxLevel());
+        StoredPaths.fetchAncestorCodes(operations, terminology, targetCodes, getMaxLevel());
 
     return getCodeInQuery(operations, terminology, ancestorCodes);
   }

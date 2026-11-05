@@ -84,18 +84,6 @@ public class HierarchyQueryTest {
     CHILDREN.put("G", List.of());
   }
 
-  /** Codes tagged with a shared keyword so an inner query can pick several anchors at once. */
-  private static final Set<String> GROUPED = Set.of("B", "C");
-
-  /** Keyword field holding the group tag. */
-  private static final String GROUP_FIELD = "normName";
-
-  /** The group tag. */
-  private static final String GROUP_TAG = "anchor-group";
-
-  /** A tag no concept has. */
-  private static final String UNMATCHED_TAG = "no-such-tag";
-
   /** Terminology name shared by both test terminologies. */
   private static final String TERMINOLOGY_NAME = "unit";
 
@@ -132,8 +120,8 @@ public class HierarchyQueryTest {
   /** Level of a path's first step, the code itself. */
   private static final int PATH_START_LEVEL = 0;
 
-  /** Distance of an anchor from itself. */
-  private static final int ANCHOR_DISTANCE = 0;
+  /** Distance of a target from itself. */
+  private static final int TARGET_DISTANCE = 0;
 
   /** Direction of a path to root. */
   private static final int PATH_TO_ROOT_DIRECTION = 1;
@@ -169,12 +157,12 @@ public class HierarchyQueryTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 1: DescendantOf matches everything strictly below the anchor.
+  // Lesson 1: DescendantOf matches everything strictly below the target.
   // ---------------------------------------------------------------------------------------------
 
   /** Everything below A, at any depth, and not A itself. */
   @Test
-  public void testDescendantOfMatchesEverythingBelowAnchor() {
+  public void testDescendantOfMatchesEverythingBelowTarget() {
     assertBoth(() -> new DescendantOf("A"), "C", "D", "E", "F", "G");
   }
 
@@ -185,12 +173,12 @@ public class HierarchyQueryTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 2: DescendantOrSelfOf also matches the anchor.
+  // Lesson 2: DescendantOrSelfOf also matches the target.
   // ---------------------------------------------------------------------------------------------
 
   /** A and everything below A. */
   @Test
-  public void testDescendantOrSelfOfIncludesAnchorAndEverythingBelow() {
+  public void testDescendantOrSelfOfIncludesTargetAndEverythingBelow() {
     assertBoth(() -> new DescendantOrSelfOf("A"), "A", "C", "D", "E", "F", "G");
   }
 
@@ -219,9 +207,9 @@ public class HierarchyQueryTest {
     assertBoth(() -> new DescendantOf("R", 2), "A", "B", "C", "D", "F");
   }
 
-  /** With the anchor included, the anchor is depth 0 and always matches. */
+  /** With the target included, the target is depth 0 and always matches. */
   @Test
-  public void testDescendantOrSelfOfMaxLevelOneIncludesAnchorAndChildren() {
+  public void testDescendantOrSelfOfMaxLevelOneIncludesTargetAndChildren() {
     assertBoth(() -> new DescendantOrSelfOf("A", 1), "A", "C", "D");
   }
 
@@ -234,43 +222,8 @@ public class HierarchyQueryTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 4: the anchors come from any inner query, run first as a dependency.
+  // Lesson 4: hierarchy nodes compose.
   // ---------------------------------------------------------------------------------------------
-
-  /** An inner query matching B and C: below either of them. */
-  @Test
-  public void testDescendantOfInnerQueryWithSeveralAnchorsMatchesBelowEach() {
-    assertBoth(
-        () -> new DescendantOf(new MatchAnyOf(GROUP_FIELD, Set.of(GROUP_TAG))), "E", "F", "G");
-  }
-
-  /** An inner query matching nothing gives nothing. */
-  @Test
-  public void testDescendantOfInnerQueryWithNoMatchesMatchesNothing() {
-    assertBoth(() -> new DescendantOf(new MatchAnyOf(GROUP_FIELD, Set.of(UNMATCHED_TAG))));
-  }
-
-  // ---------------------------------------------------------------------------------------------
-  // Lesson 5: hierarchy nodes nest and compose.
-  // ---------------------------------------------------------------------------------------------
-
-  /** Below the children of R: the inner query is itself a hierarchy node. */
-  @Test
-  public void testDescendantOfNestedDescendantOfMatchesBelowChildren() {
-    assertBoth(() -> new DescendantOf(new DescendantOf("R", 1)), "C", "D", "E", "F", "G");
-  }
-
-  /** Two levels of nesting with depth limits at each. */
-  @Test
-  public void testDescendantOrSelfOfDoublyNestedWithDepthsMatchesExpectedLevels() {
-    // Children of R are A and B; their children are C, D, and F; those and one more level below
-    assertBoth(
-        () -> new DescendantOrSelfOf(new DescendantOf(new DescendantOf("R", 1), 1), 1),
-        "C",
-        "D",
-        "E",
-        "F");
-  }
 
   /** Composes inside a raw bool, as other nodes will: below A but not below C. */
   @Test
@@ -286,10 +239,10 @@ public class HierarchyQueryTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 6: several terminologies at once, indexed and legacy mixed.
+  // Lesson 5: several terminologies at once, indexed and legacy mixed.
   // ---------------------------------------------------------------------------------------------
 
-  /** Each terminology's anchors match only in its own index, through its own path. */
+  /** Each terminology's targets match only in its own index, through its own path. */
   @Test
   public void testDescendantOfIndexedAndLegacyTogetherMatchesInEachIndex() {
     final List<Terminology> both = List.of(indexed, legacy);
@@ -303,12 +256,12 @@ public class HierarchyQueryTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 7: AncestorOf matches everything strictly above the anchor (the upward counterpart).
+  // Lesson 6: AncestorOf matches everything strictly above the target (the upward counterpart).
   // ---------------------------------------------------------------------------------------------
 
   /** Everything above G, and not G itself. */
   @Test
-  public void testAncestorOfMatchesEverythingAboveAnchor() {
+  public void testAncestorOfMatchesEverythingAboveTarget() {
     assertBoth(() -> new AncestorOf("G"), "E", "C", "A", "R");
   }
 
@@ -324,9 +277,9 @@ public class HierarchyQueryTest {
     assertBoth(() -> new AncestorOf("R"));
   }
 
-  /** AncestorOrSelfOf also matches the anchor. */
+  /** AncestorOrSelfOf also matches the target. */
   @Test
-  public void testAncestorOrSelfOfIncludesAnchorAndEverythingAbove() {
+  public void testAncestorOrSelfOfIncludesTargetAndEverythingAbove() {
     assertBoth(() -> new AncestorOrSelfOf("G"), "G", "E", "C", "A", "R");
   }
 
@@ -342,9 +295,9 @@ public class HierarchyQueryTest {
     assertBoth(() -> new AncestorOf("F", 1), "D", "B");
   }
 
-  /** maxLevel 1 with the anchor included is the anchor and its direct parents. */
+  /** maxLevel 1 with the target included is the target and its direct parents. */
   @Test
-  public void testAncestorOrSelfOfMaxLevelOneIncludesAnchorAndParents() {
+  public void testAncestorOrSelfOfMaxLevelOneIncludesTargetAndParents() {
     assertBoth(() -> new AncestorOrSelfOf("F", 1), "F", "D", "B");
   }
 
@@ -371,33 +324,9 @@ public class HierarchyQueryTest {
     assertThrows(IllegalArgumentException.class, () -> new AncestorOf("G", invalidMaxLevel));
   }
 
-  /** An inner query matching B and C: above either of them. */
-  @Test
-  public void testAncestorOfInnerQueryWithSeveralAnchorsMatchesAboveEach() {
-    assertBoth(() -> new AncestorOf(new MatchAnyOf(GROUP_FIELD, Set.of(GROUP_TAG))), "A", "R");
-  }
-
   // ---------------------------------------------------------------------------------------------
-  // Lesson 8: upward and downward nodes nest in each other and compose.
+  // Lesson 7: upward nodes compose too.
   // ---------------------------------------------------------------------------------------------
-
-  /** Above the children of A (C and D): A and R. */
-  @Test
-  public void testAncestorOfDescendantOfMatchesAboveChildren() {
-    assertBoth(() -> new AncestorOf(new DescendantOf("A", 1)), "A", "R");
-  }
-
-  /** Below the parent of G (E): G. */
-  @Test
-  public void testDescendantOfAncestorOfMatchesBelowParent() {
-    assertBoth(() -> new DescendantOf(new AncestorOf("G", 1)), "G");
-  }
-
-  /** Siblings of C, and C: the children of C's parents. */
-  @Test
-  public void testDescendantOfAncestorOfMaxLevelOneMatchesSiblingsAndSelf() {
-    assertBoth(() -> new DescendantOf(new AncestorOf("C", 1), 1), "C", "D");
-  }
 
   /** Common ancestors of G and F, composed in a raw bool. */
   @Test
@@ -411,7 +340,7 @@ public class HierarchyQueryTest {
         "R");
   }
 
-  /** Each terminology's anchors match only in its own index. */
+  /** Each terminology's targets match only in its own index. */
   @Test
   public void testAncestorOfIndexedAndLegacyTogetherMatchesInEachIndex() {
     final List<Terminology> both = List.of(indexed, legacy);
@@ -569,7 +498,7 @@ public class HierarchyQueryTest {
     final Concept concept =
         new Concept(terminology.getTerminology(), code, CONCEPT_NAME_PREFIX + code);
     concept.setVersion(terminology.getVersion());
-    concept.setNormName(getNormName(code));
+    concept.setNormName(code.toLowerCase());
     concept.setChildren(CHILDREN.get(code).stream().map(Concept::new).collect(Collectors.toList()));
     concept.setDescendants(getDepthFirstDescendants(code));
     concept.setPaths(getPathsToRoot(code));
@@ -582,22 +511,6 @@ public class HierarchyQueryTest {
     concept.setAncestorDepths(getAncestorDepthTokens(depths));
 
     return concept;
-  }
-
-  /**
-   * Returns a code's normalized name: the shared group tag for grouped codes, else the lowercase
-   * code.
-   *
-   * @param code the code
-   * @return the normalized name
-   */
-  private static String getNormName(final String code) {
-    final boolean isGrouped = GROUPED.contains(code);
-    if (isGrouped) {
-      return GROUP_TAG;
-    }
-
-    return code.toLowerCase();
   }
 
   /**
@@ -692,7 +605,7 @@ public class HierarchyQueryTest {
     final Map<String, List<String>> parents = getParentsByCode();
     final Map<String, Integer> depths = new LinkedHashMap<>();
     final Deque<String> queue = new ArrayDeque<>(List.of(code));
-    final Map<String, Integer> distance = new HashMap<>(Map.of(code, ANCHOR_DISTANCE));
+    final Map<String, Integer> distance = new HashMap<>(Map.of(code, TARGET_DISTANCE));
 
     while (!queue.isEmpty()) {
       final String current = queue.removeFirst();

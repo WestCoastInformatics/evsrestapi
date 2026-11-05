@@ -74,19 +74,13 @@ public class InSubsetTest {
   /** Code of {@link #RELATED_TO}. */
   private static final String RELATED_TO_CODE = "A99";
 
-  /** The root of the CDISC subsets. Has no members itself. */
-  private static final String CDISC = "C61410";
-
-  /** Name of {@link #CDISC}. */
-  private static final String CDISC_NAME = "Clinical Data Interchange Standards Consortium";
-
-  /** A CDISC subset, below {@link #CDISC}. */
+  /** A CDISC subset. */
   private static final String SDTM = "C66830";
 
   /** Name of {@link #SDTM}. */
   private static final String SDTM_NAME = "CDISC SDTM Terminology";
 
-  /** A CDISC subset, below {@link #CDISC}. */
+  /** A CDISC subset. */
   private static final String SEND = "C77526";
 
   /** Name of {@link #SEND}. */
@@ -102,8 +96,8 @@ public class InSubsetTest {
   private static final String EMPTY_SUBSET = "C99999";
 
   /**
-   * The concepts in the index. The subsets are concepts too: SDTM and SEND are below CDISC, which
-   * lesson 3 relies on. "Tumor Finding" points to SDTM, but not as a member.
+   * The concepts in the index. The subsets are concepts too. "Tumor Finding" points to SDTM, but
+   * not as a member.
    */
   private static final List<Concept> INDEXED_CONCEPTS =
       List.of(
@@ -118,11 +112,10 @@ public class InSubsetTest {
           getConcept("C04", "Skin"),
           getConcept(
               "C05", "Tumor Finding", getAssociation(RELATED_TO, RELATED_TO_CODE, SDTM, SDTM_NAME)),
-          getSubsetConcept(CDISC, CDISC_NAME),
-          getSubsetConcept(SDTM, SDTM_NAME, CDISC),
-          getSubsetConcept(SEND, SEND_NAME, CDISC),
-          getSubsetConcept(CELLOSAURUS, CELLOSAURUS_NAME),
-          getSubsetConcept(EMPTY_SUBSET, "Empty Subset"));
+          getConcept(SDTM, SDTM_NAME),
+          getConcept(SEND, SEND_NAME),
+          getConcept(CELLOSAURUS, CELLOSAURUS_NAME),
+          getConcept(EMPTY_SUBSET, "Empty Subset"));
 
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
   @Autowired private OpensearchOperationsService operationsService;
@@ -174,20 +167,18 @@ public class InSubsetTest {
    */
   @Test
   public void testSubsetMatchedByWordOfName() {
-    final EvsQuery cellosaurusMembers =
-        new InSubset(new RelationshipTarget(new CaseInsensitive(new Exact("Cellosaurus"))));
+    final EvsQuery cellosaurusMembers = new InSubset(new CaseInsensitive(new Exact("Cellosaurus")));
 
     assertEquals(Set.of("Melanoma", "Nevus"), fetchMatchingNames(cellosaurusMembers));
   }
 
   /**
    * Known limitation: a subset's whole multi-word name never matches exactly, because the target's
-   * name is stored as separate words. Use the subset's code, or a query over the subsets.
+   * name is stored as separate words. Use the subset's code.
    */
   @Test
   public void testWholeMultiWordSubsetNameFindsNothing() {
-    final EvsQuery cellosaurusMembersByWholeName =
-        new InSubset(new RelationshipTarget(new Exact(CELLOSAURUS_NAME)));
+    final EvsQuery cellosaurusMembersByWholeName = new InSubset(new Exact(CELLOSAURUS_NAME));
 
     assertEquals(Set.of(), fetchMatchingNames(cellosaurusMembersByWholeName));
   }
@@ -199,8 +190,7 @@ public class InSubsetTest {
   /** In any of several subsets: one InSubset whose target matches any of their codes. */
   @Test
   public void testInAnyOfSubsets() {
-    final EvsQuery sdtmOrCellosaurusMembers =
-        new InSubset(new RelationshipTarget(new OneOf(Set.of(SDTM, CELLOSAURUS))));
+    final EvsQuery sdtmOrCellosaurusMembers = new InSubset(new OneOf(Set.of(SDTM, CELLOSAURUS)));
 
     assertEquals(
         Set.of("Melanoma", "Body Weight", "Nevus"), fetchMatchingNames(sdtmOrCellosaurusMembers));
@@ -237,39 +227,8 @@ public class InSubsetTest {
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(sdtmMembersOutsideSend));
   }
 
-  /**
-   * Members of any CDISC subset except SEND. The subsets are picked by a hierarchy query, then one
-   * is excluded, all as nodes. Body Weight is in SDTM too, but also in SEND, so it's excluded.
-   */
-  @Test
-  public void testInSubsetTreeExceptOneSubset() {
-    final EvsQuery cdiscMembers =
-        new InSubset(new RelationshipTarget(new DescendantOrSelfOf(CDISC)));
-    final EvsQuery cdiscMembersOutsideSend =
-        new And(List.of(cdiscMembers, new Not(new InSubset(SEND))));
-
-    assertEquals(Set.of("Melanoma"), fetchMatchingNames(cdiscMembersOutsideSend));
-  }
-
   // ---------------------------------------------------------------------------------------------
-  // Lesson 3: subsets form a hierarchy, so a hierarchy query can pick them.
-  // ---------------------------------------------------------------------------------------------
-
-  /**
-   * Members of any CDISC subset: the target query runs first and finds the subsets at or below
-   * CDISC (CDISC, SDTM, SEND), then any concept that is a member of one of them matches. Nevus is
-   * only in Cellosaurus, so it doesn't.
-   */
-  @Test
-  public void testInAnySubsetBelowRoot() {
-    final EvsQuery cdiscSubsets = new DescendantOrSelfOf(CDISC);
-    final EvsQuery cdiscMembers = new InSubset(new RelationshipTarget(cdiscSubsets));
-
-    assertEquals(Set.of("Melanoma", "Body Weight"), fetchMatchingNames(cdiscMembers));
-  }
-
-  // ---------------------------------------------------------------------------------------------
-  // Lesson 4: membership is the terminology's own association.
+  // Lesson 3: membership is the terminology's own association.
   // ---------------------------------------------------------------------------------------------
 
   /**
@@ -300,9 +259,9 @@ public class InSubsetTest {
   @Test
   public void testRejectsMissingSubset() {
     final String missingCode = null;
-    final RelationshipTarget missingTarget = null;
+    final ValueMatch missingMatch = null;
     assertThrows(NullPointerException.class, () -> new InSubset(missingCode));
-    assertThrows(NullPointerException.class, () -> new InSubset(missingTarget));
+    assertThrows(NullPointerException.class, () -> new InSubset(missingMatch));
   }
 
   /**
@@ -342,7 +301,7 @@ public class InSubsetTest {
   }
 
   /**
-   * Builds the tutorial terminology, with stored ancestor fields so hierarchy queries use them.
+   * Builds the tutorial terminology.
    *
    * @param membershipTypes the association names or codes marking subset membership
    * @return the terminology
@@ -351,8 +310,6 @@ public class InSubsetTest {
     final Terminology terminology =
         QueryTestTerminologies.getTerminology(TERMINOLOGY, VERSION, INDEX_NAME);
     final TerminologyMetadata metadata = new TerminologyMetadata();
-    metadata.setHierarchy(true);
-    metadata.setHierarchyFields(true);
     metadata.setSubsetMember(membershipTypes);
     terminology.setMetadata(metadata);
     return terminology;
@@ -388,25 +345,6 @@ public class InSubsetTest {
     concept.setName(name);
     concept.setNormName(ConceptUtils.normalize(name));
     concept.setAssociations(List.of(associations));
-    return concept;
-  }
-
-  /**
-   * Builds a subset concept, optionally directly below a parent subset.
-   *
-   * @param code the subset's code
-   * @param name the subset's name
-   * @param parentCodes the codes of the subset's parent, if any
-   * @return the concept
-   */
-  private static Concept getSubsetConcept(
-      final String code, final String name, final String... parentCodes) {
-    final Concept concept = getConcept(code, name);
-    concept.setAncestors(List.of(parentCodes));
-    concept.setAncestorDepths(
-        List.of(parentCodes).stream()
-            .map(parentCode -> parentCode + DescendantOf.DEPTH_SEPARATOR + 1)
-            .collect(Collectors.toList()));
     return concept;
   }
 

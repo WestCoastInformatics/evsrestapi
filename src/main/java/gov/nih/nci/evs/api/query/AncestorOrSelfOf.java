@@ -1,51 +1,73 @@
 package gov.nih.nci.evs.api.query;
 
+import static gov.nih.nci.evs.api.query.RawBoolQueries.getAnyOfQuery;
+
+import gov.nih.nci.evs.api.model.Terminology;
+import java.util.List;
+import org.opensearch.data.core.OpenSearchOperations;
+import org.opensearch.index.query.QueryBuilder;
+
 /**
- * Matches the concepts an inner query matches and every concept above them, in the same terminology
- * version: the upward counterpart of {@link DescendantOrSelfOf}. For example, Breast Carcinoma and
- * everything above it. {@code maxLevel} limits how far above the anchors to go (the anchors
- * themselves are distance 0 and always match).
+ * Matches the target concepts and every concept above them, in the same terminology version: the
+ * upward counterpart of {@link DescendantOrSelfOf}. For example, Breast Carcinoma and everything
+ * above it. {@code maxLevel} limits how far above the targets to go (the targets themselves are
+ * distance 0 and always match).
  */
 public class AncestorOrSelfOf extends AncestorOf {
 
   /**
-   * Instantiates an {@link AncestorOrSelfOf} for the concepts an inner query matches and everything
-   * above them.
+   * Instantiates an {@link AncestorOrSelfOf} for the target concepts and everything above them.
    *
-   * @param descendantQuery the query matching the anchor concepts
+   * @param targetNameOrCodeMatch how the target concepts' name or code must match
    */
-  public AncestorOrSelfOf(final EvsQuery descendantQuery) {
-    super(descendantQuery, ANY_LEVEL, WITH_SELF);
+  public AncestorOrSelfOf(final ValueMatch targetNameOrCodeMatch) {
+    super(targetNameOrCodeMatch);
   }
 
   /**
-   * Instantiates an {@link AncestorOrSelfOf} for the concepts an inner query matches and those
-   * within {@code maxLevel} levels above them.
+   * Instantiates an {@link AncestorOrSelfOf} for the target concepts and those within {@code
+   * maxLevel} levels above them.
    *
-   * @param descendantQuery the query matching the anchor concepts
-   * @param maxLevel the maximum distance above the anchors, at least 1
+   * @param targetNameOrCodeMatch how the target concepts' name or code must match
+   * @param maxLevel the maximum distance above the targets, at least 1
    */
-  public AncestorOrSelfOf(final EvsQuery descendantQuery, final int maxLevel) {
-    super(descendantQuery, maxLevel, WITH_SELF);
+  public AncestorOrSelfOf(final ValueMatch targetNameOrCodeMatch, final int maxLevel) {
+    super(targetNameOrCodeMatch, maxLevel);
   }
 
   /**
    * Instantiates an {@link AncestorOrSelfOf} for one concept and everything above it.
    *
-   * @param code the anchor concept's code
+   * @param code the target concept's code
    */
   public AncestorOrSelfOf(final String code) {
-    super(getCodeQuery(code), ANY_LEVEL, WITH_SELF);
+    super(code);
   }
 
   /**
    * Instantiates an {@link AncestorOrSelfOf} for one concept and those within {@code maxLevel}
    * levels above it.
    *
-   * @param code the anchor concept's code
-   * @param maxLevel the maximum distance above the anchor, at least 1
+   * @param code the target concept's code
+   * @param maxLevel the maximum distance above the target, at least 1
    */
   public AncestorOrSelfOf(final String code, final int maxLevel) {
-    super(getCodeQuery(code), maxLevel, WITH_SELF);
+    super(code, maxLevel);
+  }
+
+  /**
+   * Returns the query matching the targets' ancestors, or the targets themselves.
+   *
+   * @param operations the OpenSearch operations
+   * @param terminologies the terminologies being searched
+   * @return the query builder
+   */
+  @Override
+  public QueryBuilder fetchOpenSearchQuery(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
+    return getAnyOfQuery(
+        List.of(
+            super.fetchOpenSearchQuery(operations, terminologies),
+            getTargetsQuery(operations, terminologies)));
   }
 }

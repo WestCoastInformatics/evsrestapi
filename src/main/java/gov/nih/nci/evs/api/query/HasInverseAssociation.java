@@ -7,8 +7,8 @@ package gov.nih.nci.evs.api.query;
  *
  * <p>A {@link HasRelationship} on the concept's {@code inverseAssociations}: see it for how
  * matching works. Each entry there mirrors another concept's association, with the same type, and
- * with that other concept as the entry's related concept. So the {@link RelationshipTarget} here is
- * the association's source: the concept holding the association, not the one it points to.
+ * with that other concept as the entry's related concept. So the target match here is the
+ * association's source: the concept holding the association, not the one it points to.
  */
 public final class HasInverseAssociation extends HasRelationship {
 
@@ -21,22 +21,24 @@ public final class HasInverseAssociation extends HasRelationship {
    * Instantiates a {@link HasInverseAssociation} that matches concepts an association of the given
    * type points to, from any concept.
    *
-   * @param associationType the association's type
+   * @param associationTypeNameOrCodeMatch how the association's type name or code must match
    */
-  public HasInverseAssociation(final RelationshipType associationType) {
-    super(associationType);
+  public HasInverseAssociation(final ValueMatch associationTypeNameOrCodeMatch) {
+    super(associationTypeNameOrCodeMatch);
   }
 
   /**
    * Instantiates a {@link HasInverseAssociation} that matches concepts an association of the given
    * type points to, from the given source.
    *
-   * @param associationType the association's type
-   * @param associationSource the concepts the association must come from
+   * @param associationTypeNameOrCodeMatch how the association's type name or code must match
+   * @param associationSourceNameOrCodeMatch how the name or code of the concept the association
+   *     must come from
    */
   public HasInverseAssociation(
-      final RelationshipType associationType, final RelationshipTarget associationSource) {
-    super(associationType, associationSource);
+      final ValueMatch associationTypeNameOrCodeMatch,
+      final ValueMatch associationSourceNameOrCodeMatch) {
+    super(associationTypeNameOrCodeMatch, associationSourceNameOrCodeMatch);
   }
 
   /* see superclass */

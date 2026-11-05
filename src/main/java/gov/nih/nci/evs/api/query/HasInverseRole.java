@@ -2,9 +2,8 @@ package gov.nih.nci.evs.api.query;
 
 /**
  * Matches concepts that another concept points to with a role of the given type, optionally from
- * the given source, e.g. concepts that are the primary anatomic site of Melanoma or anything below
- * Melanoma. A {@link HasRelationship} on the concept's {@code inverseRoles}: see it for how
- * matching works.
+ * the given source, e.g. concepts that are the primary anatomic site of Melanoma. A {@link
+ * HasRelationship} on the concept's {@code inverseRoles}: see it for how matching works.
  *
  * <p>An inverse role is a role seen from the concept it points to: its type is the role's type, and
  * its target ({@code relatedCode}, {@code relatedName}) is the concept holding the role. So Skin's
@@ -20,21 +19,23 @@ public final class HasInverseRole extends HasRelationship {
    * Instantiates a {@link HasInverseRole} that matches an inverse role of the given type, from any
    * concept.
    *
-   * @param roleType the role's type
+   * @param roleTypeNameOrCodeMatch how the role's type name or code must match
    */
-  public HasInverseRole(final RelationshipType roleType) {
-    super(roleType);
+  public HasInverseRole(final ValueMatch roleTypeNameOrCodeMatch) {
+    super(roleTypeNameOrCodeMatch);
   }
 
   /**
    * Instantiates a {@link HasInverseRole} that matches an inverse role of the given type from the
    * source.
    *
-   * @param roleType the role's type
-   * @param roleSource the concepts holding the role that points to the matched concept
+   * @param roleTypeNameOrCodeMatch how the role's type name or code must match
+   * @param roleSourceNameOrCodeMatch how the name or code of the concept holding the role that
+   *     points to the matched concept
    */
-  public HasInverseRole(final RelationshipType roleType, final RelationshipTarget roleSource) {
-    super(roleType, roleSource);
+  public HasInverseRole(
+      final ValueMatch roleTypeNameOrCodeMatch, final ValueMatch roleSourceNameOrCodeMatch) {
+    super(roleTypeNameOrCodeMatch, roleSourceNameOrCodeMatch);
   }
 
   /* see superclass */

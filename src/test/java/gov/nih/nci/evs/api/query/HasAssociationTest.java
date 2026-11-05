@@ -167,8 +167,7 @@ public class HasAssociationTest {
   /** Without a target, every concept in any subset is found, whatever the subset. */
   @Test
   public void testAssociationTypeWithoutTargetFindsAnyTarget() {
-    final EvsQuery conceptsInAnySubset =
-        new HasAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
+    final EvsQuery conceptsInAnySubset = new HasAssociation(new Exact(CONCEPT_IN_SUBSET));
 
     assertEquals(
         Set.of("Cutaneous Melanoma", "Lung Carcinoma", "CTRP Disease Terminology", "Skin"),
@@ -178,10 +177,9 @@ public class HasAssociationTest {
   /** The association's code finds the same concepts as its name. */
   @Test
   public void testAssociationCodeMatchesLikeName() {
-    final EvsQuery conceptsInAnySubsetByName =
-        new HasAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
+    final EvsQuery conceptsInAnySubsetByName = new HasAssociation(new Exact(CONCEPT_IN_SUBSET));
     final EvsQuery conceptsInAnySubsetByCode =
-        new HasAssociation(new RelationshipType(new Exact(CONCEPT_IN_SUBSET_CODE)));
+        new HasAssociation(new Exact(CONCEPT_IN_SUBSET_CODE));
 
     assertEquals(
         fetchMatchingNames(conceptsInAnySubsetByName),
@@ -189,16 +187,14 @@ public class HasAssociationTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 2: the target is a value match or a query, as for roles.
+  // Lesson 2: the target is a value match, as for roles.
   // ---------------------------------------------------------------------------------------------
 
   /** A target match is compared against the association's target code. */
   @Test
   public void testTargetMatchedByCode() {
     final EvsQuery conceptsInCtrpDiseases =
-        new HasAssociation(
-            new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
-            new RelationshipTarget(new Exact(CTRP_DISEASES)));
+        new HasAssociation(new Exact(CONCEPT_IN_SUBSET), new Exact(CTRP_DISEASES));
 
     assertEquals(Set.of("Cutaneous Melanoma"), fetchMatchingNames(conceptsInCtrpDiseases));
   }
@@ -210,33 +206,11 @@ public class HasAssociationTest {
   @Test
   public void testTargetMatchedByCaseInsensitiveContainsOnName() {
     final EvsQuery conceptsInSubsetNamedLikeCtrp =
-        new HasAssociation(
-            new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
-            new RelationshipTarget(new CaseInsensitive(new Contains("ctrp"))));
+        new HasAssociation(new Exact(CONCEPT_IN_SUBSET), new CaseInsensitive(new Contains("ctrp")));
 
     assertEquals(
         Set.of("Cutaneous Melanoma", "CTRP Disease Terminology"),
         fetchMatchingNames(conceptsInSubsetNamedLikeCtrp));
-  }
-
-  /**
-   * A target query runs first: subsets in the CTRP Terminology (CTRP Disease Terminology). Then the
-   * outer query: concepts in one of those subsets (Cutaneous Melanoma). Lung Carcinoma's subset
-   * isn't in the CTRP Terminology, so it doesn't match.
-   */
-  @Test
-  public void testTargetQueryFindsConceptsInSubsetsOfSubset() {
-    final EvsQuery subsetsInCtrpTerminology =
-        new HasAssociation(
-            new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
-            new RelationshipTarget(new Exact(CTRP_TERMINOLOGY)));
-    final EvsQuery conceptsInSubsetsOfCtrpTerminology =
-        new HasAssociation(
-            new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
-            new RelationshipTarget(subsetsInCtrpTerminology));
-
-    assertEquals(
-        Set.of("Cutaneous Melanoma"), fetchMatchingNames(conceptsInSubsetsOfCtrpTerminology));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -246,8 +220,7 @@ public class HasAssociationTest {
   /** HasAssociation doesn't search roles: no concept has an association named like a role. */
   @Test
   public void testRoleTypeFindsNoAssociations() {
-    final EvsQuery conceptsWithPrimarySiteAssociation =
-        new HasAssociation(new RelationshipType(new Exact(PRIMARY_SITE)));
+    final EvsQuery conceptsWithPrimarySiteAssociation = new HasAssociation(new Exact(PRIMARY_SITE));
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithPrimarySiteAssociation));
   }
@@ -255,29 +228,9 @@ public class HasAssociationTest {
   /** HasRole doesn't search associations: no concept has a role named like an association. */
   @Test
   public void testAssociationTypeFindsNoRoles() {
-    final EvsQuery conceptsWithSubsetRole =
-        new HasRole(new RelationshipType(new Exact(CONCEPT_IN_SUBSET)));
+    final EvsQuery conceptsWithSubsetRole = new HasRole(new Exact(CONCEPT_IN_SUBSET));
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithSubsetRole));
-  }
-
-  /**
-   * A role's target can be an association query. The target query finds the sites in Anatomic Sites
-   * of Interest (Skin). Then diseases whose primary site is one of them (Cutaneous Melanoma). Lung
-   * isn't in the subset, so Lung Carcinoma doesn't match.
-   */
-  @Test
-  public void testRoleTargetCanBeAssociationQuery() {
-    final EvsQuery sitesOfInterest =
-        new HasAssociation(
-            new RelationshipType(new Exact(CONCEPT_IN_SUBSET)),
-            new RelationshipTarget(new Exact(SITES_OF_INTEREST)));
-    final EvsQuery diseasesWithPrimarySiteOfInterest =
-        new HasRole(
-            new RelationshipType(new Exact(PRIMARY_SITE)), new RelationshipTarget(sitesOfInterest));
-
-    assertEquals(
-        Set.of("Cutaneous Melanoma"), fetchMatchingNames(diseasesWithPrimarySiteOfInterest));
   }
 
   /** An association type is required. */

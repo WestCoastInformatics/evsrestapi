@@ -16,15 +16,8 @@ import org.opensearch.index.query.QueryBuilder;
  * type is the terminology's membership association, read from {@link
  * TerminologyMetadata#getSubsetMember}.
  *
- * <p>The subsets are a {@link RelationshipTarget}, so they can be given the same ways as any
- * relationship's target:
- *
- * <ul>
- *   <li>A value match on the subset's code or name, e.g. {@code new OneOf(Set.of(sdtm, send))} for
- *       members of either subset.
- *   <li>A query over the subset concepts, run first, e.g. {@code new DescendantOrSelfOf(cdisc)} for
- *       members of any CDISC subset, since NCIt's subsets form a hierarchy.
- * </ul>
+ * <p>The subsets are a value match on the subset's code or name, like any relationship's target,
+ * e.g. {@code new OneOf(Set.of(sdtm, send))} for members of either subset.
  *
  * <p><b>Exploratory.</b> Combinations other than "any of" (in all of several subsets, in one but
  * not another) combine {@link InSubset}s with {@link And} and {@link Not}: each membership is its
@@ -36,7 +29,8 @@ import org.opensearch.index.query.QueryBuilder;
  */
 public final class InSubset extends EvsQuery {
 
-  private final RelationshipTarget subsets;
+  /** How the subsets' name or code must match. */
+  private final ValueMatch subsetNameOrCodeMatch;
 
   /**
    * Instantiates an {@link InSubset} that matches members of one subset, given by its exact code.
@@ -44,16 +38,17 @@ public final class InSubset extends EvsQuery {
    * @param subsetCode the subset's code
    */
   public InSubset(final String subsetCode) {
-    this(new RelationshipTarget(new Exact(Objects.requireNonNull(subsetCode, "subsetCode"))));
+    this(new Exact(Objects.requireNonNull(subsetCode, "subsetCode")));
   }
 
   /**
    * Instantiates an {@link InSubset} that matches members of any of the given subsets.
    *
-   * @param subsets the subsets, as a match on their code or name or as a query over them
+   * @param subsetNameOrCodeMatch how the subsets' name or code must match
    */
-  public InSubset(final RelationshipTarget subsets) {
-    this.subsets = Objects.requireNonNull(subsets, "subsets");
+  public InSubset(final ValueMatch subsetNameOrCodeMatch) {
+    this.subsetNameOrCodeMatch =
+        Objects.requireNonNull(subsetNameOrCodeMatch, "subsetNameOrCodeMatch");
   }
 
   /**
@@ -68,9 +63,10 @@ public final class InSubset extends EvsQuery {
   @Override
   public QueryBuilder fetchOpenSearchQuery(
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
-    final RelationshipType membershipType =
-        new RelationshipType(new OneOf(getMembershipTypeNamesOrCodes(terminologies)));
-    final HasAssociation membership = new HasAssociation(membershipType, subsets);
+    final OneOf membershipTypeNameOrCodeMatch =
+        new OneOf(getMembershipTypeNamesOrCodes(terminologies));
+    final HasAssociation membership =
+        new HasAssociation(membershipTypeNameOrCodeMatch, subsetNameOrCodeMatch);
 
     return membership.fetchOpenSearchQuery(operations, terminologies);
   }
