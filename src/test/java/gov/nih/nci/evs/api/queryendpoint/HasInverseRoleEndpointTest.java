@@ -3,6 +3,8 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasInverseRole;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -53,5 +55,19 @@ public class HasInverseRoleEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasInverseRoleRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(PRIMARY_ANATOMIC_SITE_OF_BREAST_CARCINOMA_QUERY);
+  }
+
+  /**
+   * Test the HasInverseRole query built in Java is written as the expected JSON.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testHasInverseRoleSerializesToExpectedJson() throws Exception {
+    final HasInverseRole primaryAnatomicSiteOfBreastCarcinoma =
+        new HasInverseRole(new Exact(PRIMARY_ANATOMIC_SITE_ROLE), new Exact(BREAST_CARCINOMA));
+
+    assertSerializesTo(
+        primaryAnatomicSiteOfBreastCarcinoma, PRIMARY_ANATOMIC_SITE_OF_BREAST_CARCINOMA_QUERY);
   }
 }

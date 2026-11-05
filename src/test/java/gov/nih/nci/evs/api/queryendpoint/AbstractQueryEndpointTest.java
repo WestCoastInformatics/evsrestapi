@@ -67,6 +67,9 @@ public abstract class AbstractQueryEndpointTest {
   /** Breast, the target of most hierarchy tests. */
   protected static final String BREAST = "C12971";
 
+  /** The max level that limits hierarchy queries to direct children or parents. */
+  protected static final int DIRECT_RELATIVES_MAX_LEVEL = 1;
+
   /** The four children of Breast. */
   protected static final List<String> BREAST_CHILDREN =
       List.of("C12851", "C33048", "C47855", "C47856");
@@ -112,6 +115,22 @@ public abstract class AbstractQueryEndpointTest {
     final JsonNode roundTripped = objectMapper.readTree(objectMapper.writeValueAsString(query));
 
     assertThat(roundTripped).isEqualTo(original);
+  }
+
+  /**
+   * Asserts the app's object mapper writes the query as the expected JSON, compared as JSON trees
+   * so key order and whitespace don't matter. A regression check on the wire format: a renamed
+   * class, property, or enum constant changes the JSON clients send and receive.
+   *
+   * @param query the query, built in Java
+   * @param expectedJson the JSON it must be written as
+   * @throws Exception the exception
+   */
+  protected void assertSerializesTo(final EvsQuery query, final String expectedJson)
+      throws Exception {
+    final JsonNode serialized = objectMapper.readTree(objectMapper.writeValueAsString(query));
+
+    assertThat(serialized).isEqualTo(objectMapper.readTree(expectedJson));
   }
 
   /**

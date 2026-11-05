@@ -3,6 +3,13 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.And;
+import gov.nih.nci.evs.api.query.DescendantOf;
+import gov.nih.nci.evs.api.query.EvsQuery;
+import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasSynonym;
+import gov.nih.nci.evs.api.query.StartsWith;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -57,5 +64,22 @@ public class AndEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testAndRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(LEFT_CHILD_OF_BREAST_QUERY);
+  }
+
+  /**
+   * Test And serializes to the expected JSON when built in Java: the And of the children of Breast
+   * and the synonym starting "left".
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testAndSerializesToExpectedJson() throws Exception {
+    final EvsQuery leftChildOfBreast =
+        new And(
+            List.of(
+                new DescendantOf(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL),
+                new HasSynonym(new StartsWith("left"))));
+
+    assertSerializesTo(leftChildOfBreast, LEFT_CHILD_OF_BREAST_QUERY);
   }
 }

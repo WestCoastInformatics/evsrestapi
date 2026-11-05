@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasRole;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -61,5 +63,18 @@ public class HasRoleEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasRoleRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(PRIMARY_ANATOMIC_SITE_BREAST_QUERY);
+  }
+
+  /**
+   * Test the HasRole query built in Java is written as the expected JSON.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testHasRoleSerializesToExpectedJson() throws Exception {
+    final HasRole primaryAnatomicSiteBreast =
+        new HasRole(new Exact(PRIMARY_ANATOMIC_SITE_ROLE), new Exact(BREAST));
+
+    assertSerializesTo(primaryAnatomicSiteBreast, PRIMARY_ANATOMIC_SITE_BREAST_QUERY);
   }
 }

@@ -3,6 +3,12 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.AncestorOf;
+import gov.nih.nci.evs.api.query.DescendantOf;
+import gov.nih.nci.evs.api.query.EvsQuery;
+import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.Or;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -56,5 +62,22 @@ public class OrEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testOrRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(CHILDREN_OR_PARENT_QUERY);
+  }
+
+  /**
+   * Test Or serializes to the expected JSON when built in Java: the Or of the children of Breast
+   * and the parent of Female Breast.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testOrSerializesToExpectedJson() throws Exception {
+    final EvsQuery childrenOrParent =
+        new Or(
+            List.of(
+                new DescendantOf(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL),
+                new AncestorOf(new Exact(FEMALE_BREAST), DIRECT_RELATIVES_MAX_LEVEL)));
+
+    assertSerializesTo(childrenOrParent, CHILDREN_OR_PARENT_QUERY);
   }
 }

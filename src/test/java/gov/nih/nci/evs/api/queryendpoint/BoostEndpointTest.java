@@ -3,6 +3,10 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.Boost;
+import gov.nih.nci.evs.api.query.DescendantOf;
+import gov.nih.nci.evs.api.query.EvsQuery;
+import gov.nih.nci.evs.api.query.Exact;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -54,5 +58,20 @@ public class BoostEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testBoostRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(BOOSTED_CHILDREN_OF_BREAST_QUERY);
+  }
+
+  /**
+   * Test Boost serializes to the expected JSON when built in Java: the Boost of the children of
+   * Breast.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testBoostSerializesToExpectedJson() throws Exception {
+    final float score = 2.0f;
+    final EvsQuery boostedChildrenOfBreast =
+        new Boost(new DescendantOf(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL), score);
+
+    assertSerializesTo(boostedChildrenOfBreast, BOOSTED_CHILDREN_OF_BREAST_QUERY);
   }
 }

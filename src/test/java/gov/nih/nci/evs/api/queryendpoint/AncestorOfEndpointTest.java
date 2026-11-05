@@ -3,6 +3,8 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.AncestorOf;
+import gov.nih.nci.evs.api.query.Exact;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -52,5 +54,18 @@ public class AncestorOfEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testAncestorOfRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(PARENT_OF_FEMALE_BREAST_QUERY);
+  }
+
+  /**
+   * Test the AncestorOf query built in Java is written as the expected JSON.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testAncestorOfSerializesToExpectedJson() throws Exception {
+    final AncestorOf parentOfFemaleBreast =
+        new AncestorOf(new Exact(FEMALE_BREAST), DIRECT_RELATIVES_MAX_LEVEL);
+
+    assertSerializesTo(parentOfFemaleBreast, PARENT_OF_FEMALE_BREAST_QUERY);
   }
 }

@@ -3,6 +3,8 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasAssociation;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -55,5 +57,20 @@ public class HasAssociationEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasAssociationRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(MEMBERS_OF_BREAST_CARCINOMA_ONLY_SUBSET_QUERY);
+  }
+
+  /**
+   * Test the HasAssociation query built in Java is written as the expected JSON.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testHasAssociationSerializesToExpectedJson() throws Exception {
+    final HasAssociation membersOfBreastCarcinomaOnlySubset =
+        new HasAssociation(
+            new Exact(IN_SUBSET_ASSOCIATION), new Exact(BREAST_CARCINOMA_ONLY_SUBSET));
+
+    assertSerializesTo(
+        membersOfBreastCarcinomaOnlySubset, MEMBERS_OF_BREAST_CARCINOMA_ONLY_SUBSET_QUERY);
   }
 }

@@ -3,6 +3,9 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.CaseInsensitive;
+import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasSynonym;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -57,5 +60,19 @@ public class HasSynonymEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasSynonymRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(MELANOMA_PREFERRED_TERM_QUERY);
+  }
+
+  /**
+   * Test HasSynonym serializes to the expected JSON, the wire format clients use.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testHasSynonymSerializesToExpectedJson() throws Exception {
+    final HasSynonym melanomaPreferredTerm =
+        new HasSynonym(
+            new Exact("melanoma"), new CaseInsensitive(new Exact("nci")), new Exact("PT"));
+
+    assertSerializesTo(melanomaPreferredTerm, MELANOMA_PREFERRED_TERM_QUERY);
   }
 }

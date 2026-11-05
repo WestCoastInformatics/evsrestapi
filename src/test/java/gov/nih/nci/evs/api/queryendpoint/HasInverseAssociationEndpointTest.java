@@ -3,6 +3,10 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasInverseAssociation;
+import gov.nih.nci.evs.api.query.OneOf;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -58,5 +62,19 @@ public class HasInverseAssociationEndpointTest extends AbstractQueryEndpointTest
   @Test
   public void testHasInverseAssociationRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(SUBSETS_OF_BREAST_CARCINOMA_QUERY);
+  }
+
+  /**
+   * Test the HasInverseAssociation query built in Java is written as the expected JSON.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testHasInverseAssociationSerializesToExpectedJson() throws Exception {
+    final HasInverseAssociation subsetsOfBreastCarcinoma =
+        new HasInverseAssociation(
+            new OneOf(Set.of(IN_SUBSET_ASSOCIATION)), new Exact(BREAST_CARCINOMA));
+
+    assertSerializesTo(subsetsOfBreastCarcinoma, SUBSETS_OF_BREAST_CARCINOMA_QUERY);
   }
 }

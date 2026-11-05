@@ -3,6 +3,7 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.Typeahead;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -51,5 +52,17 @@ public class TypeaheadEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testTypeaheadRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(MELANOMA_TYPEAHEAD_QUERY);
+  }
+
+  /**
+   * Test Typeahead serializes to the expected JSON, the wire format clients use.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTypeaheadSerializesToExpectedJson() throws Exception {
+    final Typeahead melanomaTypeahead = new Typeahead("melanoma");
+
+    assertSerializesTo(melanomaTypeahead, MELANOMA_TYPEAHEAD_QUERY);
   }
 }

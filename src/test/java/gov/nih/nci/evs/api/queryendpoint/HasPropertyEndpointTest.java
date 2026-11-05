@@ -3,6 +3,16 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.AllQualifiers;
+import gov.nih.nci.evs.api.query.AnyQualifier;
+import gov.nih.nci.evs.api.query.EvsQuery;
+import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasProperty;
+import gov.nih.nci.evs.api.query.NoQualifier;
+import gov.nih.nci.evs.api.query.OneOf;
+import gov.nih.nci.evs.api.query.PropertyQualifier;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -72,5 +82,29 @@ public class HasPropertyEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasPropertyRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(REPAIR_ANNOTATION_WITHOUT_TAS_OR_NR_QUERY);
+  }
+
+  /**
+   * Test HasProperty serializes to the expected JSON when built in Java: the HasProperty with
+   * qualifiers.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testHasPropertySerializesToExpectedJson() throws Exception {
+    final EvsQuery repairAnnotationWithoutTasOrNr =
+        new HasProperty(
+            new Exact("P211"),
+            new Exact("nucleotide-excision repair"),
+            new AllQualifiers(
+                List.of(
+                    new PropertyQualifier(new Exact("P387"), new OneOf(Set.of("GO:0006289"))),
+                    new NoQualifier(
+                        new AnyQualifier(
+                            List.of(
+                                new PropertyQualifier(new Exact("P389"), new Exact("TAS")),
+                                new PropertyQualifier(new Exact("P389"), new Exact("NR"))))))));
+
+    assertSerializesTo(repairAnnotationWithoutTasOrNr, REPAIR_ANNOTATION_WITHOUT_TAS_OR_NR_QUERY);
   }
 }

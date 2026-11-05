@@ -3,6 +3,8 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gov.nih.nci.evs.api.query.DescendantOrSelfOf;
+import gov.nih.nci.evs.api.query.Exact;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -54,5 +56,18 @@ public class DescendantOrSelfOfEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testDescendantOrSelfOfRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(BREAST_AND_CHILDREN_QUERY);
+  }
+
+  /**
+   * Test DescendantOrSelfOf serializes to the expected JSON, the wire format clients use.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testDescendantOrSelfOfSerializesToExpectedJson() throws Exception {
+    final DescendantOrSelfOf breastAndChildren =
+        new DescendantOrSelfOf(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL);
+
+    assertSerializesTo(breastAndChildren, BREAST_AND_CHILDREN_QUERY);
   }
 }
