@@ -57,7 +57,7 @@ public record Contains(String term) implements SupportsIgnoringCase {
    * @param value the raw term
    * @return the escaped term
    */
-  static String escapeWildcards(final String value) {
+  private static String escapeWildcards(final String value) {
     // Escape the escape character first so later escapes are not doubled
     return value.replace("\\", "\\\\").replace("*", "\\*").replace("?", "\\?");
   }

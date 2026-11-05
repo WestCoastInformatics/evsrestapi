@@ -34,7 +34,7 @@ public class DescendantOf extends HierarchyQuery {
   static final String ANCESTORS_FIELD = "ancestors";
 
   /** Field listing "code|depth" tokens, each ancestor with its shortest distance. */
-  static final String ANCESTOR_DEPTHS_FIELD = "ancestorDepths";
+  private static final String ANCESTOR_DEPTHS_FIELD = "ancestorDepths";
 
   /** Separator between code and depth in {@link #ANCESTOR_DEPTHS_FIELD}. */
   static final String DEPTH_SEPARATOR = "|";

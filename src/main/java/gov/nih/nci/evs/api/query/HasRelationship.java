@@ -107,7 +107,7 @@ public abstract class HasRelationship extends EvsQuery {
    *
    * @return whether there is a target
    */
-  public boolean getHasTargetNameOrCodeMatch() {
+  private boolean getHasTargetNameOrCodeMatch() {
     return targetNameOrCodeMatch != null;
   }
 

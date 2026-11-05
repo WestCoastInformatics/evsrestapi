@@ -42,19 +42,19 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 public abstract class HierarchyQuery extends EvsQuery {
 
   /** Field holding a document's identifier, which is the concept code. */
-  static final String ID_FIELD = "_id";
+  private static final String ID_FIELD = "_id";
 
   /** Metadata field naming the index a document is in; one index per terminology version. */
-  static final String INDEX_FIELD = "_index";
+  private static final String INDEX_FIELD = "_index";
 
   /** Field holding the concept's name. Analyzed text. */
-  static final String NAME_FIELD = "name";
+  private static final String NAME_FIELD = "name";
 
   /** Field holding the concept's code. */
-  static final String CODE_FIELD = "code";
+  private static final String CODE_FIELD = "code";
 
   /** The smallest allowed {@code maxLevel}: direct children or parents. */
-  static final int MIN_MAX_LEVEL = 1;
+  private static final int MIN_MAX_LEVEL = 1;
 
   /** A {@code maxLevel} of any distance, for constructors without a limit. */
   static final Integer ANY_LEVEL = null;

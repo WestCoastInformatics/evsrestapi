@@ -21,10 +21,10 @@ import org.opensearch.index.query.QueryBuilders;
  * so the constructor rejects larger sets. Callers that build the set from other concepts (see
  * {@link HierarchyQuery#fetchTargetCodes}) check the size first to report a clearer error.
  */
-public class MatchAnyOf extends EvsQuery {
+class MatchAnyOf extends EvsQuery {
 
   /** OpenSearch's default limit on values in one {@code terms} query. */
-  public static final int MAX_VALUES = 65_536;
+  static final int MAX_VALUES = 65_536;
 
   /** The field to match against. */
   private final String field;

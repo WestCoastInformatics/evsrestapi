@@ -28,10 +28,10 @@ import org.opensearch.index.query.QueryBuilder;
 public class AncestorOf extends HierarchyQuery {
 
   /** Field holding a descendant's name, on each of the concept's descendants. Analyzed text. */
-  static final String DESCENDANT_NAME_FIELD = "descendants.name";
+  private static final String DESCENDANT_NAME_FIELD = "descendants.name";
 
   /** Field holding a descendant's code, on each of the concept's descendants. */
-  static final String DESCENDANT_CODE_FIELD = "descendants.code";
+  private static final String DESCENDANT_CODE_FIELD = "descendants.code";
 
   /**
    * Instantiates an {@link AncestorOf} for everything above the target concepts.
