@@ -15,6 +15,11 @@ import org.opensearch.index.query.QueryBuilder;
  */
 public class DescendantOrSelfOf extends DescendantOf {
 
+  /** Instantiates an empty {@link DescendantOrSelfOf}. */
+  public DescendantOrSelfOf() {
+    // n/a
+  }
+
   /**
    * Instantiates a {@link DescendantOrSelfOf} for the target concepts and everything below them.
    *

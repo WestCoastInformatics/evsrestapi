@@ -18,13 +18,18 @@ final class NameOrCodeMatch extends EvsQuery {
   private static final int MINIMUM_MATCHING_FIELDS = 1;
 
   /** The field holding the name. */
-  private final String nameField;
+  private String nameField;
 
   /** The field holding the code. */
-  private final String codeField;
+  private String codeField;
 
   /** How the name or code must match. */
-  private final ValueMatch nameOrCodeMatch;
+  private ValueMatch nameOrCodeMatch;
+
+  /** Instantiates an empty {@link NameOrCodeMatch}. */
+  NameOrCodeMatch() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link NameOrCodeMatch}.
@@ -50,6 +55,15 @@ final class NameOrCodeMatch extends EvsQuery {
   }
 
   /**
+   * Sets the field holding the name.
+   *
+   * @param nameField the name field
+   */
+  public void setNameField(final String nameField) {
+    this.nameField = nameField;
+  }
+
+  /**
    * Returns the field holding the code.
    *
    * @return the code field
@@ -59,12 +73,30 @@ final class NameOrCodeMatch extends EvsQuery {
   }
 
   /**
+   * Sets the field holding the code.
+   *
+   * @param codeField the code field
+   */
+  public void setCodeField(final String codeField) {
+    this.codeField = codeField;
+  }
+
+  /**
    * Returns how the name or code must match.
    *
    * @return the name or code match
    */
   public ValueMatch getNameOrCodeMatch() {
     return nameOrCodeMatch;
+  }
+
+  /**
+   * Sets how the name or code must match.
+   *
+   * @param nameOrCodeMatch the name or code match
+   */
+  public void setNameOrCodeMatch(final ValueMatch nameOrCodeMatch) {
+    this.nameOrCodeMatch = nameOrCodeMatch;
   }
 
   /* see superclass */

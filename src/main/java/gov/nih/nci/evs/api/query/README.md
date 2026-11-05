@@ -124,32 +124,25 @@ classDiagram
     }
 
     class CaseInsensitive {
-        <<record>>
         SupportsIgnoringCase match
     }
     class Exact {
-        <<record>>
         String term
     }
     class Contains {
-        <<record>>
         String term
     }
     class StartsWith {
-        <<record>>
         String term
     }
     class Fuzzy {
-        <<record>>
         String term
         Fuzziness fuzziness
     }
     class OneOf {
-        <<record>>
         Set~String~ terms
     }
     class SearchAsYouType {
-        <<record>>
         String term
     }
 
@@ -238,7 +231,7 @@ classDiagram
 |---|---|
 | `EvsQuery` | Base type for every node. Its contract is `fetchOpenSearchQuery(operations, terminologies)`. Nodes don't hold the terminologies being searched: they're passed in when the tree runs (see [Why `operations` and `terminologies` are parameters](#why-operations-and-terminologies-are-parameters)). It also (experimental, see [Sorting](#sorting-experimental)) contributes sorts and builds a whole search request. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
 | `FieldMatch` | The leaf query. It pairs a concept field with a `ValueMatch` and rejects `null` for either. It only says which field; the match says how. |
-| `ValueMatch` | How one value is compared, with no field. Its contract is `getQueryBuilder(field)`. The implementations are records: plain values with no behavior beyond building their query. |
+| `ValueMatch` | How one value is compared, with no field. Its contract is `getQueryBuilder(field)`. The implementations are plain values, compared by value, with no behavior beyond building their query. |
 | `SupportsIgnoringCase` | A `ValueMatch` that can also ignore case: `Exact`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
 | `CaseInsensitive` | A wrapper match. It runs the wrapped match ignoring case by calling `getCaseInsensitiveQueryBuilder(field)`. The wrapped match is not changed. |
 | `HasRelationship` | Matches concepts by a relationship's type and target, each a `ValueMatch` on a name or code (see [Relationships](#relationships)). |
@@ -263,7 +256,7 @@ Apart from `SearchAsYouType`, the value matches are **case sensitive** and compa
 **whole indexed value**. To ignore case, wrap one in `CaseInsensitive` (see below).
 `SearchAsYouType` works on individual words and always ignores case.
 
-| Record | Matches when the value… | OpenSearch query |
+| Match | Matches when the value… | OpenSearch query |
 |---|---|---|
 | `Exact` | equals the term exactly | `term` |
 | `Contains` | includes the term anywhere | `wildcard` on `*term*`, with `*`, `?`, and `\` in the term escaped |
@@ -450,8 +443,9 @@ inverse lists roughly double that growth.
 
 ### Adding a value match
 
-Add a record implementing `ValueMatch` (or `SupportsIgnoringCase`, if it can ignore case), and
-build the OpenSearch query from the field it's given and its own components. For example, a
+Add a class implementing `ValueMatch` (or `SupportsIgnoringCase`, if it can ignore case), and
+build the OpenSearch query from the field it's given and its own fields. Like the model classes, it
+has a no-arg constructor, getters and setters, and is compared by value. For example, a
 regular-expression match:
 
 ```java
@@ -464,18 +458,42 @@ import org.opensearch.index.query.QueryBuilders;
 
 /**
  * Matches values against a regular expression (case sensitive).
- *
- * @param term the regular expression the value must match
  */
-public record Regex(String term) implements ValueMatch {
+public class Regex implements ValueMatch {
+
+  /** The regular expression the value must match. */
+  private String term;
+
+  /** Instantiates an empty {@link Regex}. */
+  public Regex() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link Regex}.
    *
    * @param term the regular expression the value must match
    */
-  public Regex {
-    Objects.requireNonNull(term, "term");
+  public Regex(final String term) {
+    this.term = Objects.requireNonNull(term, "term");
+  }
+
+  /**
+   * Returns the regular expression the value must match.
+   *
+   * @return the term
+   */
+  public String getTerm() {
+    return term;
+  }
+
+  /**
+   * Sets the regular expression the value must match.
+   *
+   * @param term the regular expression the value must match
+   */
+  public void setTerm(final String term) {
+    this.term = term;
   }
 
   /* see superclass */
@@ -488,6 +506,28 @@ public record Regex(String term) implements ValueMatch {
   @Override
   public Regex getWithTermsMapped(final UnaryOperator<String> termMapper) {
     return new Regex(termMapper.apply(term));
+  }
+
+  /* see superclass */
+  @Override
+  public boolean equals(final Object obj) {
+    if (this == obj) {
+      return true;
+    }
+
+    final boolean isSameClass = obj != null && getClass() == obj.getClass();
+    if (!isSameClass) {
+      return false;
+    }
+
+    final Regex other = (Regex) obj;
+    return Objects.equals(term, other.term);
+  }
+
+  /* see superclass */
+  @Override
+  public int hashCode() {
+    return Objects.hash(term);
   }
 }
 ```

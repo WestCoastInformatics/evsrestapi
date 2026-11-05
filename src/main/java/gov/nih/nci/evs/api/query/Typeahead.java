@@ -133,7 +133,12 @@ public class Typeahead extends EvsQuery {
           .formatted(NORMALIZED_NAME_FIELD, DESCENDANT_COUNT_FIELD, DESCENDANT_LEAF_FIELD);
 
   /** The text typed so far, as entered. The search_as_you_type analyzer handles normalization. */
-  private final String incompleteTerm;
+  private String incompleteTerm;
+
+  /** Instantiates an empty {@link Typeahead}. */
+  public Typeahead() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link Typeahead}.
@@ -168,6 +173,15 @@ public class Typeahead extends EvsQuery {
    */
   public String getIncompleteTerm() {
     return incompleteTerm;
+  }
+
+  /**
+   * Sets the text typed so far.
+   *
+   * @param incompleteTerm the incomplete term
+   */
+  public void setIncompleteTerm(final String incompleteTerm) {
+    this.incompleteTerm = incompleteTerm;
   }
 
   /**

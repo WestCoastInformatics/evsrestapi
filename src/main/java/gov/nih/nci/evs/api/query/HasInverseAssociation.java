@@ -17,6 +17,11 @@ public final class HasInverseAssociation extends HasRelationship {
    */
   private static final String INVERSE_ASSOCIATIONS_FIELD_NAME = "inverseAssociations";
 
+  /** Instantiates an empty {@link HasInverseAssociation}. */
+  public HasInverseAssociation() {
+    // n/a
+  }
+
   /**
    * Instantiates a {@link HasInverseAssociation} that matches concepts an association of the given
    * type points to, from any concept.

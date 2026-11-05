@@ -79,10 +79,15 @@ public abstract class HierarchyQuery extends EvsQuery {
   private static final int FIRST_PAGE = 0;
 
   /** How the target concepts' name or code must match. */
-  private final ValueMatch targetNameOrCodeMatch;
+  private ValueMatch targetNameOrCodeMatch;
 
   /** The maximum distance from the targets, or null for any distance. */
-  private final Integer maxLevel;
+  private Integer maxLevel;
+
+  /** Instantiates an empty {@link HierarchyQuery}. */
+  protected HierarchyQuery() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link HierarchyQuery}.
@@ -113,12 +118,30 @@ public abstract class HierarchyQuery extends EvsQuery {
   }
 
   /**
+   * Sets how the target concepts' name or code must match.
+   *
+   * @param targetNameOrCodeMatch the target name or code match
+   */
+  public void setTargetNameOrCodeMatch(final ValueMatch targetNameOrCodeMatch) {
+    this.targetNameOrCodeMatch = targetNameOrCodeMatch;
+  }
+
+  /**
    * Returns the maximum distance from the targets.
    *
    * @return the max level, or null for any distance
    */
   public Integer getMaxLevel() {
     return maxLevel;
+  }
+
+  /**
+   * Sets the maximum distance from the targets.
+   *
+   * @param maxLevel the max level, or null for any distance
+   */
+  public void setMaxLevel(final Integer maxLevel) {
+    this.maxLevel = maxLevel;
   }
 
   /**

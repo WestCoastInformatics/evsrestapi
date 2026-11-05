@@ -53,10 +53,15 @@ public abstract class HasRelationship extends EvsQuery {
    * entries, each pairing a type with a target concept, and the type says how the concept relates
    * to that target.
    */
-  private final ValueMatch typeNameOrCodeMatch;
+  private ValueMatch typeNameOrCodeMatch;
 
   /** How the name or code of the concept the relationship points to must match, or null for any. */
-  private final ValueMatch targetNameOrCodeMatch;
+  private ValueMatch targetNameOrCodeMatch;
+
+  /** Instantiates an empty {@link HasRelationship}. */
+  protected HasRelationship() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link HasRelationship} that matches a relationship of the given type, pointing
@@ -103,6 +108,15 @@ public abstract class HasRelationship extends EvsQuery {
   }
 
   /**
+   * Sets how the relationship's type name or code must match.
+   *
+   * @param typeNameOrCodeMatch the type name or code match
+   */
+  public void setTypeNameOrCodeMatch(final ValueMatch typeNameOrCodeMatch) {
+    this.typeNameOrCodeMatch = typeNameOrCodeMatch;
+  }
+
+  /**
    * Indicates whether the relationship must point to a specific target.
    *
    * @return whether there is a target
@@ -118,6 +132,15 @@ public abstract class HasRelationship extends EvsQuery {
    */
   public ValueMatch getTargetNameOrCodeMatch() {
     return targetNameOrCodeMatch;
+  }
+
+  /**
+   * Sets how the target's name or code must match.
+   *
+   * @param targetNameOrCodeMatch the target name or code match, or null for any target
+   */
+  public void setTargetNameOrCodeMatch(final ValueMatch targetNameOrCodeMatch) {
+    this.targetNameOrCodeMatch = targetNameOrCodeMatch;
   }
 
   /**

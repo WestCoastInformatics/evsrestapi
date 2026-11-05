@@ -20,10 +20,15 @@ import org.opensearch.index.query.QueryBuilder;
 final class FieldMatch extends EvsQuery {
 
   /** The field to match against. */
-  private final String field;
+  private String field;
 
   /** How the field's value must match. */
-  private final ValueMatch match;
+  private ValueMatch match;
+
+  /** Instantiates an empty {@link FieldMatch}. */
+  public FieldMatch() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link FieldMatch}.
@@ -46,12 +51,30 @@ final class FieldMatch extends EvsQuery {
   }
 
   /**
+   * Sets the field to match against.
+   *
+   * @param field the field
+   */
+  public void setField(final String field) {
+    this.field = field;
+  }
+
+  /**
    * Returns how the field's value must match.
    *
    * @return the match
    */
   public ValueMatch getMatch() {
     return match;
+  }
+
+  /**
+   * Sets how the field's value must match.
+   *
+   * @param match the match
+   */
+  public void setMatch(final ValueMatch match) {
+    this.match = match;
   }
 
   /* see superclass */

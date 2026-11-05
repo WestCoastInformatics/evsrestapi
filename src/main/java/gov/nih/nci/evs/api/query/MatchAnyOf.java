@@ -2,7 +2,6 @@ package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -27,10 +26,15 @@ class MatchAnyOf extends EvsQuery {
   static final int MAX_VALUES = 65_536;
 
   /** The field to match against. */
-  private final String field;
+  private String field;
 
   /** The values, any of which the field may equal. Sorted, so built queries are repeatable. */
-  private final Set<String> values;
+  private Set<String> values;
+
+  /** Instantiates an empty {@link MatchAnyOf}. */
+  public MatchAnyOf() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link MatchAnyOf}.
@@ -64,12 +68,33 @@ class MatchAnyOf extends EvsQuery {
   }
 
   /**
+   * Sets the field to match against.
+   *
+   * @param field the field
+   */
+  public void setField(final String field) {
+    this.field = field;
+  }
+
+  /**
    * Returns the values, any of which the field may equal.
    *
-   * @return the values, sorted and unmodifiable
+   * @return the values, sorted
    */
   public Set<String> getValues() {
-    return Collections.unmodifiableSet(values);
+    if (values == null) {
+      values = new TreeSet<>();
+    }
+    return values;
+  }
+
+  /**
+   * Sets the values, any of which the field may equal.
+   *
+   * @param values the values
+   */
+  public void setValues(final Set<String> values) {
+    this.values = values;
   }
 
   /* see superclass */

@@ -18,7 +18,12 @@ import org.opensearch.index.query.QueryBuilders;
 public class Not extends EvsQuery {
 
   /** The query concepts must not match. */
-  private final EvsQuery child;
+  private EvsQuery child;
+
+  /** Instantiates an empty {@link Not}. */
+  public Not() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link Not}.
@@ -36,6 +41,15 @@ public class Not extends EvsQuery {
    */
   public EvsQuery getChild() {
     return child;
+  }
+
+  /**
+   * Sets the query concepts must not match.
+   *
+   * @param child the child
+   */
+  public void setChild(final EvsQuery child) {
+    this.child = child;
   }
 
   /* see superclass */

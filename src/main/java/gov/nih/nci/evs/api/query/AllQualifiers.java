@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Terminology;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.opensearch.data.core.OpenSearchOperations;
@@ -15,8 +16,13 @@ import org.opensearch.index.query.QueryBuilders;
  */
 public final class AllQualifiers implements QualifierCondition {
 
-  /** The conditions that must all hold. Unmodifiable. */
-  private final List<QualifierCondition> conditions;
+  /** The conditions that must all hold. */
+  private List<QualifierCondition> conditions;
+
+  /** Instantiates an empty {@link AllQualifiers}. */
+  public AllQualifiers() {
+    // n/a
+  }
 
   /**
    * Instantiates an {@link AllQualifiers}.
@@ -24,16 +30,28 @@ public final class AllQualifiers implements QualifierCondition {
    * @param conditions the conditions that must all hold
    */
   public AllQualifiers(final List<QualifierCondition> conditions) {
-    this.conditions = List.copyOf(Objects.requireNonNull(conditions, "conditions"));
+    this.conditions = new ArrayList<>(Objects.requireNonNull(conditions, "conditions"));
   }
 
   /**
    * Returns the conditions that must all hold.
    *
-   * @return the conditions, unmodifiable
+   * @return the conditions
    */
   public List<QualifierCondition> getConditions() {
+    if (conditions == null) {
+      conditions = new ArrayList<>();
+    }
     return conditions;
+  }
+
+  /**
+   * Sets the conditions that must all hold.
+   *
+   * @param conditions the conditions
+   */
+  public void setConditions(final List<QualifierCondition> conditions) {
+    this.conditions = conditions;
   }
 
   /* see superclass */

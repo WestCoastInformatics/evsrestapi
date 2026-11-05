@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Terminology;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.opensearch.data.core.OpenSearchOperations;
@@ -18,8 +19,13 @@ public final class AnyQualifier implements QualifierCondition {
   /** One of the conditions must hold. */
   private static final int MINIMUM_MATCHING_CONDITIONS = 1;
 
-  /** The alternative conditions. Unmodifiable. */
-  private final List<QualifierCondition> conditions;
+  /** The alternative conditions. */
+  private List<QualifierCondition> conditions;
+
+  /** Instantiates an empty {@link AnyQualifier}. */
+  public AnyQualifier() {
+    // n/a
+  }
 
   /**
    * Instantiates an {@link AnyQualifier}.
@@ -27,16 +33,28 @@ public final class AnyQualifier implements QualifierCondition {
    * @param conditions the alternative conditions
    */
   public AnyQualifier(final List<QualifierCondition> conditions) {
-    this.conditions = List.copyOf(Objects.requireNonNull(conditions, "conditions"));
+    this.conditions = new ArrayList<>(Objects.requireNonNull(conditions, "conditions"));
   }
 
   /**
    * Returns the alternative conditions.
    *
-   * @return the conditions, unmodifiable
+   * @return the conditions
    */
   public List<QualifierCondition> getConditions() {
+    if (conditions == null) {
+      conditions = new ArrayList<>();
+    }
     return conditions;
+  }
+
+  /**
+   * Sets the alternative conditions.
+   *
+   * @param conditions the conditions
+   */
+  public void setConditions(final List<QualifierCondition> conditions) {
+    this.conditions = conditions;
   }
 
   /* see superclass */

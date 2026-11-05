@@ -30,7 +30,12 @@ import org.opensearch.index.query.QueryBuilder;
 public final class InSubset extends EvsQuery {
 
   /** How the subsets' name or code must match. */
-  private final ValueMatch subsetNameOrCodeMatch;
+  private ValueMatch subsetNameOrCodeMatch;
+
+  /** Instantiates an empty {@link InSubset}. */
+  public InSubset() {
+    // n/a
+  }
 
   /**
    * Instantiates an {@link InSubset} that matches members of one subset, given by its exact code.
@@ -58,6 +63,15 @@ public final class InSubset extends EvsQuery {
    */
   public ValueMatch getSubsetNameOrCodeMatch() {
     return subsetNameOrCodeMatch;
+  }
+
+  /**
+   * Sets how the subsets' name or code must match.
+   *
+   * @param subsetNameOrCodeMatch the subset name or code match
+   */
+  public void setSubsetNameOrCodeMatch(final ValueMatch subsetNameOrCodeMatch) {
+    this.subsetNameOrCodeMatch = subsetNameOrCodeMatch;
   }
 
   /**

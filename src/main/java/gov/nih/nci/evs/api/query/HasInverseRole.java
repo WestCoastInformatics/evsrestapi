@@ -15,6 +15,11 @@ public final class HasInverseRole extends HasRelationship {
   /** The concept document's list of inverse roles, mapped as nested so they can be searched. */
   private static final String INVERSE_ROLES_FIELD_NAME = "inverseRoles";
 
+  /** Instantiates an empty {@link HasInverseRole}. */
+  public HasInverseRole() {
+    // n/a
+  }
+
   /**
    * Instantiates a {@link HasInverseRole} that matches an inverse role of the given type, from any
    * concept.

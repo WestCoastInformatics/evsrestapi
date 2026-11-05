@@ -42,6 +42,11 @@ public class DescendantOf extends HierarchyQuery {
   /** The first depth below a target: its direct children. */
   private static final int FIRST_DEPTH = 1;
 
+  /** Instantiates an empty {@link DescendantOf}. */
+  public DescendantOf() {
+    // n/a
+  }
+
   /**
    * Instantiates a {@link DescendantOf} for everything below the target concepts.
    *

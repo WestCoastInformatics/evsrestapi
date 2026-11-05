@@ -21,10 +21,8 @@ import org.opensearch.index.query.QueryBuilders;
  * <p>The field must be mapped as {@code search_as_you_type}. OpenSearch then also indexes the
  * word-pair and word-triple subfields this query searches, which rank names with the words in the
  * typed order higher.
- *
- * @param term the text typed so far
  */
-public record SearchAsYouType(String term) implements ValueMatch {
+public class SearchAsYouType implements ValueMatch {
 
   /** Subfield holding adjacent word pairs, created by the search_as_you_type mapping. */
   private static final String WORD_PAIRS_SUFFIX = "._2gram";
@@ -32,13 +30,39 @@ public record SearchAsYouType(String term) implements ValueMatch {
   /** Subfield holding adjacent word triples, created by the search_as_you_type mapping. */
   private static final String WORD_TRIPLES_SUFFIX = "._3gram";
 
+  /** The text typed so far. */
+  private String term;
+
+  /** Instantiates an empty {@link SearchAsYouType}. */
+  public SearchAsYouType() {
+    // n/a
+  }
+
   /**
    * Instantiates a {@link SearchAsYouType}.
    *
    * @param term the text typed so far
    */
-  public SearchAsYouType {
-    Objects.requireNonNull(term, "term");
+  public SearchAsYouType(final String term) {
+    this.term = Objects.requireNonNull(term, "term");
+  }
+
+  /**
+   * Returns the text typed so far.
+   *
+   * @return the term
+   */
+  public String getTerm() {
+    return term;
+  }
+
+  /**
+   * Sets the text typed so far.
+   *
+   * @param term the text typed so far
+   */
+  public void setTerm(final String term) {
+    this.term = term;
   }
 
   /* see superclass */
@@ -59,5 +83,27 @@ public record SearchAsYouType(String term) implements ValueMatch {
         .type(MultiMatchQueryBuilder.Type.BOOL_PREFIX)
         // Require every typed word; the default would match on any one word
         .operator(Operator.AND);
+  }
+
+  /* see superclass */
+  @Override
+  public boolean equals(final Object obj) {
+    if (this == obj) {
+      return true;
+    }
+
+    final boolean isSameClass = obj != null && getClass() == obj.getClass();
+    if (!isSameClass) {
+      return false;
+    }
+
+    final SearchAsYouType other = (SearchAsYouType) obj;
+    return Objects.equals(term, other.term);
+  }
+
+  /* see superclass */
+  @Override
+  public int hashCode() {
+    return Objects.hash(term);
   }
 }

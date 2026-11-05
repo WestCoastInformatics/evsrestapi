@@ -15,10 +15,15 @@ import org.opensearch.index.query.QueryBuilders;
 public class Boost extends EvsQuery {
 
   /** The query whose matches are scored. */
-  private final EvsQuery child;
+  private EvsQuery child;
 
   /** The score every match gets. */
-  private final float score;
+  private float score;
+
+  /** Instantiates an empty {@link Boost}. */
+  public Boost() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link Boost}.
@@ -41,12 +46,30 @@ public class Boost extends EvsQuery {
   }
 
   /**
+   * Sets the query whose matches are scored.
+   *
+   * @param child the child
+   */
+  public void setChild(final EvsQuery child) {
+    this.child = child;
+  }
+
+  /**
    * Returns the score every match gets.
    *
    * @return the score
    */
   public float getScore() {
     return score;
+  }
+
+  /**
+   * Sets the score every match gets.
+   *
+   * @param score the score
+   */
+  public void setScore(final float score) {
+    this.score = score;
   }
 
   /* see superclass */

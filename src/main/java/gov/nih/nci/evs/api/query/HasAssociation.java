@@ -10,6 +10,11 @@ public final class HasAssociation extends HasRelationship {
   /** The concept document's list of associations, mapped as nested so they can be searched. */
   private static final String ASSOCIATIONS_FIELD_NAME = "associations";
 
+  /** Instantiates an empty {@link HasAssociation}. */
+  public HasAssociation() {
+    // n/a
+  }
+
   /**
    * Instantiates a {@link HasAssociation} that matches an association of the given type, pointing
    * to any concept.

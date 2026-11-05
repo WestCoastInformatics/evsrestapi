@@ -15,6 +15,11 @@ import org.opensearch.index.query.QueryBuilder;
  */
 public class AncestorOrSelfOf extends AncestorOf {
 
+  /** Instantiates an empty {@link AncestorOrSelfOf}. */
+  public AncestorOrSelfOf() {
+    // n/a
+  }
+
   /**
    * Instantiates an {@link AncestorOrSelfOf} for the target concepts and everything above them.
    *

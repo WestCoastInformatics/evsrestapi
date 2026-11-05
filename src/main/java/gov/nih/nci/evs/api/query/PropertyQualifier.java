@@ -32,10 +32,15 @@ public final class PropertyQualifier implements QualifierCondition {
   /** Separates the qualifier list field from a qualifier entry's field. */
   private static final String ENTRY_FIELD_SEPARATOR = ".";
 
-  private final ValueMatch typeNameOrCodeMatch;
+  private ValueMatch typeNameOrCodeMatch;
 
   /** The match for the qualifier's value, or null to match any value. */
-  private final ValueMatch valueMatch;
+  private ValueMatch valueMatch;
+
+  /** Instantiates an empty {@link PropertyQualifier}. */
+  public PropertyQualifier() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link PropertyQualifier} that matches a qualifier of the given type, with any
@@ -70,12 +75,30 @@ public final class PropertyQualifier implements QualifierCondition {
   }
 
   /**
+   * Sets the match for the qualifier's type name or code.
+   *
+   * @param typeNameOrCodeMatch the type name or code match
+   */
+  public void setTypeNameOrCodeMatch(final ValueMatch typeNameOrCodeMatch) {
+    this.typeNameOrCodeMatch = typeNameOrCodeMatch;
+  }
+
+  /**
    * Returns the match for the qualifier's value.
    *
    * @return the value match, or null to match any value
    */
   public ValueMatch getValueMatch() {
     return valueMatch;
+  }
+
+  /**
+   * Sets the match for the qualifier's value.
+   *
+   * @param valueMatch the value match, or null to match any value
+   */
+  public void setValueMatch(final ValueMatch valueMatch) {
+    this.valueMatch = valueMatch;
   }
 
   /**

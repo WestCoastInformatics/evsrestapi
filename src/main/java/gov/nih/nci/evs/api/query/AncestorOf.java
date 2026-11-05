@@ -33,6 +33,11 @@ public class AncestorOf extends HierarchyQuery {
   /** Field holding a descendant's code, on each of the concept's descendants. */
   private static final String DESCENDANT_CODE_FIELD = "descendants.code";
 
+  /** Instantiates an empty {@link AncestorOf}. */
+  public AncestorOf() {
+    // n/a
+  }
+
   /**
    * Instantiates an {@link AncestorOf} for everything above the target concepts.
    *

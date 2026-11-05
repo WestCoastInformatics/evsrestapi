@@ -16,7 +16,12 @@ import org.opensearch.index.query.QueryBuilders;
 public final class NoQualifier implements QualifierCondition {
 
   /** The condition the entry must not meet. */
-  private final QualifierCondition condition;
+  private QualifierCondition condition;
+
+  /** Instantiates an empty {@link NoQualifier}. */
+  public NoQualifier() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link NoQualifier}.
@@ -34,6 +39,15 @@ public final class NoQualifier implements QualifierCondition {
    */
   public QualifierCondition getCondition() {
     return condition;
+  }
+
+  /**
+   * Sets the condition the entry must not meet.
+   *
+   * @param condition the condition
+   */
+  public void setCondition(final QualifierCondition condition) {
+    this.condition = condition;
   }
 
   /* see superclass */

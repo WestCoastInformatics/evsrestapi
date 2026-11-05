@@ -1,6 +1,7 @@
 package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Terminology;
+import java.util.ArrayList;
 import java.util.List;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -14,7 +15,12 @@ import org.opensearch.index.query.QueryBuilders;
 public class Or extends EvsQuery {
 
   /** The queries of which at least one must match. */
-  private final List<EvsQuery> children;
+  private List<EvsQuery> children;
+
+  /** Instantiates an empty {@link Or}. */
+  public Or() {
+    // n/a
+  }
 
   /**
    * Instantiates an {@link Or}.
@@ -22,7 +28,7 @@ public class Or extends EvsQuery {
    * @param children the queries of which at least one must match
    */
   public Or(final List<EvsQuery> children) {
-    this.children = List.copyOf(children);
+    this.children = new ArrayList<>(children);
   }
 
   /**
@@ -31,7 +37,19 @@ public class Or extends EvsQuery {
    * @return the children
    */
   public List<EvsQuery> getChildren() {
+    if (children == null) {
+      children = new ArrayList<>();
+    }
     return children;
+  }
+
+  /**
+   * Sets the queries of which at least one must match.
+   *
+   * @param children the children
+   */
+  public void setChildren(final List<EvsQuery> children) {
+    this.children = children;
   }
 
   /* see superclass */

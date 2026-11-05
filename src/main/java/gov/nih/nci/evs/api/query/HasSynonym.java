@@ -52,16 +52,21 @@ public final class HasSynonym extends EvsQuery {
   private static final String SUB_SOURCE_FIELD = SYNONYMS_FIELD + ".subSource";
 
   /** The match for the synonym's name, with normalized terms, or null to match any name. */
-  private final ValueMatch normalizedNameMatch;
+  private ValueMatch normalizedNameMatch;
 
   /** The match for the synonym's source, or null to match any source. */
-  private final ValueMatch sourceMatch;
+  private ValueMatch sourceMatch;
 
   /** The match for the synonym's term type, or null to match any term type. */
-  private final ValueMatch termTypeMatch;
+  private ValueMatch termTypeMatch;
 
   /** The match for the synonym's sub-source, or null to match any sub-source. */
-  private final ValueMatch subSourceMatch;
+  private ValueMatch subSourceMatch;
+
+  /** Instantiates an empty {@link HasSynonym}. */
+  public HasSynonym() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with a matching name, from any source.
@@ -117,12 +122,30 @@ public final class HasSynonym extends EvsQuery {
   }
 
   /**
+   * Sets the match for the synonym's name, with normalized terms.
+   *
+   * @param normalizedNameMatch the normalized name match, or null to match any name
+   */
+  public void setNormalizedNameMatch(final ValueMatch normalizedNameMatch) {
+    this.normalizedNameMatch = normalizedNameMatch;
+  }
+
+  /**
    * Returns the match for the synonym's source.
    *
    * @return the source match, or null to match any source
    */
   public ValueMatch getSourceMatch() {
     return sourceMatch;
+  }
+
+  /**
+   * Sets the match for the synonym's source.
+   *
+   * @param sourceMatch the source match, or null to match any source
+   */
+  public void setSourceMatch(final ValueMatch sourceMatch) {
+    this.sourceMatch = sourceMatch;
   }
 
   /**
@@ -135,12 +158,30 @@ public final class HasSynonym extends EvsQuery {
   }
 
   /**
+   * Sets the match for the synonym's term type.
+   *
+   * @param termTypeMatch the term type match, or null to match any term type
+   */
+  public void setTermTypeMatch(final ValueMatch termTypeMatch) {
+    this.termTypeMatch = termTypeMatch;
+  }
+
+  /**
    * Returns the match for the synonym's sub-source.
    *
    * @return the sub-source match, or null to match any sub-source
    */
   public ValueMatch getSubSourceMatch() {
     return subSourceMatch;
+  }
+
+  /**
+   * Sets the match for the synonym's sub-source.
+   *
+   * @param subSourceMatch the sub-source match, or null to match any sub-source
+   */
+  public void setSubSourceMatch(final ValueMatch subSourceMatch) {
+    this.subSourceMatch = subSourceMatch;
   }
 
   /* see superclass */

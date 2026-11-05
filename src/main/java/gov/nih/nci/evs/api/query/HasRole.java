@@ -10,6 +10,11 @@ public final class HasRole extends HasRelationship {
   /** The concept document's list of roles, mapped as nested so roles can be searched. */
   private static final String ROLES_FIELD_NAME = "roles";
 
+  /** Instantiates an empty {@link HasRole}. */
+  public HasRole() {
+    // n/a
+  }
+
   /**
    * Instantiates a {@link HasRole} that matches a role of the given type, pointing to any concept.
    *

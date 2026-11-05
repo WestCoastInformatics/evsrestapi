@@ -44,13 +44,18 @@ public final class HasProperty extends EvsQuery {
   /** A property entry's list of qualifiers, mapped as nested so qualifiers can be searched. */
   private static final String QUALIFIERS_FIELD = PROPERTIES_FIELD + ".qualifiers";
 
-  private final ValueMatch typeNameOrCodeMatch;
+  private ValueMatch typeNameOrCodeMatch;
 
   /** The match for the property's value, or null to match any value. */
-  private final ValueMatch valueMatch;
+  private ValueMatch valueMatch;
 
   /** The condition the property's qualifiers must meet, or null to require none. */
-  private final QualifierCondition qualifierCondition;
+  private QualifierCondition qualifierCondition;
+
+  /** Instantiates an empty {@link HasProperty}. */
+  public HasProperty() {
+    // n/a
+  }
 
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type, with any value.
@@ -114,6 +119,15 @@ public final class HasProperty extends EvsQuery {
   }
 
   /**
+   * Sets the match for the property's type name or code.
+   *
+   * @param typeNameOrCodeMatch the type name or code match
+   */
+  public void setTypeNameOrCodeMatch(final ValueMatch typeNameOrCodeMatch) {
+    this.typeNameOrCodeMatch = typeNameOrCodeMatch;
+  }
+
+  /**
    * Returns the match for the property's value.
    *
    * @return the value match, or null to match any value
@@ -123,12 +137,30 @@ public final class HasProperty extends EvsQuery {
   }
 
   /**
+   * Sets the match for the property's value.
+   *
+   * @param valueMatch the value match, or null to match any value
+   */
+  public void setValueMatch(final ValueMatch valueMatch) {
+    this.valueMatch = valueMatch;
+  }
+
+  /**
    * Returns the condition the property's qualifiers must meet.
    *
    * @return the qualifier condition, or null to require none
    */
   public QualifierCondition getQualifierCondition() {
     return qualifierCondition;
+  }
+
+  /**
+   * Sets the condition the property's qualifiers must meet.
+   *
+   * @param qualifierCondition the qualifier condition, or null to require none
+   */
+  public void setQualifierCondition(final QualifierCondition qualifierCondition) {
+    this.qualifierCondition = qualifierCondition;
   }
 
   /* see superclass */
