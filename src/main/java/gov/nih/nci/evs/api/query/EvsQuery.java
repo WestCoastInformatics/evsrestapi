@@ -1,5 +1,9 @@
 package gov.nih.nci.evs.api.query;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import gov.nih.nci.evs.api.model.Concept;
 import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.Terminology;
@@ -27,6 +31,26 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
  * <p>Run a tree with {@link #fetchConcepts}. EXPERIMENTAL: nodes may also contribute sorts (see
  * {@link #getSorts()}).
  */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonSubTypes({
+  @JsonSubTypes.Type(value = And.class, name = "And"),
+  @JsonSubTypes.Type(value = Or.class, name = "Or"),
+  @JsonSubTypes.Type(value = Not.class, name = "Not"),
+  @JsonSubTypes.Type(value = Boost.class, name = "Boost"),
+  @JsonSubTypes.Type(value = HasProperty.class, name = "HasProperty"),
+  @JsonSubTypes.Type(value = HasSynonym.class, name = "HasSynonym"),
+  @JsonSubTypes.Type(value = InSubset.class, name = "InSubset"),
+  @JsonSubTypes.Type(value = Typeahead.class, name = "Typeahead"),
+  @JsonSubTypes.Type(value = DescendantOf.class, name = "DescendantOf"),
+  @JsonSubTypes.Type(value = DescendantOrSelfOf.class, name = "DescendantOrSelfOf"),
+  @JsonSubTypes.Type(value = AncestorOf.class, name = "AncestorOf"),
+  @JsonSubTypes.Type(value = AncestorOrSelfOf.class, name = "AncestorOrSelfOf"),
+  @JsonSubTypes.Type(value = HasRole.class, name = "HasRole"),
+  @JsonSubTypes.Type(value = HasInverseRole.class, name = "HasInverseRole"),
+  @JsonSubTypes.Type(value = HasAssociation.class, name = "HasAssociation"),
+  @JsonSubTypes.Type(value = HasInverseAssociation.class, name = "HasInverseAssociation")
+})
+@JsonInclude(Include.NON_EMPTY)
 public abstract class EvsQuery {
 
   /**

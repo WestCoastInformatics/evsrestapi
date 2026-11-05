@@ -2,7 +2,6 @@ package gov.nih.nci.evs.api.query;
 
 import java.util.Objects;
 import java.util.function.UnaryOperator;
-import org.opensearch.common.unit.Fuzziness;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
@@ -11,6 +10,46 @@ import org.opensearch.index.query.QueryBuilders;
  * distance scales with term length: exact for 1-2 characters, 1 edit for 3-5, 2 edits beyond.
  */
 public class Fuzzy implements ValueMatch {
+
+  /**
+   * How many edits a {@link Fuzzy} match allows between a value and its term. These are the edit
+   * distances OpenSearch's fuzzy query accepts; it allows at most 2.
+   */
+  public enum Fuzziness {
+
+    /** Scales with term length: exact for 1-2 characters, 1 edit for 3-5, 2 edits beyond. */
+    AUTO(org.opensearch.common.unit.Fuzziness.AUTO),
+
+    /** No edits: the value must equal the term. */
+    ZERO(org.opensearch.common.unit.Fuzziness.ZERO),
+
+    /** At most 1 edit. */
+    ONE(org.opensearch.common.unit.Fuzziness.ONE),
+
+    /** At most 2 edits. */
+    TWO(org.opensearch.common.unit.Fuzziness.TWO);
+
+    /** The OpenSearch fuzziness this stands for. */
+    private final org.opensearch.common.unit.Fuzziness openSearchFuzziness;
+
+    /**
+     * Instantiates a {@link Fuzziness}.
+     *
+     * @param openSearchFuzziness the OpenSearch fuzziness this stands for
+     */
+    Fuzziness(final org.opensearch.common.unit.Fuzziness openSearchFuzziness) {
+      this.openSearchFuzziness = openSearchFuzziness;
+    }
+
+    /**
+     * Returns the OpenSearch fuzziness this stands for, for building the fuzzy query.
+     *
+     * @return the OpenSearch fuzziness
+     */
+    public org.opensearch.common.unit.Fuzziness getOpenSearchFuzziness() {
+      return openSearchFuzziness;
+    }
+  }
 
   /** The term the value must approximately equal. */
   private String term;
@@ -88,7 +127,7 @@ public class Fuzzy implements ValueMatch {
   /* see superclass */
   @Override
   public QueryBuilder getQueryBuilder(final String field) {
-    return QueryBuilders.fuzzyQuery(field, term).fuzziness(fuzziness);
+    return QueryBuilders.fuzzyQuery(field, term).fuzziness(fuzziness.getOpenSearchFuzziness());
   }
 
   /* see superclass */

@@ -1,5 +1,9 @@
 package gov.nih.nci.evs.api.query;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.function.UnaryOperator;
 import org.opensearch.index.query.QueryBuilder;
 
@@ -11,6 +15,17 @@ import org.opensearch.index.query.QueryBuilder;
  * <p>Matches compare against the whole indexed value, so they are intended for keyword fields.
  * Against an analyzed text field they operate on individual lowercased tokens instead.
  */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonSubTypes({
+  @JsonSubTypes.Type(value = Exact.class, name = "Exact"),
+  @JsonSubTypes.Type(value = Contains.class, name = "Contains"),
+  @JsonSubTypes.Type(value = StartsWith.class, name = "StartsWith"),
+  @JsonSubTypes.Type(value = Fuzzy.class, name = "Fuzzy"),
+  @JsonSubTypes.Type(value = OneOf.class, name = "OneOf"),
+  @JsonSubTypes.Type(value = SearchAsYouType.class, name = "SearchAsYouType"),
+  @JsonSubTypes.Type(value = CaseInsensitive.class, name = "CaseInsensitive")
+})
+@JsonInclude(Include.NON_EMPTY)
 public interface ValueMatch {
 
   /**

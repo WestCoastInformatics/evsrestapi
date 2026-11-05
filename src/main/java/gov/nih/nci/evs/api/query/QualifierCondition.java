@@ -1,5 +1,9 @@
 package gov.nih.nci.evs.api.query;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
 import org.opensearch.data.core.OpenSearchOperations;
@@ -29,6 +33,14 @@ import org.opensearch.index.query.QueryBuilder;
  * it when a second entry-level scope needs logic, e.g. a synonym's source and type: these classes
  * then become {@code And<QualifierScope>} and so on.
  */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonSubTypes({
+  @JsonSubTypes.Type(value = PropertyQualifier.class, name = "PropertyQualifier"),
+  @JsonSubTypes.Type(value = AllQualifiers.class, name = "AllQualifiers"),
+  @JsonSubTypes.Type(value = AnyQualifier.class, name = "AnyQualifier"),
+  @JsonSubTypes.Type(value = NoQualifier.class, name = "NoQualifier")
+})
+@JsonInclude(Include.NON_EMPTY)
 public interface QualifierCondition {
 
   /**

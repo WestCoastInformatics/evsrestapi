@@ -2,10 +2,10 @@ package gov.nih.nci.evs.api.query;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import gov.nih.nci.evs.api.query.Fuzzy.Fuzziness;
 import java.util.Set;
 import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
-import org.opensearch.common.unit.Fuzziness;
 
 /**
  * Tests {@link ValueMatch#getWithTermsMapped}: each match maps its terms and keeps its kind and any

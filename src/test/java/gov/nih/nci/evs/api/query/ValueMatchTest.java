@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import gov.nih.nci.evs.api.model.Terminology;
+import gov.nih.nci.evs.api.query.Fuzzy.Fuzziness;
 import gov.nih.nci.evs.api.service.OpensearchOperationsService;
 import java.util.List;
 import java.util.Set;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.opensearch.common.unit.Fuzziness;
 import org.opensearch.data.client.orhlc.NativeSearchQuery;
 import org.opensearch.data.client.orhlc.NativeSearchQueryBuilder;
 import org.opensearch.data.core.OpenSearchOperations;
