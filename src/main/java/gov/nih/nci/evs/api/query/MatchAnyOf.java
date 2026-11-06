@@ -18,7 +18,7 @@ import org.opensearch.index.query.QueryBuilders;
  *
  * <p>OpenSearch accepts at most {@value #MAX_VALUES} values in one {@code terms} query by default,
  * so the constructor rejects larger sets. Callers that build the set from other concepts (see
- * {@link HierarchyQuery#fetchTargetCodes}) check the size first to report a clearer error.
+ * {@link HasHierarchyRelative#fetchTargetCodes}) check the size first to report a clearer error.
  */
 class MatchAnyOf extends EvsQuery {
 

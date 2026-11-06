@@ -9,7 +9,7 @@ import org.opensearch.index.query.QueryBuilder;
 
 /**
  * Matches concepts strictly above any target concept, in the same terminology version: the upward
- * counterpart of {@link DescendantOf}. A target is a concept whose name or code matches the {@link
+ * counterpart of {@link HasAncestor}. A target is a concept whose name or code matches the {@link
  * ValueMatch}. For example, everything above Breast Carcinoma, or the parents of any concept named
  * "... Melanoma".
  *
@@ -21,11 +21,12 @@ import org.opensearch.index.query.QueryBuilder;
  * shortest, so a concept that is a direct parent of X on one path and further up on another counts
  * as 1. The {@code descendants} entries can't answer that yet (their levels aren't tied to their
  * codes, and aren't the shortest distance), so the target codes are looked up first (see {@link
- * HierarchyQuery#fetchTargetCodes}) and the ancestors come from the targets' stored paths to root.
+ * HasHierarchyRelative#fetchTargetCodes}) and the ancestors come from the targets' stored paths to
+ * root.
  *
- * @see AncestorOrSelfOf
+ * @see HasDescendantOrIs
  */
-public class AncestorOf extends HierarchyQuery {
+public class HasDescendant extends HasHierarchyRelative {
 
   /** Field holding a descendant's name, on each of the concept's descendants. Analyzed text. */
   private static final String DESCENDANT_NAME_FIELD = "descendants.name";
@@ -33,48 +34,48 @@ public class AncestorOf extends HierarchyQuery {
   /** Field holding a descendant's code, on each of the concept's descendants. */
   private static final String DESCENDANT_CODE_FIELD = "descendants.code";
 
-  /** Instantiates an empty {@link AncestorOf}. */
-  public AncestorOf() {
+  /** Instantiates an empty {@link HasDescendant}. */
+  public HasDescendant() {
     // n/a
   }
 
   /**
-   * Instantiates an {@link AncestorOf} for everything above the target concepts.
+   * Instantiates an {@link HasDescendant} for everything above the target concepts.
    *
    * @param target how the target concepts' name or code must match
    */
-  public AncestorOf(final ValueMatch target) {
+  public HasDescendant(final ValueMatch target) {
     super(target, ANY_LEVEL);
   }
 
   /**
-   * Instantiates an {@link AncestorOf} for concepts within {@code maxLevel} levels above the target
-   * concepts.
+   * Instantiates an {@link HasDescendant} for concepts within {@code maxLevel} levels above the
+   * target concepts.
    *
    * @param target how the target concepts' name or code must match
    * @param maxLevel the maximum distance above the targets, at least 1
    */
-  public AncestorOf(final ValueMatch target, final int maxLevel) {
+  public HasDescendant(final ValueMatch target, final int maxLevel) {
     super(target, maxLevel);
   }
 
   /**
-   * Instantiates an {@link AncestorOf} for everything above one concept.
+   * Instantiates an {@link HasDescendant} for everything above one concept.
    *
    * @param code the target concept's code
    */
-  public AncestorOf(final String code) {
+  public HasDescendant(final String code) {
     this(new Exact(Objects.requireNonNull(code, "code")));
   }
 
   /**
-   * Instantiates an {@link AncestorOf} for concepts within {@code maxLevel} levels above one
+   * Instantiates an {@link HasDescendant} for concepts within {@code maxLevel} levels above one
    * concept.
    *
    * @param code the target concept's code
    * @param maxLevel the maximum distance above the target, at least 1
    */
-  public AncestorOf(final String code, final int maxLevel) {
+  public HasDescendant(final String code, final int maxLevel) {
     this(new Exact(Objects.requireNonNull(code, "code")), maxLevel);
   }
 

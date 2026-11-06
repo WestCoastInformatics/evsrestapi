@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gov.nih.nci.evs.api.query.Boost;
-import gov.nih.nci.evs.api.query.DescendantOf;
 import gov.nih.nci.evs.api.query.EvsQuery;
 import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasAncestor;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -19,7 +19,7 @@ public class BoostEndpointTest extends AbstractQueryEndpointTest {
   private static final String BOOSTED_CHILDREN_OF_BREAST_QUERY =
       """
       {"type": "Boost", "score": 2.0, "child":
-        {"type": "DescendantOf",
+        {"type": "HasAncestor",
          "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}}
       """;
 
@@ -70,7 +70,7 @@ public class BoostEndpointTest extends AbstractQueryEndpointTest {
   public void testBoostSerializesToExpectedJson() throws Exception {
     final float score = 2.0f;
     final EvsQuery boostedChildrenOfBreast =
-        new Boost(new DescendantOf(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL), score);
+        new Boost(new HasAncestor(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL), score);
 
     assertSerializesTo(boostedChildrenOfBreast, BOOSTED_CHILDREN_OF_BREAST_QUERY);
   }

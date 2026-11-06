@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gov.nih.nci.evs.api.query.And;
-import gov.nih.nci.evs.api.query.DescendantOf;
 import gov.nih.nci.evs.api.query.EvsQuery;
 import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasAncestor;
 import gov.nih.nci.evs.api.query.HasSynonym;
 import gov.nih.nci.evs.api.query.StartsWith;
 import java.util.List;
@@ -22,7 +22,7 @@ public class AndEndpointTest extends AbstractQueryEndpointTest {
   private static final String LEFT_CHILD_OF_BREAST_QUERY =
       """
       {"type": "And", "children": [
-        {"type": "DescendantOf",
+        {"type": "HasAncestor",
          "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
         {"type": "HasSynonym",
          "name": {"type": "StartsWith", "term": "left"}}]}
@@ -77,7 +77,7 @@ public class AndEndpointTest extends AbstractQueryEndpointTest {
     final EvsQuery leftChildOfBreast =
         new And(
             List.of(
-                new DescendantOf(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL),
+                new HasAncestor(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL),
                 new HasSynonym(new StartsWith("left"))));
 
     assertSerializesTo(leftChildOfBreast, LEFT_CHILD_OF_BREAST_QUERY);

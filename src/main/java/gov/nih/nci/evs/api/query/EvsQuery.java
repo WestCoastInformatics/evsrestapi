@@ -41,10 +41,10 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
   @JsonSubTypes.Type(value = HasSynonym.class, name = "HasSynonym"),
   @JsonSubTypes.Type(value = InSubset.class, name = "InSubset"),
   @JsonSubTypes.Type(value = Typeahead.class, name = "Typeahead"),
-  @JsonSubTypes.Type(value = DescendantOf.class, name = "DescendantOf"),
-  @JsonSubTypes.Type(value = DescendantOrSelfOf.class, name = "DescendantOrSelfOf"),
-  @JsonSubTypes.Type(value = AncestorOf.class, name = "AncestorOf"),
-  @JsonSubTypes.Type(value = AncestorOrSelfOf.class, name = "AncestorOrSelfOf"),
+  @JsonSubTypes.Type(value = HasAncestor.class, name = "HasAncestor"),
+  @JsonSubTypes.Type(value = HasAncestorOrIs.class, name = "HasAncestorOrIs"),
+  @JsonSubTypes.Type(value = HasDescendant.class, name = "HasDescendant"),
+  @JsonSubTypes.Type(value = HasDescendantOrIs.class, name = "HasDescendantOrIs"),
   @JsonSubTypes.Type(value = HasRole.class, name = "HasRole"),
   @JsonSubTypes.Type(value = HasInverseRole.class, name = "HasInverseRole"),
   @JsonSubTypes.Type(value = HasAssociation.class, name = "HasAssociation"),
@@ -55,7 +55,7 @@ public abstract class EvsQuery {
 
   /**
    * Returns the OpenSearch query for this node. A hierarchy node may look up its target concepts'
-   * codes first (see {@link HierarchyQuery#fetchTargetCodes}), which is why this may go to
+   * codes first (see {@link HasHierarchyRelative#fetchTargetCodes}), which is why this may go to
    * OpenSearch.
    *
    * <p>Most nodes ignore {@code operations}, and only pass {@code terminologies} on to their
@@ -79,7 +79,7 @@ public abstract class EvsQuery {
    * // Stub search(...) to return a page holding the target codes
    * when(operations.search(any(), eq(Concept.class), any())).thenReturn(skinAndLungHits);
    *
-   * final DescendantOf query = new DescendantOf(new OneOf(Set.of("C12470", "C12468")));
+   * final HasAncestor query = new HasAncestor(new OneOf(Set.of("C12470", "C12468")));
    * final QueryBuilder builder = query.fetchOpenSearchQuery(operations, terminologies);
    * // builder now matches concepts below Skin or Lung
    * }</pre>

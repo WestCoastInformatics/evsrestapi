@@ -594,7 +594,7 @@ public class SearchController extends BaseController {
       description =
           "Runs a query tree sent as JSON against the requested terminologies (NCI Thesaurus by"
               + " default) and returns the concepts it matches. Each node names its kind in a"
-              + " \"type\" property, e.g. And, Or, Not, DescendantOf, HasProperty, HasSynonym, and"
+              + " \"type\" property, e.g. And, Or, Not, HasAncestor, HasProperty, HasSynonym, and"
               + " each value match does too, e.g. Exact, StartsWith, Contains. Returns only the"
               + " first page, and the total counts matches only up to 10,000.")
   @ApiResponses({
@@ -662,7 +662,7 @@ public class SearchController extends BaseController {
               examples =
                   @ExampleObject(
                       value =
-                          "{\"type\": \"DescendantOf\", \"target\": {\"type\":"
+                          "{\"type\": \"HasAncestor\", \"target\": {\"type\":"
                               + " \"Exact\", \"term\": \"C3262\"}, \"maxLevel\": 1}")))
   @RecordMetric
   @PostMapping(

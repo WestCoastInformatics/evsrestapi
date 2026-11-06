@@ -3,45 +3,45 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import gov.nih.nci.evs.api.query.DescendantOrSelfOf;
 import gov.nih.nci.evs.api.query.Exact;
+import gov.nih.nci.evs.api.query.HasAncestorOrIs;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests the DescendantOrSelfOf node, which matches a target concept and its descendants, through
- * the query endpoint.
+ * Tests the HasAncestorOrIs node, which matches a target concept and its descendants, through the
+ * query endpoint.
  */
-public class DescendantOrSelfOfEndpointTest extends AbstractQueryEndpointTest {
+public class HasAncestorOrIsEndpointTest extends AbstractQueryEndpointTest {
 
   /** Breast and its descendants at most one level down, which are its children. */
   private static final String BREAST_AND_CHILDREN_QUERY =
       """
-      {"type": "DescendantOrSelfOf",
+      {"type": "HasAncestorOrIs",
        "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}
       """;
 
   /**
-   * Test DescendantOrSelfOf with a max level of 1 returns the target and its children.
+   * Test HasAncestorOrIs with a max level of 1 returns the target and its children.
    *
    * @throws Exception the exception
    */
   @Test
-  public void testDescendantOrSelfOfReturnsTargetAndChildren() throws Exception {
+  public void testHasAncestorOrIsReturnsTargetAndChildren() throws Exception {
     assertThat(fetchCodes(BREAST_AND_CHILDREN_QUERY))
         .containsExactlyInAnyOrderElementsOf(getWithBreast(BREAST_CHILDREN));
   }
 
   /**
-   * Test DescendantOrSelfOf with a misspelled node type (DescendantOrSelf) is rejected as a bad
+   * Test HasAncestorOrIs with a misspelled node type (HasAncestorOrSelf) is rejected as a bad
    * request.
    *
    * @throws Exception the exception
    */
   @Test
-  public void testDescendantOrSelfOfWithMisspelledNodeTypeReturnsBadRequest() throws Exception {
+  public void testHasAncestorOrIsWithMisspelledNodeTypeReturnsBadRequest() throws Exception {
     final String misspelledNodeTypeQuery =
         """
-        {"type": "DescendantOrSelf",
+        {"type": "HasAncestorOrSelf",
          "target": {"type": "Exact", "term": "C12971"}}
         """;
 
@@ -49,24 +49,24 @@ public class DescendantOrSelfOfEndpointTest extends AbstractQueryEndpointTest {
   }
 
   /**
-   * Test DescendantOrSelfOf round trips through Jackson unchanged.
+   * Test HasAncestorOrIs round trips through Jackson unchanged.
    *
    * @throws Exception the exception
    */
   @Test
-  public void testDescendantOrSelfOfRoundTripsUnchanged() throws Exception {
+  public void testHasAncestorOrIsRoundTripsUnchanged() throws Exception {
     assertRoundTripsUnchanged(BREAST_AND_CHILDREN_QUERY);
   }
 
   /**
-   * Test DescendantOrSelfOf serializes to the expected JSON, the wire format clients use.
+   * Test HasAncestorOrIs serializes to the expected JSON, the wire format clients use.
    *
    * @throws Exception the exception
    */
   @Test
-  public void testDescendantOrSelfOfSerializesToExpectedJson() throws Exception {
-    final DescendantOrSelfOf breastAndChildren =
-        new DescendantOrSelfOf(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL);
+  public void testHasAncestorOrIsSerializesToExpectedJson() throws Exception {
+    final HasAncestorOrIs breastAndChildren =
+        new HasAncestorOrIs(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL);
 
     assertSerializesTo(breastAndChildren, BREAST_AND_CHILDREN_QUERY);
   }

@@ -14,7 +14,7 @@ queries, and how to add a new node.
   holds only `ValueMatch`es on fields stored on the concept, e.g. a relationship's
   `target`. Don't add nodes that nest queries.
 - The hierarchy nodes call the target "target", not "anchor". They look up target codes first
-  (`HierarchyQuery.fetchTargetCodes`) only until ancestors and descendants are reindexed as nested
+  (`HasHierarchyRelative.fetchTargetCodes`) only until ancestors and descendants are reindexed as nested
   entries. Don't add other searches that run before the main query.
 - `StoredPaths` and `StoredHierarchyFallback` belong to the reindexing work; leave them as they are.
 
@@ -37,4 +37,4 @@ queries, and how to add a new node.
 ## Tests
 
 - `ValueMatchTest`, `HasRoleTest`, and `HasAssociationTest` run against OpenSearch on port 9201.
-- `HierarchyQueryTargetCodesTest` uses a mocked `OpenSearchOperations` and needs no services.
+- `HasHierarchyRelativeTargetCodesTest` uses a mocked `OpenSearchOperations` and needs no services.

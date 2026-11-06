@@ -27,7 +27,7 @@ import org.opensearch.index.query.QueryBuilder;
  * {@code Not} could instead be generic over the scope a condition is evaluated in, e.g. {@code
  * Condition<ConceptScope>} for concept queries and {@code Condition<QualifierScope>} for this, so
  * one {@code And<S>} serves both and the type parameter still stops a concept query (e.g. {@code
- * DescendantOf}) from being put inside a qualifier condition. It wasn't chosen yet because {@link
+ * HasAncestor}) from being put inside a qualifier condition. It wasn't chosen yet because {@link
  * EvsQuery} also owns the index coordinates and dependency queries, so making the logical nodes
  * generic means refactoring every node, on top of logical nodes that are still exploratory. Revisit
  * it when a second entry-level scope needs logic, e.g. a synonym's source and type: these classes

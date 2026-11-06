@@ -165,19 +165,19 @@ classDiagram
         +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) TermsQueryBuilder
     }
 
-    class HierarchyQuery {
+    class HasHierarchyRelative {
         <<abstract>>
         -ValueMatch target
         -Integer maxLevel
         #fetchTargetCodes(OpenSearchOperations, Terminology) Set~String~
         #fetchRelativesQuery(OpenSearchOperations, Terminology, Set~String~)* QueryBuilder
     }
-    class DescendantOf
-    class DescendantOrSelfOf {
+    class HasAncestor
+    class HasAncestorOrIs {
         +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
     }
-    class AncestorOf
-    class AncestorOrSelfOf {
+    class HasDescendant
+    class HasDescendantOrIs {
         +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
     }
 
@@ -220,12 +220,12 @@ classDiagram
     SupportsIgnoringCase <|.. StartsWith
     CaseInsensitive o-- SupportsIgnoringCase : wraps
     EvsQuery <|-- MatchAnyOf
-    EvsQuery <|-- HierarchyQuery
-    HierarchyQuery <|-- DescendantOf
-    HierarchyQuery <|-- AncestorOf
-    DescendantOf <|-- DescendantOrSelfOf
-    AncestorOf <|-- AncestorOrSelfOf
-    HierarchyQuery o-- ValueMatch : target
+    EvsQuery <|-- HasHierarchyRelative
+    HasHierarchyRelative <|-- HasAncestor
+    HasHierarchyRelative <|-- HasDescendant
+    HasAncestor <|-- HasAncestorOrIs
+    HasDescendant <|-- HasDescendantOrIs
+    HasHierarchyRelative o-- ValueMatch : target
 ```
 
 | Class | Role |
@@ -242,11 +242,11 @@ classDiagram
 | `QualifierCondition` | A condition on one property entry's qualifiers, checked inside `HasProperty`'s nested query on that entry. `AllQualifiers`, `AnyQualifier`, and `NoQualifier` combine conditions (`bool` `must`, `should`, `must_not`). They're separate from the concept-level `And`/`Or`/`Not`, which combine sets of concepts and so can't keep qualifiers on one entry; the Javadoc explains the choice and the generic alternative. |
 | `PropertyQualifier` | The leaf `QualifierCondition`: a qualifier a `HasProperty` property must have, a type name or code, optionally with a matching value, on one qualifier entry of that same property. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
 | `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `FieldMatch` with `Exact`. Overlaps `OneOf`; kept as is from the hierarchy branch. Rejects more than 65,536 values, OpenSearch's default limit. |
-| `HierarchyQuery` | Base type for hierarchy nodes. The targets are the concepts whose name or code matches `target`. When the concept's own fields can't answer the query yet, it looks up the target codes first (`fetchTargetCodes`), then, for each terminology version, matches the targets' relatives only in that terminology's index (see [Hierarchy queries](#hierarchy-queries)). Handles `maxLevel` (shortest distance, at least 1). Subclasses implement `fetchRelativesQuery`. |
-| `DescendantOf` | Matches concepts strictly below the targets, optionally within `maxLevel` levels. `ancestors` holds codes only, so it always looks up the target codes first. Terminologies with `ancestors`/`ancestorDepths` then match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
-| `DescendantOrSelfOf` | `DescendantOf` that also matches the targets themselves (distance 0): it ORs `DescendantOf`'s query with a match on the concept's own name or code. |
-| `AncestorOf` | The upward counterpart: matches concepts strictly above the targets, optionally within `maxLevel` levels. Without `maxLevel` it's one query on the concept's stored `descendants` names and codes. With `maxLevel` it looks up the target codes and reads their stored paths to root (`StoredPaths`). |
-| `AncestorOrSelfOf` | `AncestorOf` that also matches the targets themselves, the same way as `DescendantOrSelfOf`. |
+| `HasHierarchyRelative` | Base type for hierarchy nodes. The targets are the concepts whose name or code matches `target`. When the concept's own fields can't answer the query yet, it looks up the target codes first (`fetchTargetCodes`), then, for each terminology version, matches the targets' relatives only in that terminology's index (see [Hierarchy queries](#hierarchy-queries)). Handles `maxLevel` (shortest distance, at least 1). Subclasses implement `fetchRelativesQuery`. |
+| `HasAncestor` | Matches concepts strictly below the targets, optionally within `maxLevel` levels. `ancestors` holds codes only, so it always looks up the target codes first. Terminologies with `ancestors`/`ancestorDepths` then match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
+| `HasAncestorOrIs` | `HasAncestor` that also matches the targets themselves (distance 0): it ORs `HasAncestor`'s query with a match on the concept's own name or code. |
+| `HasDescendant` | The upward counterpart: matches concepts strictly above the targets, optionally within `maxLevel` levels. Without `maxLevel` it's one query on the concept's stored `descendants` names and codes. With `maxLevel` it looks up the target codes and reads their stored paths to root (`StoredPaths`). |
+| `HasDescendantOrIs` | `HasDescendant` that also matches the targets themselves, the same way as `HasAncestorOrIs`. |
 | `RawBoolQueries` | The raw `bool` combining helpers (`getAllOfQuery`, `getAnyOfQuery`, `getMatchNothingQuery`) used until the logical operator nodes land; each maps onto `And`, `Or`, or `Not`. |
 | `And`, `Or`, `Not`, `Boost` | Logical queries. They hold child `EvsQuery` nodes instead of a field and a match. See [Logical queries](#logical-queries). Exploratory on this branch: merged from `eas/logical-operators`, tested only by `LogicalQueryTest` and the subset lessons. |
 | `Typeahead` | The query behind `/concept/typeahead`. Builds `FieldMatch`es: preferred names with `SearchAsYouType` (on `name.search_as_you_type`), and codes case sensitively with `Exact` (whole code) and `StartsWith` (partial code) on `code`, leaving out concepts with `active: false`, and overrides `getSorts()` to sort matches into tiers (a whole typed code, then name matches, then code-only matches) and rank general concepts with short names first within a tier. It ranks on the `descendantCount` field stored at load time, falling back to counting `descendants.leaf` on indexes loaded before that field existed. The count is the size of the stored `descendants`, so the SNOMED root (`138875005`), whose descendants the loader skips, has a count of 0 and ranks like a leaf. `Typeahead.getHasWordsToComplete(term)` says whether a term has anything to complete; the constructor rejects terms that don't. The endpoint's `total` stops at 10,000 (OpenSearch's default count limit): typeahead doesn't page, so unlike search it doesn't run a second query for the exact count. `SearchControllerTests.testTypeaheadTotalCapsAtCountedHitLimit` pins this. Highlighting is optional: the endpoint takes an `include` parameter like search (default `minimal`). With `include=minimal,highlights`, `fetchConcepts` asks OpenSearch to highlight the matched fields, and the endpoint returns OpenSearch's highlight of each suggestion's name (or of its code, if only the code matched). OpenSearch marks whole words: `lung ca` gives `<em>Lung</em> <em>Carcinoma</em>`. Typeahead overrides `getHighlightFields()` to highlight the main `name` field with a `match_bool_prefix` highlight query, because highlighting the `search_as_you_type` subfield it matched never marks the partial last word (and `*` doesn't reach subfields at all). `TypeaheadTest` lesson 10, `SearchControllerTests.testTypeaheadNameMatchHighlightsTypedWords`, `...testTypeaheadCodeMatchHighlightsCode`, `...testTypeaheadEndpointDefaultIncludeReturnsNoHighlights`, and `...testTypeaheadEndpointHighlightsIncludeReturnsHighlights` pin this. |
@@ -396,13 +396,13 @@ one query and pass its codes back as `OneOf`.
 ## Hierarchy queries
 
 The hierarchy nodes take a `ValueMatch` on the target concepts' name or code, not an inner query.
-Some cases can't be answered from the concept's own fields yet, so `HierarchyQuery.fetchTargetCodes`
+Some cases can't be answered from the concept's own fields yet, so `HasHierarchyRelative.fetchTargetCodes`
 looks the target codes up first, one terminology at a time:
 
 | Node | Without `maxLevel` | With `maxLevel` |
 |---|---|---|
-| `DescendantOf` | looks up target codes, then `ancestors` (or `StoredHierarchyFallback` on older indexes) | looks up target codes, then `ancestorDepths` tokens |
-| `AncestorOf` | one query on `descendants.name` / `descendants.code` | looks up target codes, then `StoredPaths` |
+| `HasAncestor` | looks up target codes, then `ancestors` (or `StoredHierarchyFallback` on older indexes) | looks up target codes, then `ancestorDepths` tokens |
+| `HasDescendant` | one query on `descendants.name` / `descendants.code` | looks up target codes, then `StoredPaths` |
 
 `ancestors` holds codes only, so a name match needs the lookup. `descendants` entries hold names
 and codes, but they're mapped as `object`, so an entry's level isn't tied to its code, and the level
@@ -421,11 +421,11 @@ entries.
 A static lookup hides which nodes search and makes tests change global state; injecting
 `operations` at construction means every tree containing a search needs it just to be built.
 Taking it in `fetchOpenSearchQuery` keeps trees plain data, and lets unit tests pass a mock (see
-`HierarchyQueryTargetCodesTest`).
+`HasHierarchyRelativeTargetCodesTest`).
 
 The terminologies are passed the same way, as their own parameter. Most nodes only hand them to
 their children; the nodes that read them are `fetchConcepts` (which searches their indexes),
-`HierarchyQuery` (which looks up targets and matches each terminology's relatives in that
+`HasHierarchyRelative` (which looks up targets and matches each terminology's relatives in that
 terminology's index), and `InSubset` (which reads each terminology's
 `subsetMember` metadata). So the same tree can run against any terminologies, and a node can run a
 child against different ones.

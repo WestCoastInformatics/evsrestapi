@@ -23,10 +23,10 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 
 /**
- * Base type for nodes that match concepts related through the hierarchy to the target concepts:
- * {@link DescendantOf} below them, {@link AncestorOf} above them. The targets are the concepts
- * whose name or code matches {@code target}, a {@link ValueMatch}, so these don't nest other
- * queries.
+ * Base type for nodes that match concepts with a hierarchy relative among the target concepts:
+ * {@link HasAncestor} (concepts below a target), {@link HasDescendant} (concepts above a target).
+ * The targets are the concepts whose name or code matches {@code target}, a {@link ValueMatch}, so
+ * these don't nest other queries.
  *
  * <p>Some cases can't be answered from the concept's own fields yet, and look up the target codes
  * first ({@link #fetchTargetCodes}). Codes are only unique within one terminology version, and each
@@ -39,7 +39,7 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
  * <p>An optional {@code maxLevel} limits how many levels away relatives may be, by shortest
  * distance: 1 means direct children (or parents).
  */
-public abstract class HierarchyQuery extends EvsQuery {
+public abstract class HasHierarchyRelative extends EvsQuery {
 
   /** Field holding a document's identifier, which is the concept code. */
   private static final String ID_FIELD = "_id";
@@ -84,18 +84,18 @@ public abstract class HierarchyQuery extends EvsQuery {
   /** The maximum distance from the targets, or null for any distance. */
   private Integer maxLevel;
 
-  /** Instantiates an empty {@link HierarchyQuery}. */
-  protected HierarchyQuery() {
+  /** Instantiates an empty {@link HasHierarchyRelative}. */
+  protected HasHierarchyRelative() {
     // n/a
   }
 
   /**
-   * Instantiates a {@link HierarchyQuery}.
+   * Instantiates a {@link HasHierarchyRelative}.
    *
    * @param target how the target concepts' name or code must match
    * @param maxLevel the maximum distance from the targets, at least 1, or null for any distance
    */
-  protected HierarchyQuery(final ValueMatch target, final Integer maxLevel) {
+  protected HasHierarchyRelative(final ValueMatch target, final Integer maxLevel) {
     this.target = Objects.requireNonNull(target, "target");
 
     final boolean hasInvalidMaxLevel = maxLevel != null && maxLevel < MIN_MAX_LEVEL;
@@ -180,7 +180,7 @@ public abstract class HierarchyQuery extends EvsQuery {
   }
 
   /**
-   * Returns the condition matching the targets themselves, for the "or self" subclasses: concepts
+   * Returns the condition matching the targets themselves, for the "or is" subclasses: concepts
    * whose own name or code matches.
    *
    * @param operations the OpenSearch operations

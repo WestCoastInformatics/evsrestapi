@@ -45,9 +45,9 @@ import org.springframework.data.elasticsearch.core.query.Query;
  *
  * <p>No OpenSearch or Spring: a mocked {@link OpenSearchOperations} returns made-up concepts. That
  * makes it cheap to return tens of thousands of descendants or ancestors, which {@link
- * HierarchyQueryTest} can't index.
+ * HasHierarchyRelativeTest} can't index.
  */
-public class HierarchyQueryLimitsTest {
+public class HasHierarchyRelativeLimitsTest {
 
   /** Index name of the made-up terminology. */
   private static final String INDEX_NAME = "concept_limits_test";
@@ -143,7 +143,7 @@ public class HierarchyQueryLimitsTest {
   /** Suffix of the made-up parent of each anchor. */
   private static final String PARENT_SUFFIX = "-parent";
 
-  /** A terminology indexed without ancestor fields, so {@link DescendantOf} uses the fallback. */
+  /** A terminology indexed without ancestor fields, so {@link HasAncestor} uses the fallback. */
   private Terminology terminology;
 
   /** The terminology searched, as a list. */
@@ -186,12 +186,12 @@ public class HierarchyQueryLimitsTest {
   public void testDepthTokensForOneTargetGivesOneTokenPerDepth() {
     final List<String> expectedTokens =
         List.of(
-            DEPTH_TARGET_CODE + DescendantOf.DEPTH_SEPARATOR + 1,
-            DEPTH_TARGET_CODE + DescendantOf.DEPTH_SEPARATOR + 2);
+            DEPTH_TARGET_CODE + HasAncestor.DEPTH_SEPARATOR + 1,
+            DEPTH_TARGET_CODE + HasAncestor.DEPTH_SEPARATOR + 2);
 
     assertEquals(
         expectedTokens,
-        DescendantOf.getDepthTokens(List.of(DEPTH_TARGET_CODE), ONE_TARGET_MAX_LEVEL));
+        HasAncestor.getDepthTokens(List.of(DEPTH_TARGET_CODE), ONE_TARGET_MAX_LEVEL));
   }
 
   /** Depth tokens that exactly reach the limit are accepted. */
@@ -201,7 +201,7 @@ public class HierarchyQueryLimitsTest {
 
     assertEquals(
         MatchAnyOf.MAX_VALUES,
-        DescendantOf.getDepthTokens(getCodes(targetsAtLimit), LEVELS_AT_LIMIT).size());
+        HasAncestor.getDepthTokens(getCodes(targetsAtLimit), LEVELS_AT_LIMIT).size());
   }
 
   /** Too many targets for the limit, even at a max level of one, throws an error. */
@@ -209,7 +209,7 @@ public class HierarchyQueryLimitsTest {
   public void testDepthTokensWithTooManyTargetsThrowsError() {
     assertThrows(
         IllegalArgumentException.class,
-        () -> DescendantOf.getDepthTokens(getCodes(TARGETS_OVER_LIMIT), ONE_LEVEL));
+        () -> HasAncestor.getDepthTokens(getCodes(TARGETS_OVER_LIMIT), ONE_LEVEL));
   }
 
   /** Targets times max level over the limit throws an error naming the max level. */
@@ -218,45 +218,45 @@ public class HierarchyQueryLimitsTest {
     final IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> DescendantOf.getDepthTokens(getCodes(TARGETS_UNDER_LIMIT), LEVELS_OVER_LIMIT));
+            () -> HasAncestor.getDepthTokens(getCodes(TARGETS_UNDER_LIMIT), LEVELS_OVER_LIMIT));
 
     assertTrue(e.getMessage().contains(MAX_LEVEL_MESSAGE), e.getMessage());
   }
 
-  /** A null target match on DescendantOf throws an error naming target. */
+  /** A null target match on HasAncestor throws an error naming target. */
   @Test
-  public void testDescendantOfWithNullTargetMatchThrowsErrorNamingTargetMatch() {
+  public void testHasAncestorWithNullTargetMatchThrowsErrorNamingTargetMatch() {
     final NullPointerException e =
-        assertThrows(NullPointerException.class, () -> new DescendantOf((ValueMatch) null));
+        assertThrows(NullPointerException.class, () -> new HasAncestor((ValueMatch) null));
 
     assertEquals(TARGET_MATCH_ARGUMENT, e.getMessage());
   }
 
-  /** A null target match on AncestorOrSelfOf throws an error naming target. */
+  /** A null target match on HasDescendantOrIs throws an error naming target. */
   @Test
-  public void testAncestorOrSelfOfWithNullTargetMatchThrowsErrorNamingTargetMatch() {
+  public void testHasDescendantOrIsWithNullTargetMatchThrowsErrorNamingTargetMatch() {
     final NullPointerException e =
         assertThrows(
-            NullPointerException.class, () -> new AncestorOrSelfOf((ValueMatch) null, ONE_LEVEL));
+            NullPointerException.class, () -> new HasDescendantOrIs((ValueMatch) null, ONE_LEVEL));
 
     assertEquals(TARGET_MATCH_ARGUMENT, e.getMessage());
   }
 
-  /** A null code on AncestorOf throws an error naming code. */
+  /** A null code on HasDescendant throws an error naming code. */
   @Test
-  public void testAncestorOfWithNullCodeThrowsErrorNamingCode() {
+  public void testHasDescendantWithNullCodeThrowsErrorNamingCode() {
     final NullPointerException e =
-        assertThrows(NullPointerException.class, () -> new AncestorOf((String) null));
+        assertThrows(NullPointerException.class, () -> new HasDescendant((String) null));
 
     assertEquals(CODE_ARGUMENT, e.getMessage());
   }
 
-  /** A null code on DescendantOrSelfOf throws an error naming code. */
+  /** A null code on HasAncestorOrIs throws an error naming code. */
   @Test
-  public void testDescendantOrSelfOfWithNullCodeThrowsErrorNamingCode() {
+  public void testHasAncestorOrIsWithNullCodeThrowsErrorNamingCode() {
     final NullPointerException e =
         assertThrows(
-            NullPointerException.class, () -> new DescendantOrSelfOf((String) null, ONE_LEVEL));
+            NullPointerException.class, () -> new HasAncestorOrIs((String) null, ONE_LEVEL));
 
     assertEquals(CODE_ARGUMENT, e.getMessage());
   }
@@ -278,7 +278,7 @@ public class HierarchyQueryLimitsTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                new DescendantOf(DESCENDANT_TARGET_CODE)
+                new HasAncestor(DESCENDANT_TARGET_CODE)
                     .fetchOpenSearchQuery(operations, terminologies));
 
     assertTrue(e.getMessage().contains(REINDEX_MESSAGE), e.getMessage());
@@ -297,24 +297,24 @@ public class HierarchyQueryLimitsTest {
     assertThrows(
         IllegalArgumentException.class,
         () ->
-            new DescendantOf(DESCENDANT_TARGET_CODE, ONE_LEVEL)
+            new HasAncestor(DESCENDANT_TARGET_CODE, ONE_LEVEL)
                 .fetchOpenSearchQuery(operations, terminologies));
   }
 
   /**
-   * A level-limited AncestorOf whose target has more ancestors within the limit than fit in one
-   * query throws an error. Without a limit, AncestorOf matches on the stored descendants and reads
-   * no paths, so only a limited one can hit this.
+   * A level-limited HasDescendant whose target has more ancestors within the limit than fit in one
+   * query throws an error. Without a limit, HasDescendant matches on the stored descendants and
+   * reads no paths, so only a limited one can hit this.
    */
   @Test
-  public void testAncestorOfMaxLevelWithTooManyAncestorsThrowsErrorNamingTooManyAncestors() {
+  public void testHasDescendantMaxLevelWithTooManyAncestorsThrowsErrorNamingTooManyAncestors() {
     stubSearch(target -> getConceptWithAncestorCount(target, TOO_MANY));
 
     final IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                new AncestorOf(ANCESTOR_TARGET_CODE, LEVELS_REACHING_EVERY_ANCESTOR)
+                new HasDescendant(ANCESTOR_TARGET_CODE, LEVELS_REACHING_EVERY_ANCESTOR)
                     .fetchOpenSearchQuery(operations, terminologies));
 
     assertTrue(e.getMessage().contains(TOO_MANY_ANCESTORS_MESSAGE), e.getMessage());
@@ -394,8 +394,8 @@ public class HierarchyQueryLimitsTest {
 
   /**
    * Stubs the mock: a lookup by ids returns one concept per id, built by {@code byCode}; any other
-   * search (the target code lookup, {@link HierarchyQuery#fetchTargetCodes}) returns one page with
-   * the matched target.
+   * search (the target code lookup, {@link HasHierarchyRelative#fetchTargetCodes}) returns one page
+   * with the matched target.
    *
    * @param byCode builds the stored concept for a code
    */
