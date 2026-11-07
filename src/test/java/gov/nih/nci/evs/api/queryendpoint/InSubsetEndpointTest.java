@@ -3,7 +3,6 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.InSubset;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +12,7 @@ public class InSubsetEndpointTest extends AbstractQueryEndpointTest {
   /** The members of the subset whose only member is Breast Carcinoma. */
   private static final String BREAST_CARCINOMA_SUBSET_MEMBERS_QUERY =
       """
-      {"type": "InSubset", "subset": {"type": "Exact", "term": "C103042"}}
+      {"type": "InSubset", "subset": "C103042"}
       """;
 
   /**
@@ -59,8 +58,7 @@ public class InSubsetEndpointTest extends AbstractQueryEndpointTest {
    */
   @Test
   public void testInSubsetSerializesToExpectedJson() throws Exception {
-    final InSubset breastCarcinomaSubsetMembers =
-        new InSubset(new Exact(BREAST_CARCINOMA_ONLY_SUBSET));
+    final InSubset breastCarcinomaSubsetMembers = new InSubset(BREAST_CARCINOMA_ONLY_SUBSET);
 
     assertSerializesTo(breastCarcinomaSubsetMembers, BREAST_CARCINOMA_SUBSET_MEMBERS_QUERY);
   }

@@ -1,9 +1,7 @@
 package gov.nih.nci.evs.api.queryendpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasDescendant;
 import org.junit.jupiter.api.Test;
 
@@ -16,8 +14,7 @@ public class HasDescendantEndpointTest extends AbstractQueryEndpointTest {
   /** The query for the parent of Female Breast, with a max level of 1. */
   private static final String PARENT_OF_FEMALE_BREAST_QUERY =
       """
-      {"type": "HasDescendant",
-       "target": {"type": "Exact", "term": "C12851"}, "maxLevel": 1}
+      {"type": "HasDescendant", "target": "C12851", "maxLevel": 1}
       """;
 
   /**
@@ -28,22 +25,6 @@ public class HasDescendantEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasDescendantReturnsParent() throws Exception {
     assertThat(fetchCodes(PARENT_OF_FEMALE_BREAST_QUERY)).containsExactly(BREAST);
-  }
-
-  /**
-   * Test HasDescendant with the target given as a code, not a value match, is rejected as a bad
-   * request.
-   *
-   * @throws Exception the exception
-   */
-  @Test
-  public void testHasDescendantWithCodeAsTargetReturnsBadRequest() throws Exception {
-    final String codeAsTargetQuery =
-        """
-        {"type": "HasDescendant", "target": "C12851"}
-        """;
-
-    postQuery(codeAsTargetQuery).andExpect(status().isBadRequest());
   }
 
   /**
@@ -64,7 +45,7 @@ public class HasDescendantEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasDescendantSerializesToExpectedJson() throws Exception {
     final HasDescendant parentOfFemaleBreast =
-        new HasDescendant(new Exact(FEMALE_BREAST), DIRECT_RELATIVES_MAX_LEVEL);
+        new HasDescendant(FEMALE_BREAST, DIRECT_RELATIVES_MAX_LEVEL);
 
     assertSerializesTo(parentOfFemaleBreast, PARENT_OF_FEMALE_BREAST_QUERY);
   }

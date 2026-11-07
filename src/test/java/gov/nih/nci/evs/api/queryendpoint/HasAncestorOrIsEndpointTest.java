@@ -3,7 +3,6 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasAncestorOrIs;
 import org.junit.jupiter.api.Test;
 
@@ -16,8 +15,7 @@ public class HasAncestorOrIsEndpointTest extends AbstractQueryEndpointTest {
   /** Breast and its descendants at most one level down, which are its children. */
   private static final String BREAST_AND_CHILDREN_QUERY =
       """
-      {"type": "HasAncestorOrIs",
-       "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}
+      {"type": "HasAncestorOrIs", "target": "C12971", "maxLevel": 1}
       """;
 
   /**
@@ -41,8 +39,7 @@ public class HasAncestorOrIsEndpointTest extends AbstractQueryEndpointTest {
   public void testHasAncestorOrIsWithMisspelledNodeTypeReturnsBadRequest() throws Exception {
     final String misspelledNodeTypeQuery =
         """
-        {"type": "HasAncestorOrSelf",
-         "target": {"type": "Exact", "term": "C12971"}}
+        {"type": "HasAncestorOrSelf", "target": "C12971"}
         """;
 
     postQuery(misspelledNodeTypeQuery).andExpect(status().isBadRequest());
@@ -66,7 +63,7 @@ public class HasAncestorOrIsEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasAncestorOrIsSerializesToExpectedJson() throws Exception {
     final HasAncestorOrIs breastAndChildren =
-        new HasAncestorOrIs(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL);
+        new HasAncestorOrIs(BREAST, DIRECT_RELATIVES_MAX_LEVEL);
 
     assertSerializesTo(breastAndChildren, BREAST_AND_CHILDREN_QUERY);
   }

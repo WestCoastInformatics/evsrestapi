@@ -2,10 +2,12 @@ package gov.nih.nci.evs.api.query;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import gov.nih.nci.evs.api.model.Concept;
+import gov.nih.nci.evs.api.model.Property;
 import gov.nih.nci.evs.api.model.Terminology;
-import gov.nih.nci.evs.api.query.ValueMatchTest.IndexedName;
 import gov.nih.nci.evs.api.service.OpensearchOperationsService;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
@@ -31,8 +33,9 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  * A tutorial for the logical queries: {@link And}, {@link Or}, {@link Not}, and the {@link Boost}
  * wrapper. They combine other queries into one OpenSearch query.
  *
- * <p>Every lesson runs against a small index of names, stored in a keyword field like {@link
- * ValueMatchTest}'s, and checks which names came back, or in what order.
+ * <p>Every lesson runs against a small index of concepts, each with a neoplastic status, a cell
+ * origin, or both, combines {@link HasProperty} leaves, and checks which names came back, or in
+ * what order.
  */
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
@@ -42,18 +45,49 @@ public class LogicalQueryTest {
   /** A throwaway index used only by this tutorial. */
   private static final IndexCoordinates INDEX = IndexCoordinates.of("evs_logical_query_tutorial");
 
-  /** One page large enough to hold every indexed name. */
+  /** One page large enough to hold every indexed concept. */
   private static final Pageable ALL_NAMES = PageRequest.of(0, 100);
 
-  /** The keyword field every lesson searches. */
-  private static final String NAME_FIELD = "name";
+  /** The keyword field ranked ties are sorted by. Each concept's code is its name. */
+  private static final String CODE_FIELD = "code";
 
   /** Logical queries don't filter by terminology. */
   private static final List<Terminology> TERMINOLOGIES = List.of();
 
-  /** The names in the index. */
-  private static final List<String> INDEXED_NAMES =
-      List.of("Melanoma", "melanoma", "Malignant Melanoma", "Melanocyte", "Carcinoma", "NEVUS");
+  /** The property saying whether a concept is malignant or benign. */
+  private static final String NEOPLASTIC_STATUS = "Neoplastic_Status";
+
+  /** The property saying which kind of cell a concept comes from. */
+  private static final String CELL_ORIGIN = "Cell_Origin";
+
+  /** A {@link #NEOPLASTIC_STATUS} value. */
+  private static final String MALIGNANT = "Malignant";
+
+  /** A {@link #NEOPLASTIC_STATUS} value. */
+  private static final String BENIGN = "Benign";
+
+  /** A {@link #CELL_ORIGIN} value. */
+  private static final String MELANOCYTIC = "Melanocytic";
+
+  /** A {@link #CELL_ORIGIN} value. */
+  private static final String EPITHELIAL = "Epithelial";
+
+  /** The concepts in the index, by name, with their properties. Melanocyte has no status. */
+  private static final Map<String, List<Property>> PROPERTIES_BY_NAME =
+      Map.of(
+          "Melanoma",
+          List.of(
+              new Property(NEOPLASTIC_STATUS, MALIGNANT), new Property(CELL_ORIGIN, MELANOCYTIC)),
+          "Malignant Melanoma",
+          List.of(
+              new Property(NEOPLASTIC_STATUS, MALIGNANT), new Property(CELL_ORIGIN, MELANOCYTIC)),
+          "Melanocyte",
+          List.of(new Property(CELL_ORIGIN, MELANOCYTIC)),
+          "Carcinoma",
+          List.of(
+              new Property(NEOPLASTIC_STATUS, MALIGNANT), new Property(CELL_ORIGIN, EPITHELIAL)),
+          "Nevus",
+          List.of(new Property(NEOPLASTIC_STATUS, BENIGN), new Property(CELL_ORIGIN, MELANOCYTIC)));
 
   /** The project's OpenSearch wrapper, which selects the correct operations bean. */
   @Autowired private OpensearchOperationsService operationsService;
@@ -61,17 +95,19 @@ public class LogicalQueryTest {
   /** The OpenSearch operations, taken from {@link #operationsService}. */
   private OpenSearchOperations operations;
 
-  /** Creates the index and loads {@link #INDEXED_NAMES}. */
+  /** Creates the index and loads {@link #PROPERTIES_BY_NAME}. */
   @BeforeAll
   public void setUpIndex() {
     operations = operationsService.getOpenSearchOperations();
     final IndexOperations indexOperations = operations.indexOps(INDEX);
     indexOperations.delete();
     indexOperations.create();
-    indexOperations.putMapping(indexOperations.createMapping(IndexedName.class));
+    indexOperations.putMapping(indexOperations.createMapping(Concept.class));
 
-    final List<IndexedName> documents =
-        INDEXED_NAMES.stream().map(IndexedName::new).collect(Collectors.toList());
+    final List<Concept> documents =
+        PROPERTIES_BY_NAME.entrySet().stream()
+            .map(entry -> getConcept(entry.getKey(), entry.getValue()))
+            .collect(Collectors.toList());
     operations.save(documents, INDEX);
     indexOperations.refresh();
   }
@@ -86,14 +122,16 @@ public class LogicalQueryTest {
   // Lesson 1: And finds what every child finds.
   // ---------------------------------------------------------------------------------------------
 
-  /** Starts with "Mel" and contains "oma": "Melanocyte" starts with "Mel" but has no "oma". */
+  /** Malignant and melanocytic: Carcinoma is malignant but epithelial, Nevus is benign. */
   @Test
   public void testAndNeedsEveryChild() {
     final EvsQuery query =
         new And(
-            List.of(getNameMatching(new StartsWith("Mel")), getNameMatching(new Contains("oma"))));
+            List.of(
+                new HasProperty(NEOPLASTIC_STATUS, MALIGNANT),
+                new HasProperty(CELL_ORIGIN, MELANOCYTIC)));
 
-    assertEquals(Set.of("Melanoma"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanoma", "Malignant Melanoma"), fetchMatchingNames(query));
   }
 
   /** With no children there's nothing to fail, so everything matches. */
@@ -101,21 +139,23 @@ public class LogicalQueryTest {
   public void testAndWithoutChildrenMatchesEverything() {
     final EvsQuery query = new And(List.of());
 
-    assertEquals(Set.copyOf(INDEXED_NAMES), fetchMatchingNames(query));
+    assertEquals(PROPERTIES_BY_NAME.keySet(), fetchMatchingNames(query));
   }
 
   // ---------------------------------------------------------------------------------------------
   // Lesson 2: Or finds what any child finds.
   // ---------------------------------------------------------------------------------------------
 
-  /** Either exact name matches. */
+  /** Either benign or epithelial. */
   @Test
   public void testOrNeedsAnyChild() {
     final EvsQuery query =
         new Or(
-            List.of(getNameMatching(new Exact("Carcinoma")), getNameMatching(new Exact("NEVUS"))));
+            List.of(
+                new HasProperty(NEOPLASTIC_STATUS, BENIGN),
+                new HasProperty(CELL_ORIGIN, EPITHELIAL)));
 
-    assertEquals(Set.of("Carcinoma", "NEVUS"), fetchMatchingNames(query));
+    assertEquals(Set.of("Carcinoma", "Nevus"), fetchMatchingNames(query));
   }
 
   /**
@@ -133,12 +173,12 @@ public class LogicalQueryTest {
   // Lesson 3: Not finds what its child doesn't.
   // ---------------------------------------------------------------------------------------------
 
-  /** Every name without "elan" in it. Matching is case sensitive, so "melanoma" has it too. */
+  /** Every concept that isn't malignant, including Melanocyte, which has no status at all. */
   @Test
   public void testNotFindsWhatChildDoesNot() {
-    final EvsQuery query = new Not(getNameMatching(new Contains("elan")));
+    final EvsQuery query = new Not(new HasProperty(NEOPLASTIC_STATUS, MALIGNANT));
 
-    assertEquals(Set.of("Carcinoma", "NEVUS"), fetchMatchingNames(query));
+    assertEquals(Set.of("Melanocyte", "Nevus"), fetchMatchingNames(query));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -148,9 +188,11 @@ public class LogicalQueryTest {
   /** The higher-boosted alternative ranks first, then the rest by name. */
   @Test
   public void testBoostRanksAlternativesInTiers() {
-    final EvsQuery query = getCarcinomaThenMelanoQuery();
+    final EvsQuery query = getEpithelialThenMelanocyticQuery();
 
-    assertEquals(List.of("Carcinoma", "Melanocyte", "Melanoma"), fetchRankedNames(query));
+    assertEquals(
+        List.of("Carcinoma", "Malignant Melanoma", "Melanocyte", "Melanoma", "Nevus"),
+        fetchRankedNames(query));
   }
 
   /** Not adds nothing to the score, so requiring it alongside the tiers leaves the order alone. */
@@ -158,35 +200,41 @@ public class LogicalQueryTest {
   public void testNotLeavesRankingUnchanged() {
     final EvsQuery query =
         new And(
-            List.of(new Not(getNameMatching(new Exact("NEVUS"))), getCarcinomaThenMelanoQuery()));
+            List.of(
+                new Not(new HasProperty(NEOPLASTIC_STATUS, BENIGN)),
+                getEpithelialThenMelanocyticQuery()));
 
-    assertEquals(List.of("Carcinoma", "Melanocyte", "Melanoma"), fetchRankedNames(query));
+    assertEquals(
+        List.of("Carcinoma", "Malignant Melanoma", "Melanocyte", "Melanoma"),
+        fetchRankedNames(query));
   }
 
   /**
-   * Builds a query for "Carcinoma" (score 2) or names starting with "Melano" (score 1).
+   * Builds a query for epithelial concepts (score 2) or melanocytic concepts (score 1).
    *
    * @return the query
    */
-  private EvsQuery getCarcinomaThenMelanoQuery() {
+  private EvsQuery getEpithelialThenMelanocyticQuery() {
     final float firstTierScore = 2.0f;
     final float secondTierScore = 1.0f;
     return new Or(
         List.of(
-            new Boost(getNameMatching(new Exact("Carcinoma")), firstTierScore),
-            new Boost(getNameMatching(new StartsWith("Melano")), secondTierScore)));
+            new Boost(new HasProperty(CELL_ORIGIN, EPITHELIAL), firstTierScore),
+            new Boost(new HasProperty(CELL_ORIGIN, MELANOCYTIC), secondTierScore)));
   }
 
   /**
-   * Builds the leaf the lessons combine: names matching a value match. The logical queries need
-   * some leaf to combine, and this toy index has only a name field.
+   * Builds a tutorial concept whose code is its name.
    *
-   * @param match how the name must match
-   * @return the query
+   * @param name the name, also used as the code
+   * @param properties the properties
+   * @return the concept
    */
-  @DemonstratesFieldMatch
-  private static EvsQuery getNameMatching(final ValueMatch match) {
-    return new FieldMatch(NAME_FIELD, match);
+  private static Concept getConcept(final String name, final List<Property> properties) {
+    final Concept concept = new Concept(name);
+    concept.setName(name);
+    concept.setProperties(properties);
+    return concept;
   }
 
   /**
@@ -201,9 +249,9 @@ public class LogicalQueryTest {
             .withQuery(query.fetchOpenSearchQuery(operations, TERMINOLOGIES))
             .withPageable(ALL_NAMES)
             .build();
-    return operations.search(search, IndexedName.class, INDEX).stream()
+    return operations.search(search, Concept.class, INDEX).stream()
         .map(SearchHit::getContent)
-        .map(IndexedName::getName)
+        .map(Concept::getName)
         .collect(Collectors.toSet());
   }
 
@@ -219,12 +267,12 @@ public class LogicalQueryTest {
             .withQuery(query.fetchOpenSearchQuery(operations, TERMINOLOGIES))
             .withSorts(
                 SortBuilders.scoreSort().order(SortOrder.DESC),
-                SortBuilders.fieldSort(NAME_FIELD).order(SortOrder.ASC))
+                SortBuilders.fieldSort(CODE_FIELD).order(SortOrder.ASC))
             .withPageable(ALL_NAMES)
             .build();
-    return operations.search(search, IndexedName.class, INDEX).stream()
+    return operations.search(search, Concept.class, INDEX).stream()
         .map(SearchHit::getContent)
-        .map(IndexedName::getName)
+        .map(Concept::getName)
         .collect(Collectors.toList());
   }
 }

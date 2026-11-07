@@ -5,9 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import gov.nih.nci.evs.api.query.And;
 import gov.nih.nci.evs.api.query.EvsQuery;
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasAncestor;
-import gov.nih.nci.evs.api.query.HasSynonym;
 import gov.nih.nci.evs.api.query.StartsWith;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -18,19 +16,17 @@ import org.junit.jupiter.api.Test;
  */
 public class AndEndpointTest extends AbstractQueryEndpointTest {
 
-  /** The children of Breast that have a synonym starting "left", combined with And. */
+  /** The children of Breast with a name or synonym starting "left", combined with And. */
   private static final String LEFT_CHILD_OF_BREAST_QUERY =
       """
       {"type": "And", "children": [
-        {"type": "HasAncestor",
-         "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
-        {"type": "HasSynonym",
-         "name": {"type": "StartsWith", "term": "left"}}]}
+        {"type": "HasAncestor", "target": "C12971", "maxLevel": 1},
+        {"type": "StartsWith", "term": "left"}]}
       """;
 
   /**
-   * Test And returns only the concepts every child matches: the child of Breast with a synonym
-   * starting "left".
+   * Test And returns only the concepts every child matches: the child of Breast with a name or
+   * synonym starting "left".
    *
    * @throws Exception the exception
    */
@@ -50,7 +46,7 @@ public class AndEndpointTest extends AbstractQueryEndpointTest {
     final String misspelledChildrenQuery =
         """
         {"type": "And", "child": [
-          {"type": "HasRole", "role": {"type": "Exact", "term": "R101"}}]}
+          {"type": "HasRole", "role": "R101"}]}
         """;
 
     postQuery(misspelledChildrenQuery).andExpect(status().isBadRequest());
@@ -68,7 +64,7 @@ public class AndEndpointTest extends AbstractQueryEndpointTest {
 
   /**
    * Test And serializes to the expected JSON when built in Java: the And of the children of Breast
-   * and the synonym starting "left".
+   * and the names or synonyms starting "left".
    *
    * @throws Exception the exception
    */
@@ -76,9 +72,7 @@ public class AndEndpointTest extends AbstractQueryEndpointTest {
   public void testAndSerializesToExpectedJson() throws Exception {
     final EvsQuery leftChildOfBreast =
         new And(
-            List.of(
-                new HasAncestor(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL),
-                new HasSynonym(new StartsWith("left"))));
+            List.of(new HasAncestor(BREAST, DIRECT_RELATIVES_MAX_LEVEL), new StartsWith("left")));
 
     assertSerializesTo(leftChildOfBreast, LEFT_CHILD_OF_BREAST_QUERY);
   }

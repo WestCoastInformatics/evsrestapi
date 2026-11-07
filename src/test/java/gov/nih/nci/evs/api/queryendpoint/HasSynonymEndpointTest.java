@@ -1,10 +1,7 @@
 package gov.nih.nci.evs.api.queryendpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import gov.nih.nci.evs.api.query.CaseInsensitive;
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasSynonym;
 import org.junit.jupiter.api.Test;
 
@@ -14,42 +11,21 @@ import org.junit.jupiter.api.Test;
  */
 public class HasSynonymEndpointTest extends AbstractQueryEndpointTest {
 
-  /** The NCI preferred term "melanoma", with the source matched ignoring case. */
+  /** The NCI preferred term "melanoma". */
   private static final String MELANOMA_PREFERRED_TERM_QUERY =
       """
-      {"type": "HasSynonym",
-       "name": {"type": "Exact", "term": "melanoma"},
-       "source": {"type": "CaseInsensitive", "match": {"type": "Exact", "term": "nci"}},
-       "termType": {"type": "Exact", "term": "PT"}}
+      {"type": "HasSynonym", "name": "melanoma", "source": "NCI", "termType": "PT"}
       """;
 
   /**
    * Test HasSynonym returns the concepts with a matching synonym: the NCI preferred term
-   * "melanoma", with the source matched ignoring case.
+   * "melanoma".
    *
    * @throws Exception the exception
    */
   @Test
   public void testHasSynonymReturnsMatchingConcepts() throws Exception {
     assertThat(fetchCodes(MELANOMA_PREFERRED_TERM_QUERY)).containsExactly(MELANOMA);
-  }
-
-  /**
-   * Test HasSynonym with a case-insensitive fuzzy match, which OpenSearch can't run, is rejected as
-   * a bad request.
-   *
-   * @throws Exception the exception
-   */
-  @Test
-  public void testHasSynonymWithCaseInsensitiveFuzzyReturnsBadRequest() throws Exception {
-    final String caseInsensitiveFuzzyQuery =
-        """
-        {"type": "HasSynonym",
-         "name":
-           {"type": "CaseInsensitive", "match": {"type": "Fuzzy", "term": "melanoma"}}}
-        """;
-
-    postQuery(caseInsensitiveFuzzyQuery).andExpect(status().isBadRequest());
   }
 
   /**
@@ -69,9 +45,7 @@ public class HasSynonymEndpointTest extends AbstractQueryEndpointTest {
    */
   @Test
   public void testHasSynonymSerializesToExpectedJson() throws Exception {
-    final HasSynonym melanomaPreferredTerm =
-        new HasSynonym(
-            new Exact("melanoma"), new CaseInsensitive(new Exact("nci")), new Exact("PT"));
+    final HasSynonym melanomaPreferredTerm = new HasSynonym("melanoma", "NCI", "PT");
 
     assertSerializesTo(melanomaPreferredTerm, MELANOMA_PREFERRED_TERM_QUERY);
   }

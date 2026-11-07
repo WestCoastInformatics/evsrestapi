@@ -63,7 +63,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  * <p>F is the polyhierarchy case: it is 2 below R through B, but a depth-first walk reaches it
  * through A and D first, at 3. Depth limits must use the shortest distance.
  *
- * <p>Runs against OpenSearch on port 9201, like {@link ValueMatchTest}.
+ * <p>Runs against OpenSearch on port 9201.
  */
 @ExtendWith(SpringExtension.class)
 @SpringBootTest

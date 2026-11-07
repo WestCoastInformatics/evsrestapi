@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gov.nih.nci.evs.api.query.EvsQuery;
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasAncestor;
 import gov.nih.nci.evs.api.query.HasDescendant;
 import gov.nih.nci.evs.api.query.Or;
@@ -20,10 +19,8 @@ public class OrEndpointTest extends AbstractQueryEndpointTest {
   private static final String CHILDREN_OR_PARENT_QUERY =
       """
       {"type": "Or", "children": [
-        {"type": "HasAncestor",
-         "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
-        {"type": "HasDescendant",
-         "target": {"type": "Exact", "term": "C12851"}, "maxLevel": 1}]}
+        {"type": "HasAncestor", "target": "C12971", "maxLevel": 1},
+        {"type": "HasDescendant", "target": "C12851", "maxLevel": 1}]}
       """;
 
   /**
@@ -48,7 +45,7 @@ public class OrEndpointTest extends AbstractQueryEndpointTest {
     final String childrenNotInListQuery =
         """
         {"type": "Or", "children":
-          {"type": "HasRole", "role": {"type": "Exact", "term": "R101"}}}
+          {"type": "HasRole", "role": "R101"}}
         """;
 
     postQuery(childrenNotInListQuery).andExpect(status().isBadRequest());
@@ -75,8 +72,8 @@ public class OrEndpointTest extends AbstractQueryEndpointTest {
     final EvsQuery childrenOrParent =
         new Or(
             List.of(
-                new HasAncestor(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL),
-                new HasDescendant(new Exact(FEMALE_BREAST), DIRECT_RELATIVES_MAX_LEVEL)));
+                new HasAncestor(BREAST, DIRECT_RELATIVES_MAX_LEVEL),
+                new HasDescendant(FEMALE_BREAST, DIRECT_RELATIVES_MAX_LEVEL)));
 
     assertSerializesTo(childrenOrParent, CHILDREN_OR_PARENT_QUERY);
   }

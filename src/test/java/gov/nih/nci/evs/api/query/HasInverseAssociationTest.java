@@ -206,7 +206,7 @@ public class HasInverseAssociationTest {
    */
   @Test
   public void testAssociationTypeWithoutSourceFindsAnyConceptPointedTo() {
-    final EvsQuery subsetsWithAnyMember = new HasInverseAssociation(new Exact(CONCEPT_IN_SUBSET));
+    final EvsQuery subsetsWithAnyMember = new HasInverseAssociation(CONCEPT_IN_SUBSET);
 
     assertEquals(
         Set.of(
@@ -220,10 +220,8 @@ public class HasInverseAssociationTest {
   /** The association's code finds the same concepts as its name. */
   @Test
   public void testAssociationCodeMatchesLikeName() {
-    final EvsQuery subsetsWithAnyMemberByName =
-        new HasInverseAssociation(new Exact(CONCEPT_IN_SUBSET));
-    final EvsQuery subsetsWithAnyMemberByCode =
-        new HasInverseAssociation(new Exact(CONCEPT_IN_SUBSET_CODE));
+    final EvsQuery subsetsWithAnyMemberByName = new HasInverseAssociation(CONCEPT_IN_SUBSET);
+    final EvsQuery subsetsWithAnyMemberByCode = new HasInverseAssociation(CONCEPT_IN_SUBSET_CODE);
 
     assertEquals(
         fetchMatchingNames(subsetsWithAnyMemberByName),
@@ -231,10 +229,10 @@ public class HasInverseAssociationTest {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 2: the source is a value match, as the target is for HasAssociation.
+  // Lesson 2: the source is a name or code, as the target is for HasAssociation.
   // ---------------------------------------------------------------------------------------------
 
-  /** A source match is compared against the source's code: the subsets Cutaneous Melanoma is in. */
+  /** A source is compared against the source's code: the subsets Cutaneous Melanoma is in. */
   @Test
   public void testSourceMatchedByCode() {
     final EvsQuery subsetsContainingCutaneousMelanoma =
@@ -242,22 +240,6 @@ public class HasInverseAssociationTest {
 
     assertEquals(
         Set.of("CTRP Disease Terminology"), fetchMatchingNames(subsetsContainingCutaneousMelanoma));
-  }
-
-  /**
-   * A source match is also compared against the source's name. "Cutaneous Melanoma", "Lung
-   * Carcinoma", and "Basal Cell Carcinoma of Skin" each have a word containing "noma", so the
-   * subsets holding any of them are found.
-   */
-  @Test
-  public void testSourceMatchedByCaseInsensitiveContainsOnName() {
-    final EvsQuery subsetsContainingANoma =
-        new HasInverseAssociation(
-            new Exact(CONCEPT_IN_SUBSET), new CaseInsensitive(new Contains("NOMA")));
-
-    assertEquals(
-        Set.of("CTRP Disease Terminology", "Cellosaurus Disease Terminology"),
-        fetchMatchingNames(subsetsContainingANoma));
   }
 
   /** Lung holds no associations, so no subset contains it. */
@@ -276,7 +258,7 @@ public class HasInverseAssociationTest {
   @Test
   public void testRoleTypeFindsNoInverseAssociations() {
     final EvsQuery conceptsPointedToByPrimarySiteAssociation =
-        new HasInverseAssociation(new Exact(PRIMARY_SITE));
+        new HasInverseAssociation(PRIMARY_SITE);
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsPointedToByPrimarySiteAssociation));
   }
@@ -289,7 +271,7 @@ public class HasInverseAssociationTest {
   @Test
   public void testAssociationDoesNotSearchInverseAssociations() {
     final EvsQuery conceptsInCutaneousMelanoma =
-        new HasAssociation(new Exact(CONCEPT_IN_SUBSET), new Exact(CUTANEOUS_MELANOMA));
+        new HasAssociation(CONCEPT_IN_SUBSET, CUTANEOUS_MELANOMA);
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsInCutaneousMelanoma));
   }
@@ -313,9 +295,8 @@ public class HasInverseAssociationTest {
    */
   @Test
   public void testCombinesWithHasAssociation() {
-    final EvsQuery hasAnyMember = new HasInverseAssociation(new Exact(CONCEPT_IN_SUBSET));
-    final EvsQuery isInCtrpTerminology =
-        new HasAssociation(new Exact(CONCEPT_IN_SUBSET), new Exact(CTRP_TERMINOLOGY));
+    final EvsQuery hasAnyMember = new HasInverseAssociation(CONCEPT_IN_SUBSET);
+    final EvsQuery isInCtrpTerminology = new HasAssociation(CONCEPT_IN_SUBSET, CTRP_TERMINOLOGY);
     final QueryBuilder nonEmptySubsetsInCtrpTerminology =
         QueryBuilders.boolQuery()
             .must(hasAnyMember.fetchOpenSearchQuery(operations, terminologies))
@@ -339,7 +320,7 @@ public class HasInverseAssociationTest {
    * @return the query
    */
   private HasInverseAssociation getHasInverseAssociation(final String sourceCode) {
-    return new HasInverseAssociation(new Exact(CONCEPT_IN_SUBSET), new Exact(sourceCode));
+    return new HasInverseAssociation(CONCEPT_IN_SUBSET, sourceCode);
   }
 
   /**

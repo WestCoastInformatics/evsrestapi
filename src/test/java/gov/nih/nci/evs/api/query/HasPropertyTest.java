@@ -38,8 +38,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  * <ol>
  *   <li>A small index holds the concepts in {@link #INDEXED_CONCEPTS}, mapped exactly like a real
  *       concept index, so the nested properties mapping is tested too.
- *   <li>The lesson builds a query, e.g. {@code new HasProperty(new Exact(NEOPLASTIC_STATUS), new
- *       Exact(MALIGNANT))}.
+ *   <li>The lesson builds a query, e.g. {@code new HasProperty(NEOPLASTIC_STATUS, MALIGNANT)}.
  *   <li>The query runs against the index, and the lesson checks which concept names came back.
  * </ol>
  *
@@ -210,8 +209,7 @@ public class HasPropertyTest {
    */
   @Test
   public void testPropertyTypeAndValueMatchOnSameEntry() {
-    final EvsQuery malignantConcepts =
-        new HasProperty(new Exact(NEOPLASTIC_STATUS), new Exact(MALIGNANT));
+    final EvsQuery malignantConcepts = new HasProperty(NEOPLASTIC_STATUS, MALIGNANT);
 
     assertEquals(Set.of("Melanoma", "Basal Cell Carcinoma"), fetchMatchingNames(malignantConcepts));
   }
@@ -219,8 +217,7 @@ public class HasPropertyTest {
   /** The value only matches under its own type: no ICD-O-3 code is "Malignant". */
   @Test
   public void testValueUnderOtherTypeFindsNothing() {
-    final EvsQuery conceptsWithIcdO3CodeMalignant =
-        new HasProperty(new Exact(ICD_O_3_CODE), new Exact(MALIGNANT));
+    final EvsQuery conceptsWithIcdO3CodeMalignant = new HasProperty(ICD_O_3_CODE, MALIGNANT);
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithIcdO3CodeMalignant));
   }
@@ -228,7 +225,7 @@ public class HasPropertyTest {
   /** Nothing has a property type that isn't indexed. */
   @Test
   public void testUnmatchedPropertyTypeFindsNothing() {
-    final EvsQuery conceptsWithSemanticType = new HasProperty(new Exact("P106"));
+    final EvsQuery conceptsWithSemanticType = new HasProperty("P106");
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithSemanticType));
   }
@@ -240,7 +237,7 @@ public class HasPropertyTest {
   /** Without a value, every concept with a neoplastic status is found, whatever its value. */
   @Test
   public void testPropertyTypeWithoutValueFindsAnyValue() {
-    final EvsQuery conceptsWithAnyNeoplasticStatus = new HasProperty(new Exact(NEOPLASTIC_STATUS));
+    final EvsQuery conceptsWithAnyNeoplasticStatus = new HasProperty(NEOPLASTIC_STATUS);
 
     assertEquals(
         Set.of("Melanoma", "Nevus", "Basal Cell Carcinoma"),
@@ -254,45 +251,23 @@ public class HasPropertyTest {
   /** The property's code finds the same concepts as its name. */
   @Test
   public void testPropertyCodeMatchesLikeName() {
-    final EvsQuery byName = new HasProperty(new Exact(NEOPLASTIC_STATUS), new Exact(MALIGNANT));
-    final EvsQuery byCode =
-        new HasProperty(new Exact(NEOPLASTIC_STATUS_CODE), new Exact(MALIGNANT));
+    final EvsQuery byName = new HasProperty(NEOPLASTIC_STATUS, MALIGNANT);
+    final EvsQuery byCode = new HasProperty(NEOPLASTIC_STATUS_CODE, MALIGNANT);
 
     assertEquals(fetchMatchingNames(byName), fetchMatchingNames(byCode));
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 4: the value takes any value match.
+  // Lesson 4: values are case sensitive.
   // ---------------------------------------------------------------------------------------------
 
-  /** Values are case sensitive by default. */
+  /** Values are case sensitive. */
   @Test
   public void testPropertyValueIsCaseSensitive() {
     final EvsQuery conceptsWithLowercaseMalignantStatus =
-        new HasProperty(new Exact(NEOPLASTIC_STATUS), new Exact(MALIGNANT.toLowerCase()));
+        new HasProperty(NEOPLASTIC_STATUS, MALIGNANT.toLowerCase());
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithLowercaseMalignantStatus));
-  }
-
-  /** With its match wrapped in CaseInsensitive, the value matches whatever its case. */
-  @Test
-  public void testCaseInsensitivePropertyValueMatchesAnyCase() {
-    final EvsQuery conceptsWithAnyCaseMalignantStatus =
-        new HasProperty(
-            new Exact(NEOPLASTIC_STATUS), new CaseInsensitive(new Exact(MALIGNANT.toLowerCase())));
-
-    assertEquals(
-        Set.of("Melanoma", "Basal Cell Carcinoma"),
-        fetchMatchingNames(conceptsWithAnyCaseMalignantStatus));
-  }
-
-  /** ICD-O-3 codes starting with 8720 are melanomas. */
-  @Test
-  public void testPropertyValueMatchedByStartsWith() {
-    final EvsQuery conceptsWithMelanomaMorphology =
-        new HasProperty(new Exact(ICD_O_3_CODE_CODE), new StartsWith("8720"));
-
-    assertEquals(Set.of("Melanoma"), fetchMatchingNames(conceptsWithMelanomaMorphology));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -307,9 +282,9 @@ public class HasPropertyTest {
   public void testQualifierMatchesOnSamePropertyEntry() {
     final EvsQuery genesWithAuthorStatedCellCycleArrest =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new Exact(CELL_CYCLE_ARREST),
-            new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT)));
+            GO_ANNOTATION,
+            CELL_CYCLE_ARREST,
+            new PropertyQualifier(GO_EVIDENCE, TRACEABLE_AUTHOR_STATEMENT));
 
     assertEquals(Set.of("TP53 Gene"), fetchMatchingNames(genesWithAuthorStatedCellCycleArrest));
   }
@@ -323,12 +298,11 @@ public class HasPropertyTest {
   public void testAllQualifiersMatchOnSamePropertyEntry() {
     final EvsQuery genesWithAuthorStatedCellCycleArrestId =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
+            GO_ANNOTATION,
             new AllQualifiers(
                 List.of(
-                    new PropertyQualifier(new Exact(GO_ID), new Exact(CELL_CYCLE_ARREST_GO_ID)),
-                    new PropertyQualifier(
-                        new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT)))));
+                    new PropertyQualifier(GO_ID, CELL_CYCLE_ARREST_GO_ID),
+                    new PropertyQualifier(GO_EVIDENCE, TRACEABLE_AUTHOR_STATEMENT))));
 
     assertEquals(Set.of("TP53 Gene"), fetchMatchingNames(genesWithAuthorStatedCellCycleArrestId));
   }
@@ -338,8 +312,7 @@ public class HasPropertyTest {
   public void testQualifierWithoutPropertyValueFindsAnyValue() {
     final EvsQuery genesWithActivinInhibitorId =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new PropertyQualifier(new Exact(GO_ID), new Exact(ACTIVIN_INHIBITOR_ACTIVITY_GO_ID)));
+            GO_ANNOTATION, new PropertyQualifier(GO_ID, ACTIVIN_INHIBITOR_ACTIVITY_GO_ID));
 
     assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithActivinInhibitorId));
   }
@@ -348,7 +321,7 @@ public class HasPropertyTest {
   @Test
   public void testQualifierTypeWithoutValueFindsAnyValue() {
     final EvsQuery genesWithAnyEvidence =
-        new HasProperty(new Exact(GO_ANNOTATION), new PropertyQualifier(new Exact(GO_EVIDENCE)));
+        new HasProperty(GO_ANNOTATION, new PropertyQualifier(GO_EVIDENCE));
 
     assertEquals(Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithAnyEvidence));
   }
@@ -360,9 +333,7 @@ public class HasPropertyTest {
   @Test
   public void testQualifierTypeAndValueMatchOnSameQualifierEntry() {
     final EvsQuery genesWithGoIdTas =
-        new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new PropertyQualifier(new Exact(GO_ID), new Exact(TRACEABLE_AUTHOR_STATEMENT)));
+        new HasProperty(GO_ANNOTATION, new PropertyQualifier(GO_ID, TRACEABLE_AUTHOR_STATEMENT));
 
     assertEquals(Set.of(), fetchMatchingNames(genesWithGoIdTas));
   }
@@ -371,13 +342,9 @@ public class HasPropertyTest {
   @Test
   public void testQualifierCodeMatchesLikeName() {
     final EvsQuery byName =
-        new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY)));
+        new HasProperty(GO_ANNOTATION, new PropertyQualifier(GO_EVIDENCE, DIRECT_ASSAY));
     final EvsQuery byCode =
-        new HasProperty(
-            new Exact(GO_ANNOTATION_CODE),
-            new PropertyQualifier(new Exact(GO_EVIDENCE_CODE), new Exact(DIRECT_ASSAY)));
+        new HasProperty(GO_ANNOTATION_CODE, new PropertyQualifier(GO_EVIDENCE_CODE, DIRECT_ASSAY));
 
     assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(byName));
     assertEquals(fetchMatchingNames(byName), fetchMatchingNames(byCode));
@@ -395,13 +362,12 @@ public class HasPropertyTest {
   public void testAnyQualifierMatchesEitherConditionOnSamePropertyEntry() {
     final EvsQuery genesWithCellCycleArrestFromAuthorOrAssay =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new Exact(CELL_CYCLE_ARREST),
+            GO_ANNOTATION,
+            CELL_CYCLE_ARREST,
             new AnyQualifier(
                 List.of(
-                    new PropertyQualifier(
-                        new Exact(GO_EVIDENCE), new Exact(TRACEABLE_AUTHOR_STATEMENT)),
-                    new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY)))));
+                    new PropertyQualifier(GO_EVIDENCE, TRACEABLE_AUTHOR_STATEMENT),
+                    new PropertyQualifier(GO_EVIDENCE, DIRECT_ASSAY))));
 
     assertEquals(
         Set.of("INHBA Gene", "TP53 Gene"),
@@ -420,16 +386,15 @@ public class HasPropertyTest {
     final QualifierCondition isExperimental =
         new AnyQualifier(
             List.of(
-                new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY)),
-                new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(MUTANT_PHENOTYPE))));
-    final QualifierCondition isFromCgap =
-        new PropertyQualifier(new Exact(GO_SOURCE), new Exact(CGAP));
+                new PropertyQualifier(GO_EVIDENCE, DIRECT_ASSAY),
+                new PropertyQualifier(GO_EVIDENCE, MUTANT_PHENOTYPE)));
+    final QualifierCondition isFromCgap = new PropertyQualifier(GO_SOURCE, CGAP);
     final EvsQuery genesWithExperimentalNonCgapCellCycleArrest =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
+            GO_ANNOTATION,
             new AllQualifiers(
                 List.of(
-                    new PropertyQualifier(new Exact(GO_ID), new Exact(CELL_CYCLE_ARREST_GO_ID)),
+                    new PropertyQualifier(GO_ID, CELL_CYCLE_ARREST_GO_ID),
                     isExperimental,
                     new NoQualifier(isFromCgap))));
 
@@ -441,7 +406,7 @@ public class HasPropertyTest {
   @Test
   public void testAnyQualifierWithoutConditionsMatchesNothing() {
     final EvsQuery genesWithNoAlternatives =
-        new HasProperty(new Exact(GO_ANNOTATION), new AnyQualifier(List.of()));
+        new HasProperty(GO_ANNOTATION, new AnyQualifier(List.of()));
 
     assertEquals(Set.of(), fetchMatchingNames(genesWithNoAlternatives));
   }
@@ -455,9 +420,7 @@ public class HasPropertyTest {
   public void testNoQualifierMatchesAnyPropertyEntryWithoutQualifier() {
     final EvsQuery genesWithNonAssayAnnotation =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new NoQualifier(
-                new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY))));
+            GO_ANNOTATION, new NoQualifier(new PropertyQualifier(GO_EVIDENCE, DIRECT_ASSAY)));
 
     assertEquals(
         Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithNonAssayAnnotation));
@@ -468,10 +431,9 @@ public class HasPropertyTest {
   public void testNoQualifierExcludesMatchingPropertyEntry() {
     final EvsQuery genesWithNonAssayCellCycleArrest =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new Exact(CELL_CYCLE_ARREST),
-            new NoQualifier(
-                new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY))));
+            GO_ANNOTATION,
+            CELL_CYCLE_ARREST,
+            new NoQualifier(new PropertyQualifier(GO_EVIDENCE, DIRECT_ASSAY)));
 
     assertEquals(Set.of("TP53 Gene"), fetchMatchingNames(genesWithNonAssayCellCycleArrest));
   }
@@ -484,17 +446,15 @@ public class HasPropertyTest {
   public void testNestedQualifierConditionsWithPropertyValue() {
     final EvsQuery genesWithExperimentalNonCgapCellCycleArrest =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new Exact(CELL_CYCLE_ARREST),
+            GO_ANNOTATION,
+            CELL_CYCLE_ARREST,
             new AllQualifiers(
                 List.of(
                     new AnyQualifier(
                         List.of(
-                            new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY)),
-                            new PropertyQualifier(
-                                new Exact(GO_EVIDENCE), new Exact(MUTANT_PHENOTYPE)))),
-                    new NoQualifier(
-                        new PropertyQualifier(new Exact(GO_SOURCE), new Exact(CGAP))))));
+                            new PropertyQualifier(GO_EVIDENCE, DIRECT_ASSAY),
+                            new PropertyQualifier(GO_EVIDENCE, MUTANT_PHENOTYPE))),
+                    new NoQualifier(new PropertyQualifier(GO_SOURCE, CGAP)))));
 
     assertEquals(
         Set.of("INHBA Gene"), fetchMatchingNames(genesWithExperimentalNonCgapCellCycleArrest));
@@ -504,13 +464,13 @@ public class HasPropertyTest {
   @Test
   public void testAllQualifiersWithoutConditionsMatchesAnyPropertyEntry() {
     final EvsQuery genesWithNoRequirements =
-        new HasProperty(new Exact(GO_ANNOTATION), new AllQualifiers(List.of()));
+        new HasProperty(GO_ANNOTATION, new AllQualifiers(List.of()));
 
     assertEquals(Set.of("INHBA Gene", "TP53 Gene"), fetchMatchingNames(genesWithNoRequirements));
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 7: properties without qualifiers, and other value matches on qualifiers.
+  // Lesson 7: properties without qualifiers.
   // ---------------------------------------------------------------------------------------------
 
   /**
@@ -519,8 +479,7 @@ public class HasPropertyTest {
   @Test
   public void testPropertyWithoutQualifiersFailsQualifierCondition() {
     final EvsQuery statusesWithEvidence =
-        new HasProperty(
-            new Exact(NEOPLASTIC_STATUS), new PropertyQualifier(new Exact(GO_EVIDENCE)));
+        new HasProperty(NEOPLASTIC_STATUS, new PropertyQualifier(GO_EVIDENCE));
 
     assertEquals(Set.of(), fetchMatchingNames(statusesWithEvidence));
   }
@@ -533,35 +492,11 @@ public class HasPropertyTest {
   public void testNoQualifierMatchesPropertyWithoutQualifiers() {
     final EvsQuery malignantStatusesWithoutEvidence =
         new HasProperty(
-            new Exact(NEOPLASTIC_STATUS),
-            new Exact(MALIGNANT),
-            new NoQualifier(new PropertyQualifier(new Exact(GO_EVIDENCE))));
+            NEOPLASTIC_STATUS, MALIGNANT, new NoQualifier(new PropertyQualifier(GO_EVIDENCE)));
 
     assertEquals(
         Set.of("Melanoma", "Basal Cell Carcinoma"),
         fetchMatchingNames(malignantStatusesWithoutEvidence));
-  }
-
-  /** A qualifier's value takes any value match, e.g. a prefix of the GO id. */
-  @Test
-  public void testQualifierValueMatchedByStartsWith() {
-    final EvsQuery genesWithGoIdStartingGo0017 =
-        new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new PropertyQualifier(new Exact(GO_ID), new StartsWith("GO:0017")));
-
-    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithGoIdStartingGo0017));
-  }
-
-  /** A qualifier's value can ignore case: "ida" finds the direct assay annotation. */
-  @Test
-  public void testCaseInsensitiveQualifierValueMatchesAnyCase() {
-    final EvsQuery genesWithDirectAssayInAnyCase =
-        new HasProperty(
-            new Exact(GO_ANNOTATION),
-            new PropertyQualifier(new Exact(GO_EVIDENCE), new CaseInsensitive(new Exact("ida"))));
-
-    assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithDirectAssayInAnyCase));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -571,11 +506,10 @@ public class HasPropertyTest {
   /** Excluding the exclusion of a qualifier finds the same concepts as the qualifier itself. */
   @Test
   public void testDoubleNoQualifierMatchesLikeQualifier() {
-    final QualifierCondition isDirectAssay =
-        new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY));
-    final EvsQuery genesWithDirectAssay = new HasProperty(new Exact(GO_ANNOTATION), isDirectAssay);
+    final QualifierCondition isDirectAssay = new PropertyQualifier(GO_EVIDENCE, DIRECT_ASSAY);
+    final EvsQuery genesWithDirectAssay = new HasProperty(GO_ANNOTATION, isDirectAssay);
     final EvsQuery genesWithoutNonDirectAssay =
-        new HasProperty(new Exact(GO_ANNOTATION), new NoQualifier(new NoQualifier(isDirectAssay)));
+        new HasProperty(GO_ANNOTATION, new NoQualifier(new NoQualifier(isDirectAssay)));
 
     assertEquals(Set.of("INHBA Gene"), fetchMatchingNames(genesWithDirectAssay));
     assertEquals(
@@ -589,17 +523,16 @@ public class HasPropertyTest {
    */
   @Test
   public void testNoAnyQualifierMatchesLikeAllNoQualifiers() {
-    final QualifierCondition isDirectAssay =
-        new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(DIRECT_ASSAY));
+    final QualifierCondition isDirectAssay = new PropertyQualifier(GO_EVIDENCE, DIRECT_ASSAY);
     final QualifierCondition isMutantPhenotype =
-        new PropertyQualifier(new Exact(GO_EVIDENCE), new Exact(MUTANT_PHENOTYPE));
+        new PropertyQualifier(GO_EVIDENCE, MUTANT_PHENOTYPE);
     final EvsQuery genesWithNeither =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
+            GO_ANNOTATION,
             new NoQualifier(new AnyQualifier(List.of(isDirectAssay, isMutantPhenotype))));
     final EvsQuery genesWithNotEither =
         new HasProperty(
-            new Exact(GO_ANNOTATION),
+            GO_ANNOTATION,
             new AllQualifiers(
                 List.of(new NoQualifier(isDirectAssay), new NoQualifier(isMutantPhenotype))));
 
@@ -610,18 +543,15 @@ public class HasPropertyTest {
   /** A property type, and a value or qualifiers when given, are required. */
   @Test
   public void testRejectsMissingValues() {
-    final ValueMatch missingMatch = null;
+    final String missingValue = null;
     final QualifierCondition missingQualifiers = null;
-    assertThrows(NullPointerException.class, () -> new HasProperty(missingMatch));
+    assertThrows(NullPointerException.class, () -> new HasProperty(missingValue));
     assertThrows(
-        NullPointerException.class,
-        () -> new HasProperty(new Exact(NEOPLASTIC_STATUS), missingMatch));
+        NullPointerException.class, () -> new HasProperty(NEOPLASTIC_STATUS, missingValue));
     assertThrows(
-        NullPointerException.class,
-        () -> new HasProperty(new Exact(NEOPLASTIC_STATUS), missingQualifiers));
-    assertThrows(NullPointerException.class, () -> new PropertyQualifier(missingMatch));
-    assertThrows(
-        NullPointerException.class, () -> new PropertyQualifier(new Exact(GO_ID), missingMatch));
+        NullPointerException.class, () -> new HasProperty(NEOPLASTIC_STATUS, missingQualifiers));
+    assertThrows(NullPointerException.class, () -> new PropertyQualifier(missingValue));
+    assertThrows(NullPointerException.class, () -> new PropertyQualifier(GO_ID, missingValue));
     assertThrows(NullPointerException.class, () -> new AllQualifiers(null));
     assertThrows(NullPointerException.class, () -> new AnyQualifier(null));
     assertThrows(NullPointerException.class, () -> new NoQualifier(null));

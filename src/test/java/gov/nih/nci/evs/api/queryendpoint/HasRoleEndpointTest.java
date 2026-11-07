@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gov.nih.nci.evs.api.model.Concept;
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasRole;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -18,9 +17,7 @@ public class HasRoleEndpointTest extends AbstractQueryEndpointTest {
   /** The query for the concepts whose primary anatomic site is Breast. */
   private static final String PRIMARY_ANATOMIC_SITE_BREAST_QUERY =
       """
-      {"type": "HasRole",
-       "role": {"type": "Exact", "term": "R101"},
-       "target": {"type": "Exact", "term": "C12971"}}
+      {"type": "HasRole", "role": "R101", "target": "C12971"}
       """;
 
   /**
@@ -49,7 +46,7 @@ public class HasRoleEndpointTest extends AbstractQueryEndpointTest {
   public void testHasRoleWithoutTypeReturnsBadRequest() throws Exception {
     final String withoutTypeQuery =
         """
-        {"role": {"type": "Exact", "term": "R101"}}
+        {"role": "R101"}
         """;
 
     postQuery(withoutTypeQuery).andExpect(status().isBadRequest());
@@ -72,8 +69,7 @@ public class HasRoleEndpointTest extends AbstractQueryEndpointTest {
    */
   @Test
   public void testHasRoleSerializesToExpectedJson() throws Exception {
-    final HasRole primaryAnatomicSiteBreast =
-        new HasRole(new Exact(PRIMARY_ANATOMIC_SITE_ROLE), new Exact(BREAST));
+    final HasRole primaryAnatomicSiteBreast = new HasRole(PRIMARY_ANATOMIC_SITE_ROLE, BREAST);
 
     assertSerializesTo(primaryAnatomicSiteBreast, PRIMARY_ANATOMIC_SITE_BREAST_QUERY);
   }

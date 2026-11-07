@@ -102,11 +102,8 @@ public class HasHierarchyRelativeLimitsTest {
   /** The message fragment naming the max level of an over-limit set of depth tokens. */
   private static final String MAX_LEVEL_MESSAGE = "maxLevel " + LEVELS_OVER_LIMIT;
 
-  /** The argument named when the target match is null. */
-  private static final String TARGET_MATCH_ARGUMENT = "target";
-
-  /** The argument named when the code is null. */
-  private static final String CODE_ARGUMENT = "code";
+  /** The argument named when the target is null. */
+  private static final String TARGET_ARGUMENT = "target";
 
   /** Message fragment telling the caller to reindex. */
   private static final String REINDEX_MESSAGE = "reindex the terminology";
@@ -223,42 +220,42 @@ public class HasHierarchyRelativeLimitsTest {
     assertTrue(e.getMessage().contains(MAX_LEVEL_MESSAGE), e.getMessage());
   }
 
-  /** A null target match on HasAncestor throws an error naming target. */
+  /** A null target on HasAncestor throws an error naming target. */
   @Test
-  public void testHasAncestorWithNullTargetMatchThrowsErrorNamingTargetMatch() {
+  public void testHasAncestorWithNullTargetThrowsErrorNamingTarget() {
     final NullPointerException e =
-        assertThrows(NullPointerException.class, () -> new HasAncestor((ValueMatch) null));
+        assertThrows(NullPointerException.class, () -> new HasAncestor((String) null));
 
-    assertEquals(TARGET_MATCH_ARGUMENT, e.getMessage());
+    assertEquals(TARGET_ARGUMENT, e.getMessage());
   }
 
-  /** A null target match on HasDescendantOrIs throws an error naming target. */
+  /** A null target on HasDescendantOrIs throws an error naming target. */
   @Test
-  public void testHasDescendantOrIsWithNullTargetMatchThrowsErrorNamingTargetMatch() {
+  public void testHasDescendantOrIsWithNullTargetThrowsErrorNamingTarget() {
     final NullPointerException e =
         assertThrows(
-            NullPointerException.class, () -> new HasDescendantOrIs((ValueMatch) null, ONE_LEVEL));
+            NullPointerException.class, () -> new HasDescendantOrIs((String) null, ONE_LEVEL));
 
-    assertEquals(TARGET_MATCH_ARGUMENT, e.getMessage());
+    assertEquals(TARGET_ARGUMENT, e.getMessage());
   }
 
-  /** A null code on HasDescendant throws an error naming code. */
+  /** A null target on HasDescendant throws an error naming target. */
   @Test
-  public void testHasDescendantWithNullCodeThrowsErrorNamingCode() {
+  public void testHasDescendantWithNullTargetThrowsErrorNamingTarget() {
     final NullPointerException e =
         assertThrows(NullPointerException.class, () -> new HasDescendant((String) null));
 
-    assertEquals(CODE_ARGUMENT, e.getMessage());
+    assertEquals(TARGET_ARGUMENT, e.getMessage());
   }
 
-  /** A null code on HasAncestorOrIs throws an error naming code. */
+  /** A null target on HasAncestorOrIs throws an error naming target. */
   @Test
-  public void testHasAncestorOrIsWithNullCodeThrowsErrorNamingCode() {
+  public void testHasAncestorOrIsWithNullTargetThrowsErrorNamingTarget() {
     final NullPointerException e =
         assertThrows(
             NullPointerException.class, () -> new HasAncestorOrIs((String) null, ONE_LEVEL));
 
-    assertEquals(CODE_ARGUMENT, e.getMessage());
+    assertEquals(TARGET_ARGUMENT, e.getMessage());
   }
 
   /**

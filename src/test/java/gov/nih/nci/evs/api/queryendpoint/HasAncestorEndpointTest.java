@@ -3,7 +3,6 @@ package gov.nih.nci.evs.api.queryendpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasAncestor;
 import org.junit.jupiter.api.Test;
 
@@ -16,8 +15,7 @@ public class HasAncestorEndpointTest extends AbstractQueryEndpointTest {
   /** The descendants of Breast at most one level down, which are its children. */
   private static final String CHILDREN_OF_BREAST_QUERY =
       """
-      {"type": "HasAncestor",
-       "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}
+      {"type": "HasAncestor", "target": "C12971", "maxLevel": 1}
       """;
 
   /**
@@ -40,8 +38,7 @@ public class HasAncestorEndpointTest extends AbstractQueryEndpointTest {
   public void testHasAncestorWithNonNumericMaxLevelReturnsBadRequest() throws Exception {
     final String nonNumericMaxLevelQuery =
         """
-        {"type": "HasAncestor",
-         "target": {"type": "Exact", "term": "C12971"}, "maxLevel": "one"}
+        {"type": "HasAncestor", "target": "C12971", "maxLevel": "one"}
         """;
 
     postQuery(nonNumericMaxLevelQuery).andExpect(status().isBadRequest());
@@ -64,8 +61,7 @@ public class HasAncestorEndpointTest extends AbstractQueryEndpointTest {
    */
   @Test
   public void testHasAncestorSerializesToExpectedJson() throws Exception {
-    final HasAncestor childrenOfBreast =
-        new HasAncestor(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL);
+    final HasAncestor childrenOfBreast = new HasAncestor(BREAST, DIRECT_RELATIVES_MAX_LEVEL);
 
     assertSerializesTo(childrenOfBreast, CHILDREN_OF_BREAST_QUERY);
   }

@@ -5,7 +5,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import gov.nih.nci.evs.api.query.And;
 import gov.nih.nci.evs.api.query.EvsQuery;
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasAncestor;
 import gov.nih.nci.evs.api.query.HasAncestorOrIs;
 import gov.nih.nci.evs.api.query.Not;
@@ -19,11 +18,9 @@ public class NotEndpointTest extends AbstractQueryEndpointTest {
   private static final String BREAST_WITHOUT_CHILDREN_QUERY =
       """
       {"type": "And", "children": [
-        {"type": "HasAncestorOrIs",
-         "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1},
+        {"type": "HasAncestorOrIs", "target": "C12971", "maxLevel": 1},
         {"type": "Not", "child":
-          {"type": "HasAncestor",
-           "target": {"type": "Exact", "term": "C12971"}, "maxLevel": 1}}]}
+          {"type": "HasAncestor", "target": "C12971", "maxLevel": 1}}]}
       """;
 
   /**
@@ -73,8 +70,8 @@ public class NotEndpointTest extends AbstractQueryEndpointTest {
     final EvsQuery breastWithoutChildren =
         new And(
             List.of(
-                new HasAncestorOrIs(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL),
-                new Not(new HasAncestor(new Exact(BREAST), DIRECT_RELATIVES_MAX_LEVEL))));
+                new HasAncestorOrIs(BREAST, DIRECT_RELATIVES_MAX_LEVEL),
+                new Not(new HasAncestor(BREAST, DIRECT_RELATIVES_MAX_LEVEL))));
 
     assertSerializesTo(breastWithoutChildren, BREAST_WITHOUT_CHILDREN_QUERY);
   }
