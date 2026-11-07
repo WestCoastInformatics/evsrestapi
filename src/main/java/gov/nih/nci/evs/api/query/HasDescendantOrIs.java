@@ -23,9 +23,9 @@ public class HasDescendantOrIs extends HasDescendant {
   /**
    * Instantiates an {@link HasDescendantOrIs} for the target concepts and everything above them.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concept's name or code
    */
-  public HasDescendantOrIs(final ValueMatch target) {
+  public HasDescendantOrIs(final String target) {
     super(target);
   }
 
@@ -33,31 +33,11 @@ public class HasDescendantOrIs extends HasDescendant {
    * Instantiates an {@link HasDescendantOrIs} for the target concepts and those within {@code
    * maxLevel} levels above them.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concept's name or code
    * @param maxLevel the maximum distance above the targets, at least 1
    */
-  public HasDescendantOrIs(final ValueMatch target, final int maxLevel) {
+  public HasDescendantOrIs(final String target, final int maxLevel) {
     super(target, maxLevel);
-  }
-
-  /**
-   * Instantiates an {@link HasDescendantOrIs} for one concept and everything above it.
-   *
-   * @param code the target concept's code
-   */
-  public HasDescendantOrIs(final String code) {
-    super(code);
-  }
-
-  /**
-   * Instantiates an {@link HasDescendantOrIs} for one concept and those within {@code maxLevel}
-   * levels above it.
-   *
-   * @param code the target concept's code
-   * @param maxLevel the maximum distance above the target, at least 1
-   */
-  public HasDescendantOrIs(final String code, final int maxLevel) {
-    super(code, maxLevel);
   }
 
   /**

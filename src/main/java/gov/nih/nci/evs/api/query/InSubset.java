@@ -10,18 +10,17 @@ import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 
 /**
- * Matches concepts that are members of the given subsets, e.g. every concept in CDISC SDTM
+ * Matches concepts that are members of the given subset, e.g. every concept in CDISC SDTM
  * Terminology (C66830). A subset is itself a concept, and membership is an association from the
  * member to the subset: in NCIt, Concept_In_Subset (A8). So this is a {@link HasAssociation} whose
  * type is the terminology's membership association, read from {@link
  * TerminologyMetadata#getSubsetMember}.
  *
- * <p>The subsets are a value match on the subset's code or name, like any relationship's target,
- * e.g. {@code new OneOf(Set.of(sdtm, send))} for members of either subset.
+ * <p>The subset is given by its code or name, like any relationship's target.
  *
- * <p><b>Exploratory.</b> Combinations other than "any of" (in all of several subsets, in one but
- * not another) combine {@link InSubset}s with {@link And} and {@link Not}: each membership is its
- * own association entry, so combining per concept is correct.
+ * <p><b>Exploratory.</b> Combinations of subsets (in any of several, in all of them, in one but not
+ * another) combine {@link InSubset}s with {@link Or}, {@link And}, and {@link Not}: each membership
+ * is its own association entry, so combining per concept is correct.
  *
  * <p>Unlike the current search's {@code subset} parameter, this doesn't narrow a CDISC grouper
  * subset to members named "CDISC ...". That special case is business logic in {@code
@@ -29,8 +28,8 @@ import org.opensearch.index.query.QueryBuilder;
  */
 public final class InSubset extends EvsQuery {
 
-  /** How the subsets' name or code must match. */
-  private ValueMatch subset;
+  /** The subset's code or name. */
+  private String subset;
 
   /** Instantiates an empty {@link InSubset}. */
   public InSubset() {
@@ -38,44 +37,36 @@ public final class InSubset extends EvsQuery {
   }
 
   /**
-   * Instantiates an {@link InSubset} that matches members of one subset, given by its exact code.
+   * Instantiates an {@link InSubset} that matches members of the subset.
    *
-   * @param subsetCode the subset's code
+   * @param subset the subset's code or name
    */
-  public InSubset(final String subsetCode) {
-    this(new Exact(Objects.requireNonNull(subsetCode, "subsetCode")));
-  }
-
-  /**
-   * Instantiates an {@link InSubset} that matches members of any of the given subsets.
-   *
-   * @param subset how the subsets' name or code must match
-   */
-  public InSubset(final ValueMatch subset) {
+  public InSubset(final String subset) {
     this.subset = Objects.requireNonNull(subset, "subset");
   }
 
   /**
-   * Returns how the subsets' name or code must match.
+   * Returns the subset's code or name.
    *
-   * @return the subset name or code match
+   * @return the subset code or name
    */
-  public ValueMatch getSubset() {
+  public String getSubset() {
     return subset;
   }
 
   /**
-   * Sets how the subsets' name or code must match.
+   * Sets the subset's code or name.
    *
-   * @param subset the subset name or code match
+   * @param subset the subset code or name
    */
-  public void setSubset(final ValueMatch subset) {
+  public void setSubset(final String subset) {
     this.subset = subset;
   }
 
   /**
-   * Returns the query matching members of the subsets. The association types marking membership
-   * (e.g. A8) are gathered across every searched terminology, so one query covers them all.
+   * Returns the query matching members of the subset. The association types marking membership
+   * (e.g. A8) are gathered across every searched terminology, and a concept is a member through any
+   * of them.
    *
    * @param operations the OpenSearch operations
    * @param terminologies the terminologies being searched
@@ -85,10 +76,12 @@ public final class InSubset extends EvsQuery {
   @Override
   public QueryBuilder fetchOpenSearchQuery(
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
-    final OneOf membershipAssociation = new OneOf(getMembershipTypeNamesOrCodes(terminologies));
-    final HasAssociation membership = new HasAssociation(membershipAssociation, subset);
+    final List<EvsQuery> memberships =
+        getMembershipTypeNamesOrCodes(terminologies).stream()
+            .map(membershipType -> (EvsQuery) new HasAssociation(membershipType, subset))
+            .toList();
 
-    return membership.fetchOpenSearchQuery(operations, terminologies);
+    return new Or(memberships).fetchOpenSearchQuery(operations, terminologies);
   }
 
   /**

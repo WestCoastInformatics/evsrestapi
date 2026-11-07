@@ -1,16 +1,19 @@
 package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Terminology;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
 /**
- * Matches when either the name field or the code field matches the value match, e.g. a relationship
- * entry whose type name or type code is "R101". Combined with a raw bool query until the logical
- * operator nodes land, when it becomes an {@code Or} of two {@link FieldMatch}es.
+ * Matches when either the name field or the code field equals any of the names or codes, e.g. a
+ * relationship entry whose type name or type code is "R101". Combined with a raw bool query until
+ * the logical operator nodes land, when it becomes an {@code Or} of two {@link MatchAnyOf}s.
  */
 final class NameOrCodeMatch extends EvsQuery {
 
@@ -23,8 +26,8 @@ final class NameOrCodeMatch extends EvsQuery {
   /** The field holding the code. */
   private String codeField;
 
-  /** How the name or code must match. */
-  private ValueMatch nameOrCodeMatch;
+  /** The names or codes, any of which the name or code field may equal. */
+  private Set<String> namesOrCodes;
 
   /** Instantiates an empty {@link NameOrCodeMatch}. */
   NameOrCodeMatch() {
@@ -36,13 +39,13 @@ final class NameOrCodeMatch extends EvsQuery {
    *
    * @param nameField the field holding the name
    * @param codeField the field holding the code
-   * @param nameOrCodeMatch how the name or code must match
+   * @param namesOrCodes the names or codes, any of which the name or code field may equal
    */
   NameOrCodeMatch(
-      final String nameField, final String codeField, final ValueMatch nameOrCodeMatch) {
+      final String nameField, final String codeField, final Collection<String> namesOrCodes) {
     this.nameField = Objects.requireNonNull(nameField, "nameField");
     this.codeField = Objects.requireNonNull(codeField, "codeField");
-    this.nameOrCodeMatch = Objects.requireNonNull(nameOrCodeMatch, "nameOrCodeMatch");
+    this.namesOrCodes = new TreeSet<>(Objects.requireNonNull(namesOrCodes, "namesOrCodes"));
   }
 
   /**
@@ -82,29 +85,29 @@ final class NameOrCodeMatch extends EvsQuery {
   }
 
   /**
-   * Returns how the name or code must match.
+   * Returns the names or codes, any of which the name or code field may equal.
    *
-   * @return the name or code match
+   * @return the names or codes
    */
-  public ValueMatch getNameOrCodeMatch() {
-    return nameOrCodeMatch;
+  public Set<String> getNamesOrCodes() {
+    return namesOrCodes;
   }
 
   /**
-   * Sets how the name or code must match.
+   * Sets the names or codes, any of which the name or code field may equal.
    *
-   * @param nameOrCodeMatch the name or code match
+   * @param namesOrCodes the names or codes
    */
-  public void setNameOrCodeMatch(final ValueMatch nameOrCodeMatch) {
-    this.nameOrCodeMatch = nameOrCodeMatch;
+  public void setNamesOrCodes(final Set<String> namesOrCodes) {
+    this.namesOrCodes = namesOrCodes;
   }
 
   /* see superclass */
   @Override
   public QueryBuilder fetchOpenSearchQuery(
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
-    final FieldMatch nameMatch = new FieldMatch(nameField, nameOrCodeMatch);
-    final FieldMatch codeMatch = new FieldMatch(codeField, nameOrCodeMatch);
+    final MatchAnyOf nameMatch = new MatchAnyOf(nameField, namesOrCodes);
+    final MatchAnyOf codeMatch = new MatchAnyOf(codeField, namesOrCodes);
 
     return QueryBuilders.boolQuery()
         .should(nameMatch.fetchOpenSearchQuery(operations, terminologies))

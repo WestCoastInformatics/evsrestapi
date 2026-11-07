@@ -3,6 +3,7 @@ package gov.nih.nci.evs.api.query;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -10,10 +11,10 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 
 /**
- * Matches concepts that have a property of the given type, optionally with a value matching the
- * given match, e.g. concepts whose Neoplastic_Status (P363) is "Malignant". The type and the value
- * must match on the same property entry: a concept with P363 "Benign" and some other property whose
- * value is "Malignant" doesn't match.
+ * Matches concepts that have a property of the given type, optionally with the given value, e.g.
+ * concepts whose Neoplastic_Status (P363) is "Malignant". The type and the value must match on the
+ * same property entry: a concept with P363 "Benign" and some other property whose value is
+ * "Malignant" doesn't match.
  *
  * <p>Only searches the concept's {@code properties}. Properties remodeled into their own lists,
  * such as synonyms (FULL_SYN, P90) and definitions (DEFINITION, P97), aren't there, so they can't
@@ -44,10 +45,11 @@ public final class HasProperty extends EvsQuery {
   /** A property entry's list of qualifiers, mapped as nested so qualifiers can be searched. */
   private static final String QUALIFIERS_FIELD = PROPERTIES_FIELD + ".qualifiers";
 
-  private ValueMatch property;
+  /** The property's type name or code, e.g. "Neoplastic_Status" or "P363". */
+  private String property;
 
-  /** The match for the property's value, or null to match any value. */
-  private ValueMatch value;
+  /** The property's value, or null to match any value. */
+  private String value;
 
   /** The condition the property's qualifiers must meet, or null to require none. */
   private QualifierCondition qualifiers;
@@ -60,20 +62,20 @@ public final class HasProperty extends EvsQuery {
   /**
    * Instantiates a {@link HasProperty} that matches a property of the given type, with any value.
    *
-   * @param property the match for the property's type name or code
+   * @param property the property's type name or code
    */
-  public HasProperty(final ValueMatch property) {
+  public HasProperty(final String property) {
     this(property, null, null);
   }
 
   /**
-   * Instantiates a {@link HasProperty} that matches a property of the given type with a matching
+   * Instantiates a {@link HasProperty} that matches a property of the given type with the given
    * value.
    *
-   * @param property the match for the property's type name or code
-   * @param value the match for the property's value
+   * @param property the property's type name or code
+   * @param value the property's value
    */
-  public HasProperty(final ValueMatch property, final ValueMatch value) {
+  public HasProperty(final String property, final String value) {
     this(property, Objects.requireNonNull(value, "value"), null);
   }
 
@@ -81,61 +83,61 @@ public final class HasProperty extends EvsQuery {
    * Instantiates a {@link HasProperty} that matches a property of the given type, with any value,
    * whose qualifiers meet the condition.
    *
-   * @param property the match for the property's type name or code
+   * @param property the property's type name or code
    * @param qualifiers the condition the property's qualifiers must meet
    */
-  public HasProperty(final ValueMatch property, final QualifierCondition qualifiers) {
+  public HasProperty(final String property, final QualifierCondition qualifiers) {
     this(property, null, Objects.requireNonNull(qualifiers, "qualifiers"));
   }
 
   /**
-   * Instantiates a {@link HasProperty} that matches a property of the given type with a matching
+   * Instantiates a {@link HasProperty} that matches a property of the given type with the given
    * value, whose qualifiers meet the condition.
    *
-   * @param property the match for the property's type name or code
-   * @param value the match for the property's value, or null for any value
+   * @param property the property's type name or code
+   * @param value the property's value, or null for any value
    * @param qualifiers the condition the property's qualifiers must meet, or null for none
    */
   public HasProperty(
-      final ValueMatch property, final ValueMatch value, final QualifierCondition qualifiers) {
+      final String property, final String value, final QualifierCondition qualifiers) {
     this.property = Objects.requireNonNull(property, "property");
     this.value = value;
     this.qualifiers = qualifiers;
   }
 
   /**
-   * Returns the match for the property's type name or code.
+   * Returns the property's type name or code.
    *
-   * @return the type name or code match
+   * @return the type name or code
    */
-  public ValueMatch getProperty() {
+  public String getProperty() {
     return property;
   }
 
   /**
-   * Sets the match for the property's type name or code.
+   * Sets the property's type name or code.
    *
-   * @param property the type name or code match
+   * @param property the type name or code
    */
-  public void setProperty(final ValueMatch property) {
+  public void setProperty(final String property) {
     this.property = property;
   }
 
   /**
-   * Returns the match for the property's value.
+   * Returns the property's value.
    *
-   * @return the value match, or null to match any value
+   * @return the value, or null to match any value
    */
-  public ValueMatch getValue() {
+  public String getValue() {
     return value;
   }
 
   /**
-   * Sets the match for the property's value.
+   * Sets the property's value.
    *
-   * @param value the value match, or null to match any value
+   * @param value the value, or null to match any value
    */
-  public void setValue(final ValueMatch value) {
+  public void setValue(final String value) {
     this.value = value;
   }
 
@@ -162,13 +164,13 @@ public final class HasProperty extends EvsQuery {
   public QueryBuilder fetchOpenSearchQuery(
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final NameOrCodeMatch typeMatch =
-        new NameOrCodeMatch(TYPE_NAME_FIELD, TYPE_CODE_FIELD, property);
+        new NameOrCodeMatch(TYPE_NAME_FIELD, TYPE_CODE_FIELD, Set.of(property));
     final BoolQueryBuilder entryConditions =
         QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations, terminologies));
 
-    final boolean hasValueMatch = value != null;
-    if (hasValueMatch) {
-      final FieldMatch propertyValueMatch = new FieldMatch(VALUE_FIELD, value);
+    final boolean hasValue = value != null;
+    if (hasValue) {
+      final MatchAnyOf propertyValueMatch = new MatchAnyOf(VALUE_FIELD, Set.of(value));
       entryConditions.must(propertyValueMatch.fetchOpenSearchQuery(operations, terminologies));
     }
 

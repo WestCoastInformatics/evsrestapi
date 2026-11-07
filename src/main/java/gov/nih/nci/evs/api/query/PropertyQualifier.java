@@ -3,6 +3,7 @@ package gov.nih.nci.evs.api.query;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -32,10 +33,11 @@ public final class PropertyQualifier implements QualifierCondition {
   /** Separates the qualifier list field from a qualifier entry's field. */
   private static final String ENTRY_FIELD_SEPARATOR = ".";
 
-  private ValueMatch qualifier;
+  /** The qualifier's type name or code, e.g. "go-evi" or "P389". */
+  private String qualifier;
 
-  /** The match for the qualifier's value, or null to match any value. */
-  private ValueMatch value;
+  /** The qualifier's value, or null to match any value. */
+  private String value;
 
   /** Instantiates an empty {@link PropertyQualifier}. */
   public PropertyQualifier() {
@@ -46,58 +48,58 @@ public final class PropertyQualifier implements QualifierCondition {
    * Instantiates a {@link PropertyQualifier} that matches a qualifier of the given type, with any
    * value.
    *
-   * @param qualifier the match for the qualifier's type name or code
+   * @param qualifier the qualifier's type name or code
    */
-  public PropertyQualifier(final ValueMatch qualifier) {
+  public PropertyQualifier(final String qualifier) {
     this.qualifier = Objects.requireNonNull(qualifier, "qualifier");
     this.value = null;
   }
 
   /**
-   * Instantiates a {@link PropertyQualifier} that matches a qualifier of the given type with a
-   * matching value.
+   * Instantiates a {@link PropertyQualifier} that matches a qualifier of the given type with the
+   * given value.
    *
-   * @param qualifier the match for the qualifier's type name or code
-   * @param value the match for the qualifier's value
+   * @param qualifier the qualifier's type name or code
+   * @param value the qualifier's value
    */
-  public PropertyQualifier(final ValueMatch qualifier, final ValueMatch value) {
+  public PropertyQualifier(final String qualifier, final String value) {
     this.qualifier = Objects.requireNonNull(qualifier, "qualifier");
     this.value = Objects.requireNonNull(value, "value");
   }
 
   /**
-   * Returns the match for the qualifier's type name or code.
+   * Returns the qualifier's type name or code.
    *
-   * @return the type name or code match
+   * @return the type name or code
    */
-  public ValueMatch getQualifier() {
+  public String getQualifier() {
     return qualifier;
   }
 
   /**
-   * Sets the match for the qualifier's type name or code.
+   * Sets the qualifier's type name or code.
    *
-   * @param qualifier the type name or code match
+   * @param qualifier the type name or code
    */
-  public void setQualifier(final ValueMatch qualifier) {
+  public void setQualifier(final String qualifier) {
     this.qualifier = qualifier;
   }
 
   /**
-   * Returns the match for the qualifier's value.
+   * Returns the qualifier's value.
    *
-   * @return the value match, or null to match any value
+   * @return the value, or null to match any value
    */
-  public ValueMatch getValue() {
+  public String getValue() {
     return value;
   }
 
   /**
-   * Sets the match for the qualifier's value.
+   * Sets the qualifier's value.
    *
-   * @param value the value match, or null to match any value
+   * @param value the value, or null to match any value
    */
-  public void setValue(final ValueMatch value) {
+  public void setValue(final String value) {
     this.value = value;
   }
 
@@ -119,14 +121,14 @@ public final class PropertyQualifier implements QualifierCondition {
         new NameOrCodeMatch(
             getEntryFieldName(qualifierListField, TYPE_NAME_FIELD),
             getEntryFieldName(qualifierListField, TYPE_CODE_FIELD),
-            qualifier);
+            Set.of(qualifier));
     final BoolQueryBuilder entryConditions =
         QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations, terminologies));
 
-    final boolean hasValueMatch = value != null;
-    if (hasValueMatch) {
-      final FieldMatch qualifierValueMatch =
-          new FieldMatch(getEntryFieldName(qualifierListField, VALUE_FIELD), value);
+    final boolean hasValue = value != null;
+    if (hasValue) {
+      final MatchAnyOf qualifierValueMatch =
+          new MatchAnyOf(getEntryFieldName(qualifierListField, VALUE_FIELD), Set.of(value));
       entryConditions.must(qualifierValueMatch.fetchOpenSearchQuery(operations, terminologies));
     }
 

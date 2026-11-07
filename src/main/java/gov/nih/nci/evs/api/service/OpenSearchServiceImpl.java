@@ -484,7 +484,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @return the contains query
    * @throws Exception the exception
    */
-  private BoolQueryBuilder getContainsQuery(
+  public static BoolQueryBuilder getContainsQuery(
       final SearchCriteria searchCriteria, final String term, boolean fuzzyFlag, boolean andFlag)
       throws Exception {
     return getContainsQuery(searchCriteria, term, fuzzyFlag, andFlag, true);
@@ -501,7 +501,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @return the contains query
    * @throws Exception the exception
    */
-  private BoolQueryBuilder getContainsQuery(
+  private static BoolQueryBuilder getContainsQuery(
       final SearchCriteria searchCriteria,
       final String term,
       boolean fuzzyFlag,
@@ -737,7 +737,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param andFlag the and flag
    * @throws Exception the exception
    */
-  private void addOptionalSearchPhraseQuery(
+  private static void addOptionalSearchPhraseQuery(
       final BoolQueryBuilder termQuery,
       final SearchCriteria searchCriteria,
       final String normTerm,
@@ -760,7 +760,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param term the normalized search term
    * @return the term without optional search phrases
    */
-  private String removeOptionalSearchPhrases(final String term) {
+  private static String removeOptionalSearchPhrases(final String term) {
     if (StringUtils.isBlank(term)) {
       return term;
     }
@@ -780,7 +780,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param fuzzyFlag the fuzzy flag
    * @return the code and name query, or null when the term is not eligible
    */
-  private QueryBuilder getCodeAndNameQuery(
+  private static QueryBuilder getCodeAndNameQuery(
       final String term, final String type, final boolean fuzzyFlag) {
     if (!"contains".equals(type) || StringUtils.isBlank(term) || !term.contains(" ")) {
       return null;
@@ -813,7 +813,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param type the search type
    * @param fuzzyFlag the fuzzy flag
    */
-  private void addCodeAndNameQuery(
+  private static void addCodeAndNameQuery(
       final BoolQueryBuilder parentQuery,
       final String[] tokens,
       final int codeIndex,
@@ -853,7 +853,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param fuzzyFlag the fuzzy flag
    * @return the name/synonym query, or null when no normalized name term exists
    */
-  private QueryBuilder getNameOnlyContainsQuery(
+  private static QueryBuilder getNameOnlyContainsQuery(
       final String term, final String type, final boolean fuzzyFlag) {
     final String normTerm = ConceptUtils.normalize(term);
     if (StringUtils.isBlank(normTerm)) {
@@ -938,7 +938,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param boost the boost
    * @return the code query
    */
-  private BoolQueryBuilder getCodeQuery(final String codeList, final float boost) {
+  private static BoolQueryBuilder getCodeQuery(final String codeList, final float boost) {
     return QueryBuilders.boolQuery()
         // concept code
         .should(QueryBuilders.queryStringQuery(codeList).field("code").boost(boost))
@@ -960,7 +960,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param boost the boost
    * @return the exact code query
    */
-  private BoolQueryBuilder getExactCodeQuery(final String code, final float boost) {
+  private static BoolQueryBuilder getExactCodeQuery(final String code, final float boost) {
     return QueryBuilders.boolQuery()
         .should(QueryBuilders.matchPhraseQuery("code", code).boost(boost))
         .should(
@@ -981,7 +981,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @return the match query
    * @throws Exception the exception
    */
-  private BoolQueryBuilder getMatchQuery(final String term, final boolean startsWithFlag)
+  public static BoolQueryBuilder getMatchQuery(final String term, final boolean startsWithFlag)
       throws Exception {
 
     // Normalized term with escaped spaces for exact matching
@@ -1042,7 +1042,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param boost the boost
    * @return the nested original code query
    */
-  private NestedQueryBuilder getOriginalCodeQuery(
+  private static NestedQueryBuilder getOriginalCodeQuery(
       final String codeList, final boolean analyzeWildcard, final float boost) {
     return QueryBuilders.nestedQuery(
             "properties",
@@ -1063,7 +1063,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param boost the boost
    * @return the nested original code query
    */
-  private NestedQueryBuilder getOriginalCodeExactQuery(final String code, final float boost) {
+  private static NestedQueryBuilder getOriginalCodeExactQuery(
+      final String code, final float boost) {
     return QueryBuilders.nestedQuery(
             "properties",
             QueryBuilders.boolQuery()
@@ -1121,7 +1122,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param type the type of search
    * @return the updated term
    */
-  private String updateTermForType(String term, String type) {
+  private static String updateTermForType(String term, String type) {
     if (StringUtils.isBlank(term) || StringUtils.isBlank(type)) {
       return term;
     }
@@ -1153,7 +1154,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param modifier the modifier
    * @return the modified term or phrase
    */
-  private String updateTokens(String term, Character modifier) {
+  private static String updateTokens(String term, Character modifier) {
     String[] tokens = term.split("\\s+");
     StringBuilder builder = new StringBuilder();
 

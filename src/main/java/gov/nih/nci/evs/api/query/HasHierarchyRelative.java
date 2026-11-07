@@ -25,8 +25,8 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 /**
  * Base type for nodes that match concepts with a hierarchy relative among the target concepts:
  * {@link HasAncestor} (concepts below a target), {@link HasDescendant} (concepts above a target).
- * The targets are the concepts whose name or code matches {@code target}, a {@link ValueMatch}, so
- * these don't nest other queries.
+ * The targets are the concepts whose name or code is {@code target}, so these don't nest other
+ * queries.
  *
  * <p>Some cases can't be answered from the concept's own fields yet, and look up the target codes
  * first ({@link #fetchTargetCodes}). Codes are only unique within one terminology version, and each
@@ -78,8 +78,8 @@ public abstract class HasHierarchyRelative extends EvsQuery {
    */
   private static final int FIRST_PAGE = 0;
 
-  /** How the target concepts' name or code must match. */
-  private ValueMatch target;
+  /** The target concepts' name or code. */
+  private String target;
 
   /** The maximum distance from the targets, or null for any distance. */
   private Integer maxLevel;
@@ -92,10 +92,10 @@ public abstract class HasHierarchyRelative extends EvsQuery {
   /**
    * Instantiates a {@link HasHierarchyRelative}.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concepts' name or code
    * @param maxLevel the maximum distance from the targets, at least 1, or null for any distance
    */
-  protected HasHierarchyRelative(final ValueMatch target, final Integer maxLevel) {
+  protected HasHierarchyRelative(final String target, final Integer maxLevel) {
     this.target = Objects.requireNonNull(target, "target");
 
     final boolean hasInvalidMaxLevel = maxLevel != null && maxLevel < MIN_MAX_LEVEL;
@@ -108,20 +108,20 @@ public abstract class HasHierarchyRelative extends EvsQuery {
   }
 
   /**
-   * Returns how the target concepts' name or code must match.
+   * Returns the target concepts' name or code.
    *
-   * @return the target name or code match
+   * @return the target name or code
    */
-  public ValueMatch getTarget() {
+  public String getTarget() {
     return target;
   }
 
   /**
-   * Sets how the target concepts' name or code must match.
+   * Sets the target concepts' name or code.
    *
-   * @param target the target name or code match
+   * @param target the target name or code
    */
-  public void setTarget(final ValueMatch target) {
+  public void setTarget(final String target) {
     this.target = target;
   }
 
@@ -189,7 +189,7 @@ public abstract class HasHierarchyRelative extends EvsQuery {
    */
   protected final QueryBuilder getTargetsQuery(
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
-    return new NameOrCodeMatch(NAME_FIELD, CODE_FIELD, target)
+    return new NameOrCodeMatch(NAME_FIELD, CODE_FIELD, Set.of(target))
         .fetchOpenSearchQuery(operations, terminologies);
   }
 
@@ -288,7 +288,7 @@ public abstract class HasHierarchyRelative extends EvsQuery {
    */
   private static QueryBuilder getInIndexQuery(
       final OpenSearchOperations operations, final Terminology terminology) {
-    return new FieldMatch(INDEX_FIELD, new Exact(terminology.getIndexName()))
+    return new MatchAnyOf(INDEX_FIELD, Set.of(terminology.getIndexName()))
         .fetchOpenSearchQuery(operations, List.of(terminology));
   }
 

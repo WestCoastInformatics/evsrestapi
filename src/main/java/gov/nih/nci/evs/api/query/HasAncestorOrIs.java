@@ -10,8 +10,8 @@ import org.opensearch.index.query.QueryBuilder;
 /**
  * Matches the target concepts and every concept below them, in the same terminology version. For
  * example, Skin and everything below Skin. Like {@link HasAncestor}, a target is a concept whose
- * name or code matches the {@link ValueMatch}, and {@code maxLevel} limits how far below the
- * targets to go (the targets themselves are depth 0 and always match).
+ * name or code is the given one, and {@code maxLevel} limits how far below the targets to go (the
+ * targets themselves are depth 0 and always match).
  */
 public class HasAncestorOrIs extends HasAncestor {
 
@@ -23,9 +23,9 @@ public class HasAncestorOrIs extends HasAncestor {
   /**
    * Instantiates a {@link HasAncestorOrIs} for the target concepts and everything below them.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concept's name or code
    */
-  public HasAncestorOrIs(final ValueMatch target) {
+  public HasAncestorOrIs(final String target) {
     super(target);
   }
 
@@ -33,31 +33,11 @@ public class HasAncestorOrIs extends HasAncestor {
    * Instantiates a {@link HasAncestorOrIs} for the target concepts and those within {@code
    * maxLevel} levels below them.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concept's name or code
    * @param maxLevel the maximum depth below the targets, at least 1
    */
-  public HasAncestorOrIs(final ValueMatch target, final int maxLevel) {
+  public HasAncestorOrIs(final String target, final int maxLevel) {
     super(target, maxLevel);
-  }
-
-  /**
-   * Instantiates a {@link HasAncestorOrIs} for one concept and everything below it.
-   *
-   * @param code the target concept's code
-   */
-  public HasAncestorOrIs(final String code) {
-    super(code);
-  }
-
-  /**
-   * Instantiates a {@link HasAncestorOrIs} for one concept and those within {@code maxLevel} levels
-   * below it.
-   *
-   * @param code the target concept's code
-   * @param maxLevel the maximum depth below the target, at least 1
-   */
-  public HasAncestorOrIs(final String code, final int maxLevel) {
-    super(code, maxLevel);
   }
 
   /**

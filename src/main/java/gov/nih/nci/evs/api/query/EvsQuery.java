@@ -24,9 +24,10 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 
 /**
- * A node in an EVS search query tree. A {@link FieldMatch} matches a single field with a {@link
- * ValueMatch}; the logical queries ({@link And}, {@link Or}, {@link Not}, {@link Boost}) combine
- * other {@link EvsQuery} nodes. Every other node holds only value matches, never another query.
+ * A node in an EVS search query tree. The term searches ({@link Exact}, {@link StartsWith}, {@link
+ * Contains}, {@link Fuzzy}) search names, codes, and synonyms like the legacy concept search; the
+ * logical queries ({@link And}, {@link Or}, {@link Not}, {@link Boost}) combine other {@link
+ * EvsQuery} nodes. Every other node holds only names, codes, and values, never another query.
  *
  * <p>Run a tree with {@link #fetchConcepts}. EXPERIMENTAL: nodes may also contribute sorts (see
  * {@link #getSorts()}).
@@ -41,6 +42,10 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
   @JsonSubTypes.Type(value = HasSynonym.class, name = "HasSynonym"),
   @JsonSubTypes.Type(value = InSubset.class, name = "InSubset"),
   @JsonSubTypes.Type(value = Typeahead.class, name = "Typeahead"),
+  @JsonSubTypes.Type(value = Exact.class, name = "Exact"),
+  @JsonSubTypes.Type(value = StartsWith.class, name = "StartsWith"),
+  @JsonSubTypes.Type(value = Contains.class, name = "Contains"),
+  @JsonSubTypes.Type(value = Fuzzy.class, name = "Fuzzy"),
   @JsonSubTypes.Type(value = HasAncestor.class, name = "HasAncestor"),
   @JsonSubTypes.Type(value = HasAncestorOrIs.class, name = "HasAncestorOrIs"),
   @JsonSubTypes.Type(value = HasDescendant.class, name = "HasDescendant"),
@@ -76,12 +81,12 @@ public abstract class EvsQuery {
    *
    * <pre>{@code
    * final OpenSearchOperations operations = mock(OpenSearchOperations.class);
-   * // Stub search(...) to return a page holding the target codes
+   * // Stub search(...) to return a page holding the target code
    * when(operations.search(any(), eq(Concept.class), any())).thenReturn(skinAndLungHits);
    *
-   * final HasAncestor query = new HasAncestor(new OneOf(Set.of("C12470", "C12468")));
+   * final HasAncestor query = new HasAncestor("C12470");
    * final QueryBuilder builder = query.fetchOpenSearchQuery(operations, terminologies);
-   * // builder now matches concepts below Skin or Lung
+   * // builder now matches concepts below Skin
    * }</pre>
    *
    * @param operations the OpenSearch operations, for any searches the node needs to run first

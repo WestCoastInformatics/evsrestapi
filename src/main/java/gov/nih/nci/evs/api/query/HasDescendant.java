@@ -2,16 +2,14 @@ package gov.nih.nci.evs.api.query;
 
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 
 /**
  * Matches concepts strictly above any target concept, in the same terminology version: the upward
- * counterpart of {@link HasAncestor}. A target is a concept whose name or code matches the {@link
- * ValueMatch}. For example, everything above Breast Carcinoma, or the parents of any concept named
- * "... Melanoma".
+ * counterpart of {@link HasAncestor}. A target is a concept whose name or code is the given one.
+ * For example, everything above Breast Carcinoma.
  *
  * <p>Without a level limit, this is one query: each concept stores its descendants' names and codes
  * in {@code descendants}, so a concept is an ancestor of a target when one of its descendants
@@ -42,9 +40,9 @@ public class HasDescendant extends HasHierarchyRelative {
   /**
    * Instantiates an {@link HasDescendant} for everything above the target concepts.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concept's name or code
    */
-  public HasDescendant(final ValueMatch target) {
+  public HasDescendant(final String target) {
     super(target, ANY_LEVEL);
   }
 
@@ -52,31 +50,11 @@ public class HasDescendant extends HasHierarchyRelative {
    * Instantiates an {@link HasDescendant} for concepts within {@code maxLevel} levels above the
    * target concepts.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concept's name or code
    * @param maxLevel the maximum distance above the targets, at least 1
    */
-  public HasDescendant(final ValueMatch target, final int maxLevel) {
+  public HasDescendant(final String target, final int maxLevel) {
     super(target, maxLevel);
-  }
-
-  /**
-   * Instantiates an {@link HasDescendant} for everything above one concept.
-   *
-   * @param code the target concept's code
-   */
-  public HasDescendant(final String code) {
-    this(new Exact(Objects.requireNonNull(code, "code")));
-  }
-
-  /**
-   * Instantiates an {@link HasDescendant} for concepts within {@code maxLevel} levels above one
-   * concept.
-   *
-   * @param code the target concept's code
-   * @param maxLevel the maximum distance above the target, at least 1
-   */
-  public HasDescendant(final String code, final int maxLevel) {
-    this(new Exact(Objects.requireNonNull(code, "code")), maxLevel);
   }
 
   /* see superclass */
@@ -88,7 +66,7 @@ public class HasDescendant extends HasHierarchyRelative {
       return fetchRelativesOfTargetCodesQuery(operations, terminologies);
     }
 
-    return new NameOrCodeMatch(DESCENDANT_NAME_FIELD, DESCENDANT_CODE_FIELD, getTarget())
+    return new NameOrCodeMatch(DESCENDANT_NAME_FIELD, DESCENDANT_CODE_FIELD, Set.of(getTarget()))
         .fetchOpenSearchQuery(operations, terminologies);
   }
 

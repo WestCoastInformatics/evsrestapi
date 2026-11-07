@@ -6,6 +6,8 @@ import gov.nih.nci.evs.api.util.ConceptUtils;
 import java.util.List;
 import java.util.Map;
 import org.opensearch.data.core.OpenSearchOperations;
+import org.opensearch.index.query.MultiMatchQueryBuilder;
+import org.opensearch.index.query.Operator;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.script.Script;
@@ -20,8 +22,8 @@ import org.opensearch.search.sort.SortOrder;
  * Completes a partially typed term against concept preferred names and codes.
  *
  * <ul>
- *   <li>Matching is {@link SearchAsYouType} on the preferred name: every typed word must appear, in
- *       any order, with only the last word allowed to be partial. Case and punctuation are ignored.
+ *   <li>Matching is search-as-you-type on the preferred name: every typed word must appear, in any
+ *       order, with only the last word allowed to be partial. Case and punctuation are ignored.
  *   <li>A partial code matches the start of a code, case sensitively, so "C322" finds C3224 and
  *       C32240 but "c322" finds neither.
  *   <li>Retired (inactive) concepts are left out, since they can't be used.
@@ -38,6 +40,12 @@ public class Typeahead extends EvsQuery {
   /** The search_as_you_type subfield of preferred names, which typeahead matches against. */
   private static final String NAME_TYPEAHEAD_FIELD =
       "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+
+  /** Subfield holding adjacent word pairs, created by the search_as_you_type mapping. */
+  private static final String WORD_PAIRS_SUFFIX = "._2gram";
+
+  /** Subfield holding adjacent word triples, created by the search_as_you_type mapping. */
+  private static final String WORD_TRIPLES_SUFFIX = "._3gram";
 
   /** The preferred name field, whose text highlights show what matched. */
   private static final String NAME_FIELD = "name";
@@ -202,21 +210,23 @@ public class Typeahead extends EvsQuery {
     final int eitherFieldMatches = 1;
     // Codes aren't normalized, so only surrounding whitespace is dropped before comparing
     final String typedCode = incompleteTerm.trim();
+    // The recommended way to query a search_as_you_type field: a bool_prefix multi_match over the
+    // root field and its generated subfields
     final QueryBuilder nameQuery =
-        new FieldMatch(NAME_TYPEAHEAD_FIELD, new SearchAsYouType(incompleteTerm))
-            .fetchOpenSearchQuery(operations, terminologies);
+        QueryBuilders.multiMatchQuery(
+                incompleteTerm,
+                NAME_TYPEAHEAD_FIELD,
+                NAME_TYPEAHEAD_FIELD + WORD_PAIRS_SUFFIX,
+                NAME_TYPEAHEAD_FIELD + WORD_TRIPLES_SUFFIX)
+            .type(MultiMatchQueryBuilder.Type.BOOL_PREFIX)
+            // Require every typed word; the default would match on any one word
+            .operator(Operator.AND);
     // Codes are always case sensitive, so they're completed with a prefix on the code keyword,
     // not a search_as_you_type field, which lowercases what it compares
-    final QueryBuilder partialCodeQuery =
-        new FieldMatch(CODE_FIELD, new StartsWith(typedCode))
-            .fetchOpenSearchQuery(operations, terminologies);
-    final QueryBuilder wholeCodeQuery =
-        new FieldMatch(CODE_FIELD, new Exact(typedCode))
-            .fetchOpenSearchQuery(operations, terminologies);
+    final QueryBuilder partialCodeQuery = QueryBuilders.prefixQuery(CODE_FIELD, typedCode);
+    final QueryBuilder wholeCodeQuery = QueryBuilders.termQuery(CODE_FIELD, typedCode);
     final String inactiveFlag = Boolean.toString(false);
-    final QueryBuilder inactiveQuery =
-        new FieldMatch(ACTIVE_FIELD, new Exact(inactiveFlag))
-            .fetchOpenSearchQuery(operations, terminologies);
+    final QueryBuilder inactiveQuery = QueryBuilders.termQuery(ACTIVE_FIELD, inactiveFlag);
 
     // Confirm that the ordering has not been messed up
     assert WHOLE_CODE_SCORE > NAME_MATCH_SCORE && NAME_MATCH_SCORE > CODE_MATCH_SCORE;
