@@ -132,7 +132,26 @@ public abstract class EvsQuery {
   }
 
   /**
-   * Returns the concept indexes of the terminologies, which {@link #fetchConcepts} searches.
+   * Counts every concept this query matches, with no limit, unlike the total {@link #fetchConcepts}
+   * returns, which stops at OpenSearch's default of 10,000.
+   *
+   * @param operations the OpenSearch operations
+   * @param terminologies the terminologies to search
+   * @return the number of matching concepts
+   * @throws IllegalArgumentException if a terminology is missing its terminology or version
+   */
+  public final long fetchConceptCount(
+      final OpenSearchOperations operations, final List<Terminology> terminologies) {
+    checkTerminologiesAreSearchable(terminologies);
+
+    final NativeSearchQueryBuilder count =
+        new NativeSearchQueryBuilder().withQuery(fetchOpenSearchQuery(operations, terminologies));
+    return operations.count(count.build(), Concept.class, getIndexCoordinates(terminologies));
+  }
+
+  /**
+   * Returns the concept indexes of the terminologies, which {@link #fetchConcepts} and {@link
+   * #fetchConceptCount} search.
    *
    * @param terminologies the terminologies
    * @return the index coordinates

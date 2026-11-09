@@ -596,8 +596,7 @@ public class SearchController extends BaseController {
           "Runs a query tree sent as JSON against one terminology and returns the concepts it"
               + " matches. Each node names its kind in a \"type\" property, e.g. And, Or, Not,"
               + " HasAncestor, HasProperty, HasSynonym, and each value match does too, e.g. Exact,"
-              + " StartsWith, Contains. Pages with fromRecord and pageSize, and the total counts"
-              + " matches only up to 10,000.")
+              + " StartsWith, Contains. Pages with fromRecord and pageSize.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -696,7 +695,7 @@ public class SearchController extends BaseController {
         parseAndValidateTerminologiesFromSearchCriteria(searchCriteria, license);
 
     final ConceptResultList results =
-        openSearchService.findQueryConcepts(query, terminologies, searchCriteria);
+        openSearchService.findQueryConceptsWithExactTotal(query, terminologies, searchCriteria);
     highlightConceptMatches(results);
 
     results.setTimeTaken(System.currentTimeMillis() - timerStartDate);

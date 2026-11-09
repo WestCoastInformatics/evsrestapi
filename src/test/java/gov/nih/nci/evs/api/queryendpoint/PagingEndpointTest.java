@@ -21,6 +21,12 @@ public class PagingEndpointTest extends AbstractQueryEndpointTest {
       {"type": "HasAncestor", "target": "C12971", "maxLevel": 1}
       """;
 
+  /** Every descendant of Disease, Disorder or Finding (C7057), a query with many matches. */
+  private static final String DISEASE_DESCENDANTS_QUERY =
+      """
+      {"type": "HasAncestor", "target": "C7057"}
+      """;
+
   /**
    * Test a page from a record returns the matches at those positions: records 1-2 of the four
    * children of Breast are the second and third of all the matches.
@@ -51,6 +57,21 @@ public class PagingEndpointTest extends AbstractQueryEndpointTest {
 
     assertThat(results.getConcepts()).isEmpty();
     assertThat(results.getTotal()).isEqualTo(BREAST_CHILDREN.size());
+  }
+
+  /**
+   * Test the total counts every match past OpenSearch's default limit of 10,000, as legacy search
+   * does: Disease, Disorder or Finding has more descendants than that.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testTotalCountsMatchesPastCountedHitLimit() throws Exception {
+    final long countedHitLimit = 10_000L;
+
+    final ConceptResultList results = fetchPage(DISEASE_DESCENDANTS_QUERY, 0, 10);
+
+    assertThat(results.getTotal()).isGreaterThan(countedHitLimit);
   }
 
   /**

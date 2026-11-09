@@ -89,6 +89,9 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   /** Number of concepts per children lookup in the hierarchy search fallback. */
   private static final int CHILDREN_BATCH_SIZE = 1000;
 
+  /** OpenSearch's default limit on the hits a search counts, at which its total stops. */
+  private static final long COUNTED_HIT_LIMIT = 10_000L;
+
   /** Terminology versions for which hierarchy fallback use was already logged. */
   private final Set<String> hierarchyFallbackNoted = ConcurrentHashMap.newKeySet();
 
@@ -111,13 +114,29 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     final ConceptResultList results = new ConceptResultList();
     results.setParameters(searchCriteria);
-    // Capped at 10,000: unlike findConcepts, this doesn't run a second query for the exact count
+    // Capped at 10,000: findQueryConceptsWithExactTotal runs a second query for the exact count
     results.setTotal(hits.getTotalHits());
     results.setConcepts(
         hits.stream()
             .peek(OpenSearchServiceImpl::addHighlightsToConcept)
             .map(SearchHit::getContent)
             .collect(Collectors.toList()));
+    return results;
+  }
+
+  /* see superclass */
+  @Override
+  public ConceptResultList findQueryConceptsWithExactTotal(
+      final EvsQuery query,
+      final List<Terminology> terminologies,
+      final SearchCriteria searchCriteria) {
+    final ConceptResultList results = findQueryConcepts(query, terminologies, searchCriteria);
+
+    final boolean hasTotalAtCountedHitLimit = results.getTotal() >= COUNTED_HIT_LIMIT;
+    if (hasTotalAtCountedHitLimit) {
+      results.setTotal(query.fetchConceptCount(operations, terminologies));
+    }
+
     return results;
   }
 
