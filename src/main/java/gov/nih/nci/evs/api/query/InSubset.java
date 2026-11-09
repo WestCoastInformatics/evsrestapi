@@ -29,7 +29,7 @@ import org.opensearch.index.query.QueryBuilder;
 public final class InSubset extends EvsQuery {
 
   /** The subset's code or name. */
-  private String subset;
+  private String target;
 
   /** Instantiates an empty {@link InSubset}. */
   public InSubset() {
@@ -39,10 +39,10 @@ public final class InSubset extends EvsQuery {
   /**
    * Instantiates an {@link InSubset} that matches members of the subset.
    *
-   * @param subset the subset's code or name
+   * @param target the subset's code or name
    */
-  public InSubset(final String subset) {
-    this.subset = Objects.requireNonNull(subset, "subset");
+  public InSubset(final String target) {
+    this.target = Objects.requireNonNull(target, "target");
   }
 
   /**
@@ -50,17 +50,17 @@ public final class InSubset extends EvsQuery {
    *
    * @return the subset code or name
    */
-  public String getSubset() {
-    return subset;
+  public String getTarget() {
+    return target;
   }
 
   /**
    * Sets the subset's code or name.
    *
-   * @param subset the subset code or name
+   * @param target the subset code or name
    */
-  public void setSubset(final String subset) {
-    this.subset = subset;
+  public void setTarget(final String target) {
+    this.target = target;
   }
 
   /**
@@ -78,7 +78,7 @@ public final class InSubset extends EvsQuery {
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final List<EvsQuery> memberships =
         getMembershipTypeNamesOrCodes(terminologies).stream()
-            .map(membershipType -> (EvsQuery) new HasAssociation(membershipType, subset))
+            .map(membershipType -> (EvsQuery) new HasAssociation(membershipType, target))
             .toList();
 
     return new Or(memberships).fetchOpenSearchQuery(operations, terminologies);

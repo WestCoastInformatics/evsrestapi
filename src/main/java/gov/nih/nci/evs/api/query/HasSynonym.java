@@ -56,7 +56,7 @@ public final class HasSynonym extends EvsQuery {
    * The synonym's name, as given, or null to match any name. It is normalized when the query is
    * built, so clients can send the name as written.
    */
-  private String name;
+  private String target;
 
   /** The synonym's source, or null to match any source. */
   private String source;
@@ -75,36 +75,36 @@ public final class HasSynonym extends EvsQuery {
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with the given name, from any source.
    *
-   * @param name the synonym's name
+   * @param target the synonym's name
    */
-  public HasSynonym(final String name) {
-    this(Objects.requireNonNull(name, "name"), null, null, null);
+  public HasSynonym(final String target) {
+    this(Objects.requireNonNull(target, "target"), null, null, null);
   }
 
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with the given name, source, and term
    * type, from any sub-source.
    *
-   * @param name the synonym's name, or null for any name
+   * @param target the synonym's name, or null for any name
    * @param source the synonym's source, or null for any source
    * @param termType the synonym's term type, or null for any term type
    */
-  public HasSynonym(final String name, final String source, final String termType) {
-    this(name, source, termType, null);
+  public HasSynonym(final String target, final String source, final String termType) {
+    this(target, source, termType, null);
   }
 
   /**
    * Instantiates a {@link HasSynonym} that matches a synonym with the given name, source, term
    * type, and sub-source.
    *
-   * @param name the synonym's name, or null for any name
+   * @param target the synonym's name, or null for any name
    * @param source the synonym's source, or null for any source
    * @param termType the synonym's term type, or null for any term type
    * @param subSource the synonym's sub-source, or null for any sub-source
    */
   public HasSynonym(
-      final String name, final String source, final String termType, final String subSource) {
-    this.name = name;
+      final String target, final String source, final String termType, final String subSource) {
+    this.target = target;
     this.source = source;
     this.termType = termType;
     this.subSource = subSource;
@@ -115,17 +115,17 @@ public final class HasSynonym extends EvsQuery {
    *
    * @return the name, or null to match any name
    */
-  public String getName() {
-    return name;
+  public String getTarget() {
+    return target;
   }
 
   /**
    * Sets the synonym's name, as given.
    *
-   * @param name the name, or null to match any name
+   * @param target the name, or null to match any name
    */
-  public void setName(final String name) {
-    this.name = name;
+  public void setTarget(final String target) {
+    this.target = target;
   }
 
   /**
@@ -189,8 +189,8 @@ public final class HasSynonym extends EvsQuery {
    * @return the normalized name, or null to match any name
    */
   private String getNormalizedName() {
-    final boolean hasName = name != null;
-    return hasName ? ConceptUtils.normalize(name) : null;
+    final boolean hasName = target != null;
+    return hasName ? ConceptUtils.normalize(target) : null;
   }
 
   /* see superclass */

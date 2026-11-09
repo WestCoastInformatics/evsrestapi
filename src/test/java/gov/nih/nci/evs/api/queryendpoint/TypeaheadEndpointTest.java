@@ -15,7 +15,7 @@ public class TypeaheadEndpointTest extends AbstractQueryEndpointTest {
   /** The typeahead for the term "melanoma". */
   private static final String MELANOMA_TYPEAHEAD_QUERY =
       """
-      {"type": "Typeahead", "incompleteTerm": "melanoma"}
+      {"type": "Typeahead", "term": "melanoma"}
       """;
 
   /**
@@ -29,19 +29,19 @@ public class TypeaheadEndpointTest extends AbstractQueryEndpointTest {
   }
 
   /**
-   * Test Typeahead with a misspelled property (term, not incompleteTerm) is rejected as a bad
+   * Test Typeahead with a misspelled property (incompleteTerm, not term) is rejected as a bad
    * request.
    *
    * @throws Exception the exception
    */
   @Test
   public void testTypeaheadWithMisspelledPropertyReturnsBadRequest() throws Exception {
-    final String termInsteadOfIncompleteTermQuery =
+    final String incompleteTermInsteadOfTermQuery =
         """
-        {"type": "Typeahead", "term": "melanoma"}
+        {"type": "Typeahead", "incompleteTerm": "melanoma"}
         """;
 
-    postQuery(termInsteadOfIncompleteTermQuery).andExpect(status().isBadRequest());
+    postQuery(incompleteTermInsteadOfTermQuery).andExpect(status().isBadRequest());
   }
 
   /**

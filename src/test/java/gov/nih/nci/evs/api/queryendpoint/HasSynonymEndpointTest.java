@@ -14,7 +14,7 @@ public class HasSynonymEndpointTest extends AbstractQueryEndpointTest {
   /** The NCI preferred term "melanoma". */
   private static final String MELANOMA_PREFERRED_TERM_QUERY =
       """
-      {"type": "HasSynonym", "name": "melanoma", "source": "NCI", "termType": "PT"}
+      {"type": "HasSynonym", "target": "melanoma", "source": "NCI", "termType": "PT"}
       """;
 
   /**

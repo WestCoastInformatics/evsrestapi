@@ -13,7 +13,7 @@ import org.opensearch.index.query.QueryBuilder;
  * A condition on one property entry's qualifiers, e.g. "go-id is GO:0005737 and go-evi is TAS or
  * IDA". {@link HasProperty} checks it inside its query on each property entry, so every part of the
  * condition holds on the same entry. The leaf is {@link PropertyQualifier}; {@link AllQualifiers},
- * {@link AnyQualifier}, and {@link NoQualifier} combine conditions.
+ * {@link AnyQualifiers}, and {@link NoQualifiers} combine conditions.
  *
  * <p><b>Why qualifiers have their own logical operators.</b> The concept-level {@code And}, {@code
  * Or}, and {@code Not} can't combine qualifiers: they combine sets of concepts, and once a {@link
@@ -37,8 +37,8 @@ import org.opensearch.index.query.QueryBuilder;
 @JsonSubTypes({
   @JsonSubTypes.Type(value = PropertyQualifier.class, name = "PropertyQualifier"),
   @JsonSubTypes.Type(value = AllQualifiers.class, name = "AllQualifiers"),
-  @JsonSubTypes.Type(value = AnyQualifier.class, name = "AnyQualifier"),
-  @JsonSubTypes.Type(value = NoQualifier.class, name = "NoQualifier")
+  @JsonSubTypes.Type(value = AnyQualifiers.class, name = "AnyQualifiers"),
+  @JsonSubTypes.Type(value = NoQualifiers.class, name = "NoQualifiers")
 })
 @JsonInclude(Include.NON_EMPTY)
 public interface QualifierCondition {

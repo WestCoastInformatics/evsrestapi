@@ -79,17 +79,17 @@ classDiagram
     }
 
     class InSubset {
-        -String subset
+        -String target
     }
 
     class HasProperty {
         -String property
-        -String value
+        -String target
         -QualifierCondition qualifiers
     }
 
     class HasSynonym {
-        -String name
+        -String target
         -String source
         -String termType
         -String subSource
@@ -102,15 +102,15 @@ classDiagram
     class AllQualifiers {
         -List~QualifierCondition~ conditions
     }
-    class AnyQualifier {
+    class AnyQualifiers {
         -List~QualifierCondition~ conditions
     }
-    class NoQualifier {
+    class NoQualifiers {
         -QualifierCondition condition
     }
     class PropertyQualifier {
         -String qualifier
-        -String value
+        -String target
     }
 
     class And {
@@ -128,7 +128,7 @@ classDiagram
     }
 
     class Typeahead {
-        -String incompleteTerm
+        -String term
         +getHasWordsToComplete(String)$ boolean
         +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
         +getSorts() List~SortBuilder~
@@ -188,11 +188,11 @@ classDiagram
     HasProperty o-- QualifierCondition : qualifiers
     QualifierCondition <|.. PropertyQualifier
     QualifierCondition <|.. AllQualifiers
-    QualifierCondition <|.. AnyQualifier
-    QualifierCondition <|.. NoQualifier
+    QualifierCondition <|.. AnyQualifiers
+    QualifierCondition <|.. NoQualifiers
     AllQualifiers o-- QualifierCondition : conditions
-    AnyQualifier o-- QualifierCondition : conditions
-    NoQualifier o-- QualifierCondition : condition
+    AnyQualifiers o-- QualifierCondition : conditions
+    NoQualifiers o-- QualifierCondition : condition
     EvsQuery <|-- MatchAnyOf
     EvsQuery <|-- NameOrCodeMatch
     NameOrCodeMatch ..> MatchAnyOf : builds
@@ -212,7 +212,7 @@ classDiagram
 | `InSubset` | Matches members of a subset, given by its code or name. A subset is a concept, and membership is an association to it (NCIt's Concept_In_Subset, A8, read from the terminology's `subsetMember` metadata), so it builds an `Or` of one `HasAssociation` per membership association type. Any-of, all-of, and but-not combine `InSubset`s with `Or`, `And`, and `Not`. Exploratory: drops the current search's CDISC grouper special case. |
 | `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a value, both on the same property entry and compared exactly. Searches only `properties`, not synonyms or definitions. |
 | `HasSynonym` | Matches concepts with a synonym whose name, and optionally source, term type, and sub-source, match on the same synonym entry. Searches the remodeled `synonyms` list. The name is compared to the synonym's `normName`, after normalizing it the same way (`ConceptUtils.normalize`), so matching ignores case and punctuation; the other fields are compared exactly. Combine nodes with the concept-level `And`/`Or`/`Not`; OR or NOT between fields of one synonym isn't supported yet. |
-| `QualifierCondition` | A condition on one property entry's qualifiers, checked inside `HasProperty`'s nested query on that entry. `AllQualifiers`, `AnyQualifier`, and `NoQualifier` combine conditions (`bool` `must`, `should`, `must_not`). They're separate from the concept-level `And`/`Or`/`Not`, which combine sets of concepts and so can't keep qualifiers on one entry; the Javadoc explains the choice and the generic alternative. |
+| `QualifierCondition` | A condition on one property entry's qualifiers, checked inside `HasProperty`'s nested query on that entry. `AllQualifiers`, `AnyQualifiers`, and `NoQualifiers` combine conditions (`bool` `must`, `should`, `must_not`). They're separate from the concept-level `And`/`Or`/`Not`, which combine sets of concepts and so can't keep qualifiers on one entry; the Javadoc explains the choice and the generic alternative. |
 | `PropertyQualifier` | The leaf `QualifierCondition`: a qualifier a `HasProperty` property must have, a type name or code, optionally with a value, compared exactly on one qualifier entry of that same property. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
 | `MatchAnyOf` | The package-private leaf nodes are built from: a field equal to any of a set of values, as one `terms` query (case sensitive, whole value). Rejects more than 65,536 values, OpenSearch's default limit. |
 | `NameOrCodeMatch` | Package-private. A name field or a code field equal to any of a set of names or codes: two `MatchAnyOf`s, either one enough. Used for a relationship's type and target, a property's or qualifier's type, and the hierarchy targets. |

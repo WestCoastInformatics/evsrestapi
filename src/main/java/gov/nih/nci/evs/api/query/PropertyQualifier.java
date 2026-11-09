@@ -37,7 +37,7 @@ public final class PropertyQualifier implements QualifierCondition {
   private String qualifier;
 
   /** The qualifier's value, or null to match any value. */
-  private String value;
+  private String target;
 
   /** Instantiates an empty {@link PropertyQualifier}. */
   public PropertyQualifier() {
@@ -52,7 +52,7 @@ public final class PropertyQualifier implements QualifierCondition {
    */
   public PropertyQualifier(final String qualifier) {
     this.qualifier = Objects.requireNonNull(qualifier, "qualifier");
-    this.value = null;
+    this.target = null;
   }
 
   /**
@@ -60,11 +60,11 @@ public final class PropertyQualifier implements QualifierCondition {
    * given value.
    *
    * @param qualifier the qualifier's type name or code
-   * @param value the qualifier's value
+   * @param target the qualifier's value
    */
-  public PropertyQualifier(final String qualifier, final String value) {
+  public PropertyQualifier(final String qualifier, final String target) {
     this.qualifier = Objects.requireNonNull(qualifier, "qualifier");
-    this.value = Objects.requireNonNull(value, "value");
+    this.target = Objects.requireNonNull(target, "target");
   }
 
   /**
@@ -90,17 +90,17 @@ public final class PropertyQualifier implements QualifierCondition {
    *
    * @return the value, or null to match any value
    */
-  public String getValue() {
-    return value;
+  public String getTarget() {
+    return target;
   }
 
   /**
    * Sets the qualifier's value.
    *
-   * @param value the value, or null to match any value
+   * @param target the value, or null to match any value
    */
-  public void setValue(final String value) {
-    this.value = value;
+  public void setTarget(final String target) {
+    this.target = target;
   }
 
   /**
@@ -125,10 +125,10 @@ public final class PropertyQualifier implements QualifierCondition {
     final BoolQueryBuilder entryConditions =
         QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations, terminologies));
 
-    final boolean hasValue = value != null;
+    final boolean hasValue = target != null;
     if (hasValue) {
       final MatchAnyOf qualifierValueMatch =
-          new MatchAnyOf(getEntryFieldName(qualifierListField, VALUE_FIELD), Set.of(value));
+          new MatchAnyOf(getEntryFieldName(qualifierListField, VALUE_FIELD), Set.of(target));
       entryConditions.must(qualifierValueMatch.fetchOpenSearchQuery(operations, terminologies));
     }
 

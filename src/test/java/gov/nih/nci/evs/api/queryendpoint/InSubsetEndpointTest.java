@@ -12,7 +12,7 @@ public class InSubsetEndpointTest extends AbstractQueryEndpointTest {
   /** The members of the subset whose only member is Breast Carcinoma. */
   private static final String BREAST_CARCINOMA_SUBSET_MEMBERS_QUERY =
       """
-      {"type": "InSubset", "subset": "C103042"}
+      {"type": "InSubset", "target": "C103042"}
       """;
 
   /**

@@ -22,11 +22,11 @@ import org.opensearch.index.query.QueryBuilders;
  *
  * <p>The qualifier condition ({@link QualifierCondition}) must hold on that same property entry,
  * e.g. a GO_Annotation whose go-id is "GO:0007050" and whose go-evi is "TAS". Combine qualifiers
- * with {@link AllQualifiers}, {@link AnyQualifier}, and {@link NoQualifier}, not the concept-level
- * logical nodes, which can't keep them on one entry (see {@link QualifierCondition}). Each {@link
- * PropertyQualifier} can be a different qualifier entry of the property. Qualifiers remodeled into
- * their own fields, such as a synonym's source, aren't property qualifiers, so they can't be
- * matched here.
+ * with {@link AllQualifiers}, {@link AnyQualifiers}, and {@link NoQualifiers}, not the
+ * concept-level logical nodes, which can't keep them on one entry (see {@link QualifierCondition}).
+ * Each {@link PropertyQualifier} can be a different qualifier entry of the property. Qualifiers
+ * remodeled into their own fields, such as a synonym's source, aren't property qualifiers, so they
+ * can't be matched here.
  */
 public final class HasProperty extends EvsQuery {
 
@@ -49,7 +49,7 @@ public final class HasProperty extends EvsQuery {
   private String property;
 
   /** The property's value, or null to match any value. */
-  private String value;
+  private String target;
 
   /** The condition the property's qualifiers must meet, or null to require none. */
   private QualifierCondition qualifiers;
@@ -73,10 +73,10 @@ public final class HasProperty extends EvsQuery {
    * value.
    *
    * @param property the property's type name or code
-   * @param value the property's value
+   * @param target the property's value
    */
-  public HasProperty(final String property, final String value) {
-    this(property, Objects.requireNonNull(value, "value"), null);
+  public HasProperty(final String property, final String target) {
+    this(property, Objects.requireNonNull(target, "target"), null);
   }
 
   /**
@@ -95,13 +95,13 @@ public final class HasProperty extends EvsQuery {
    * value, whose qualifiers meet the condition.
    *
    * @param property the property's type name or code
-   * @param value the property's value, or null for any value
+   * @param target the property's value, or null for any value
    * @param qualifiers the condition the property's qualifiers must meet, or null for none
    */
   public HasProperty(
-      final String property, final String value, final QualifierCondition qualifiers) {
+      final String property, final String target, final QualifierCondition qualifiers) {
     this.property = Objects.requireNonNull(property, "property");
-    this.value = value;
+    this.target = target;
     this.qualifiers = qualifiers;
   }
 
@@ -128,17 +128,17 @@ public final class HasProperty extends EvsQuery {
    *
    * @return the value, or null to match any value
    */
-  public String getValue() {
-    return value;
+  public String getTarget() {
+    return target;
   }
 
   /**
    * Sets the property's value.
    *
-   * @param value the value, or null to match any value
+   * @param target the value, or null to match any value
    */
-  public void setValue(final String value) {
-    this.value = value;
+  public void setTarget(final String target) {
+    this.target = target;
   }
 
   /**
@@ -168,9 +168,9 @@ public final class HasProperty extends EvsQuery {
     final BoolQueryBuilder entryConditions =
         QueryBuilders.boolQuery().must(typeMatch.fetchOpenSearchQuery(operations, terminologies));
 
-    final boolean hasValue = value != null;
+    final boolean hasValue = target != null;
     if (hasValue) {
-      final MatchAnyOf propertyValueMatch = new MatchAnyOf(VALUE_FIELD, Set.of(value));
+      final MatchAnyOf propertyValueMatch = new MatchAnyOf(VALUE_FIELD, Set.of(target));
       entryConditions.must(propertyValueMatch.fetchOpenSearchQuery(operations, terminologies));
     }
 
