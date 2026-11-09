@@ -1353,8 +1353,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   }
 
   /**
-   * Applies hierarchy constraints (descendantOf, notDescendantOf, ancestorOf) as filter clauses, so
-   * they do not affect scoring and can be cached.
+   * Applies hierarchy constraints (descendantOf, notDescendantOf, ancestorOf, ancestor, descendant)
+   * as filter clauses, so they do not affect scoring and can be cached.
    *
    * @param boolQuery the bool query
    * @param terminology the terminology
@@ -1371,11 +1371,29 @@ public class OpenSearchServiceImpl implements OpenSearchService {
     final List<String> descendantOf = searchCriteria.getDescendantOf();
     final List<String> notDescendantOf = searchCriteria.getNotDescendantOf();
     final String ancestorOf = searchCriteria.getAncestorOf();
+    final String ancestor = searchCriteria.getAncestor();
+    final String descendant = searchCriteria.getDescendant();
 
     checkHierarchyCodesExist(terminology, "descendantOf", descendantOf);
     checkHierarchyCodesExist(terminology, "notDescendantOf", notDescendantOf);
     if (ancestorOf != null) {
       checkHierarchyCodesExist(terminology, "ancestorOf", List.of(ancestorOf));
+    }
+    if (ancestor != null) {
+      checkHierarchyCodesExist(terminology, "ancestor", List.of(ancestor));
+    }
+    if (descendant != null) {
+      checkHierarchyCodesExist(terminology, "descendant", List.of(descendant));
+    }
+
+    // ancestor: concepts that have the code among their ancestors
+    if (ancestor != null) {
+      boolQuery.filter(QueryBuilders.termQuery("ancestors.code", ancestor));
+    }
+
+    // descendant: concepts that have the code among their descendants
+    if (descendant != null) {
+      boolQuery.filter(QueryBuilders.termQuery("descendants.code", descendant));
     }
 
     // Indexes loaded before the ancestor fields existed use the query-time fallback
