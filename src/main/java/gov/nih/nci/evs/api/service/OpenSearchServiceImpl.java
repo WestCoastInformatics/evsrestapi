@@ -136,18 +136,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   @Override
   public ConceptResultList findConcepts(
       List<Terminology> terminologies, SearchCriteria searchCriteria) throws Exception {
-    int page = searchCriteria.getFromRecord() / searchCriteria.getPageSize();
-    // PageRequest.of(page, searchCriteria.getPageSize());
-
-    // handle fromRecord offset from pageSize (e.g. fromRecord=6, pageSize=10)
-    final int fromOffset = searchCriteria.getFromRecord() % searchCriteria.getPageSize();
-    final int esFromRecord = searchCriteria.getFromRecord() - fromOffset;
-    final int esPageSize =
-        fromOffset == 0 ? searchCriteria.getPageSize() : (searchCriteria.getPageSize() * 2);
-    final int fromIndex = searchCriteria.getFromRecord() % searchCriteria.getPageSize();
-    final int toIndex = fromIndex + searchCriteria.getPageSize();
-
-    final Pageable pageable = new EVSPageable(page, esPageSize, esFromRecord);
+    final Pageable pageable =
+        EVSPageable.fromRecord(searchCriteria.getFromRecord(), searchCriteria.getPageSize());
 
     // Escape the term in case it has special characters
     final String term = escape(searchCriteria.getTerm());
@@ -248,21 +238,11 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     result.setParameters(searchCriteria);
 
-    if (fromOffset == 0) {
-      result.setConcepts(
-          hits.stream()
-              .peek(OpenSearchServiceImpl::addHighlightsToConcept)
-              .map(SearchHit::getContent)
-              .collect(Collectors.toList()));
-    } else {
-      final List<Concept> results =
-          hits.stream().map(SearchHit::getContent).collect(Collectors.toList());
-      if (fromIndex >= results.size()) {
-        result.setConcepts(new ArrayList<>());
-      } else {
-        result.setConcepts(results.subList(fromIndex, Math.min(toIndex, results.size())));
-      }
-    }
+    result.setConcepts(
+        hits.stream()
+            .peek(OpenSearchServiceImpl::addHighlightsToConcept)
+            .map(SearchHit::getContent)
+            .collect(Collectors.toList()));
     return result;
   }
 
@@ -304,18 +284,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    */
   @Override
   public MappingResultList findConceptMappings(String query, SearchCriteria searchCriteria) {
-    int page = searchCriteria.getFromRecord() / searchCriteria.getPageSize();
-    // PageRequest.of(page, searchCriteria.getPageSize());
-
-    // handle fromRecord offset from pageSize (e.g. fromRecord=6, pageSize=10)
-    final int fromOffset = searchCriteria.getFromRecord() % searchCriteria.getPageSize();
-    final int esFromRecord = searchCriteria.getFromRecord() - fromOffset;
-    final int esPageSize =
-        fromOffset == 0 ? searchCriteria.getPageSize() : (searchCriteria.getPageSize() * 2);
-    final int fromIndex = searchCriteria.getFromRecord() % searchCriteria.getPageSize();
-    final int toIndex = fromIndex + searchCriteria.getPageSize();
-
-    final Pageable pageable = new EVSPageable(page, esPageSize, esFromRecord);
+    final Pageable pageable =
+        EVSPageable.fromRecord(searchCriteria.getFromRecord(), searchCriteria.getPageSize());
 
     // build search query from string query
     final NativeSearchQueryBuilder searchQuery =
@@ -383,17 +353,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     result.setParameters(searchCriteria);
 
-    if (fromOffset == 0) {
-      result.setMaps(hits.stream().map(SearchHit::getContent).collect(Collectors.toList()));
-    } else {
-      final List<Mapping> results =
-          hits.stream().map(SearchHit::getContent).collect(Collectors.toList());
-      if (fromIndex >= results.size()) {
-        result.setMaps(new ArrayList<>());
-      } else {
-        result.setMaps(results.subList(fromIndex, Math.min(toIndex, results.size())));
-      }
-    }
+    result.setMaps(hits.stream().map(SearchHit::getContent).collect(Collectors.toList()));
     return result;
   }
 

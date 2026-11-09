@@ -8,6 +8,7 @@ import gov.nih.nci.evs.api.model.Concept;
 import gov.nih.nci.evs.api.model.IncludeParam;
 import gov.nih.nci.evs.api.model.Terminology;
 import gov.nih.nci.evs.api.service.OpensearchOperationsService;
+import gov.nih.nci.evs.api.support.es.EVSPageable;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -203,6 +204,39 @@ public class TermSearchTest {
     assertTrue(firstName.toLowerCase().contains("enzyme"));
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Lesson 5: A page can start at any record, not only at a multiple of its size.
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * A page from a record that is not a multiple of the page size starts at that record: records
+   * 6-15 of the results, the same records a page from the start returns at those positions.
+   */
+  @Test
+  public void testPageFromUnalignedRecordStartsAtThatRecord() {
+    final TermSearch search = new Contains("melanoma");
+    final int pageSize = 10;
+    final int fromRecord = 6;
+    final Pageable pageFromRecord = EVSPageable.fromRecord(fromRecord, pageSize);
+    final Pageable pageThroughRecords = PageRequest.of(0, fromRecord + pageSize);
+
+    final List<Concept> concepts = fetchMatchingConcepts(search, pageFromRecord);
+    final List<Concept> conceptsFromStart = fetchMatchingConcepts(search, pageThroughRecords);
+
+    assertEquals(
+        getCodes(conceptsFromStart.subList(fromRecord, fromRecord + pageSize)), getCodes(concepts));
+  }
+
+  /**
+   * Returns the codes of the concepts, in order.
+   *
+   * @param concepts the concepts
+   * @return the codes
+   */
+  private static List<String> getCodes(final List<Concept> concepts) {
+    return concepts.stream().map(Concept::getCode).toList();
+  }
+
   /**
    * Runs the term search against NCIt.
    *
@@ -220,7 +254,18 @@ public class TermSearchTest {
    * @return the concepts that matched, most relevant first
    */
   private List<Concept> fetchMatchingConcepts(final TermSearch search) {
-    return search.fetchConcepts(operations, terminologies, ALL_MATCHES, MINIMAL_FIELDS).stream()
+    return fetchMatchingConcepts(search, ALL_MATCHES);
+  }
+
+  /**
+   * Runs the term search against NCIt and returns one page of the results.
+   *
+   * @param search the term search
+   * @param page the page to return
+   * @return the concepts on the page, most relevant first
+   */
+  private List<Concept> fetchMatchingConcepts(final TermSearch search, final Pageable page) {
+    return search.fetchConcepts(operations, terminologies, page, MINIMAL_FIELDS).stream()
         .map(SearchHit::getContent)
         .toList();
   }
