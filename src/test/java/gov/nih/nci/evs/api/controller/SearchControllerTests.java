@@ -5776,6 +5776,142 @@ public class SearchControllerTests {
   }
 
   /**
+   * Test that the ancestor parameter returns the concepts below a code, and that each result lists
+   * the code among its ancestors. MA:0000003 (organ system) has 3,030 descendants.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testSearchAncestorMa() throws Exception {
+    final ConceptResultList list =
+        searchMa(Map.of("ancestor", "MA:0000003", "include", "ancestors", "pageSize", "100"));
+
+    assertThat(list.getTotal()).isEqualTo(3030);
+    assertThat(list.getConcepts()).hasSize(100);
+    for (final Concept concept : list.getConcepts()) {
+      assertThat(concept.getCode()).isNotEqualTo("MA:0000003");
+      assertThat(concept.getAncestors()).extracting(Concept::getCode).contains("MA:0000003");
+    }
+  }
+
+  /**
+   * Test that the descendant parameter returns the concepts above a code. MA:0002450 (body fluid or
+   * substance) has two parents, MA:0003000 and MA:0002405, and the root MA:0000001 above both.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testSearchDescendantMa() throws Exception {
+    final ConceptResultList list =
+        searchMa(Map.of("descendant", "MA:0002450", "include", "descendants"));
+
+    assertThat(list.getTotal()).isEqualTo(3);
+    assertThat(list.getConcepts())
+        .extracting(Concept::getCode)
+        .containsExactlyInAnyOrder("MA:0000001", "MA:0002405", "MA:0003000");
+    for (final Concept concept : list.getConcepts()) {
+      assertThat(concept.getDescendants()).extracting(Concept::getCode).contains("MA:0002450");
+    }
+  }
+
+  /**
+   * Test that ancestor narrows a term search to the matches below a code, without changing their
+   * order. Brain (MA:0000168) has cortex regions below it.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testSearchAncestorWithTermMa() throws Exception {
+    final ConceptResultList all = searchMa(Map.of("term", "cortex", "pageSize", "1000"));
+    final ConceptResultList inBrain =
+        searchMa(
+            Map.of(
+                "term",
+                "cortex",
+                "ancestor",
+                "MA:0000168",
+                "include",
+                "ancestors",
+                "pageSize",
+                "1000"));
+
+    assertThat(inBrain.getTotal()).isGreaterThan(0).isLessThan(all.getTotal());
+    for (final Concept concept : inBrain.getConcepts()) {
+      assertThat(concept.getAncestors()).extracting(Concept::getCode).contains("MA:0000168");
+    }
+    final Set<String> inBrainCodes =
+        inBrain.getConcepts().stream().map(Concept::getCode).collect(Collectors.toSet());
+    assertThat(inBrain.getConcepts())
+        .extracting(Concept::getCode)
+        .containsExactlyElementsOf(
+            all.getConcepts().stream()
+                .map(Concept::getCode)
+                .filter(inBrainCodes::contains)
+                .collect(Collectors.toList()));
+  }
+
+  /**
+   * Test that ancestor and descendant together return the concepts between two codes: below organ
+   * system (MA:0000003) and above medial entorhinal cortex (MA:0000922).
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testSearchAncestorAndDescendantMa() throws Exception {
+    final ConceptResultList list =
+        searchMa(
+            Map.of(
+                "ancestor",
+                "MA:0000003",
+                "descendant",
+                "MA:0000922",
+                "include",
+                "ancestors,descendants"));
+
+    assertThat(list.getTotal()).isGreaterThan(0);
+    assertThat(list.getConcepts()).extracting(Concept::getCode).contains("MA:0000168");
+    for (final Concept concept : list.getConcepts()) {
+      assertThat(concept.getAncestors()).extracting(Concept::getCode).contains("MA:0000003");
+      assertThat(concept.getDescendants()).extracting(Concept::getCode).contains("MA:0000922");
+    }
+  }
+
+  /**
+   * Test that unknown ancestor and descendant codes are rejected.
+   *
+   * @throws Exception the exception
+   */
+  @Test
+  public void testSearchAncestorDescendantInvalidCodeMa() throws Exception {
+    for (final String parameter : List.of("ancestor", "descendant")) {
+      final MvcResult result =
+          mvc.perform(get("/api/v1/concept/ma/search").param(parameter, "MA:9999999"))
+              .andExpect(status().isBadRequest())
+              .andReturn();
+      assertThat(result.getResponse().getErrorMessage())
+          .contains("'" + parameter + "' has an invalid code = MA:9999999");
+    }
+  }
+
+  /**
+   * Runs an MA search and returns the results.
+   *
+   * @param params the request parameters
+   * @return the results
+   * @throws Exception the exception
+   */
+  private ConceptResultList searchMa(final Map<String, String> params) throws Exception {
+    MockHttpServletRequestBuilder request = get("/api/v1/concept/ma/search");
+    for (final Map.Entry<String, String> param : params.entrySet()) {
+      request = request.param(param.getKey(), param.getValue());
+    }
+    log.info("Testing url - /api/v1/concept/ma/search " + params);
+    final MvcResult result = mvc.perform(request).andExpect(status().isOk()).andReturn();
+    return ThreadLocalMapper.get()
+        .readValue(result.getResponse().getContentAsString(), ConceptResultList.class);
+  }
+
+  /**
    * Counts every ncit concept a typeahead matches, with no limit.
    *
    * @param incompleteTerm the partially typed term
