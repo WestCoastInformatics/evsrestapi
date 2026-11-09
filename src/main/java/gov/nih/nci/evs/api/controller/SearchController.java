@@ -583,10 +583,11 @@ public class SearchController extends BaseController {
    *
    * @param terminology the terminology to search
    * @param query the query tree, deserialized from the request body by its "type" properties
+   * @param fromRecord the index of the first concept to return, or null for the first match
    * @param pageSize the maximum number of concepts to return, or null for the default
    * @param include the fields to return for each concept, or null for the default
    * @param license the license key from the request header
-   * @return the first page of matching concepts
+   * @return the requested page of matching concepts
    * @throws Exception the exception
    */
   @Operation(
@@ -595,8 +596,8 @@ public class SearchController extends BaseController {
           "Runs a query tree sent as JSON against one terminology and returns the concepts it"
               + " matches. Each node names its kind in a \"type\" property, e.g. And, Or, Not,"
               + " HasAncestor, HasProperty, HasSynonym, and each value match does too, e.g. Exact,"
-              + " StartsWith, Contains. Returns only the first page, and the total counts matches"
-              + " only up to 10,000.")
+              + " StartsWith, Contains. Pages with fromRecord and pageSize, and the total counts"
+              + " matches only up to 10,000.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -626,6 +627,11 @@ public class SearchController extends BaseController {
         required = true,
         schema = @Schema(implementation = String.class),
         example = "ncit"),
+    @Parameter(
+        name = "fromRecord",
+        description = "Start index of the search results",
+        required = false,
+        schema = @Schema(implementation = Integer.class, defaultValue = "0")),
     @Parameter(
         name = "pageSize",
         description = "Max number of results to return.",
@@ -672,13 +678,15 @@ public class SearchController extends BaseController {
   public @ResponseBody ConceptResultList search(
       @PathVariable(value = "terminology") final String terminology,
       @org.springframework.web.bind.annotation.RequestBody final EvsQuery query,
+      @RequestParam(name = "fromRecord", required = false) final Integer fromRecord,
       @RequestParam(name = "pageSize", required = false) final Integer pageSize,
       @RequestParam(name = "include", required = false) final String include,
       @RequestHeader(name = "X-EVSRESTAPI-License-Key", required = false) final String license)
       throws Exception {
     // SearchCriteria carries the request parameters, as for typeahead, so this reuses the
     // existing validation methods
-    final SearchCriteria searchCriteria = getQuerySearchCriteria(terminology, pageSize, include);
+    final SearchCriteria searchCriteria =
+        getQuerySearchCriteria(terminology, fromRecord, pageSize, include);
 
     final long timerStartDate = System.currentTimeMillis();
 
@@ -699,14 +707,23 @@ public class SearchController extends BaseController {
    * Builds the search criteria carrying the query request parameters.
    *
    * @param terminology the terminology to search
+   * @param fromRecord the index of the first concept to return, or null for the first match
    * @param pageSize the maximum number of concepts to return, or null for the default
    * @param include the fields to return for each concept, or null for the default
    * @return the search criteria
    */
   private SearchCriteria getQuerySearchCriteria(
-      final String terminology, final Integer pageSize, final String include) {
+      final String terminology,
+      final Integer fromRecord,
+      final Integer pageSize,
+      final String include) {
     final SearchCriteria searchCriteria = new SearchCriteria();
     searchCriteria.setTerminology(List.of(terminology));
+
+    final boolean hasRequestedFromRecord = fromRecord != null;
+    if (hasRequestedFromRecord) {
+      searchCriteria.setFromRecord(fromRecord);
+    }
 
     final boolean hasRequestedPageSize = pageSize != null;
     if (hasRequestedPageSize) {

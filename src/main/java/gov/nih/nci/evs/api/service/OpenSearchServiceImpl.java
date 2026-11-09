@@ -43,7 +43,6 @@ import org.opensearch.search.sort.SortOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -103,19 +102,16 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       final EvsQuery query,
       final List<Terminology> terminologies,
       final SearchCriteria searchCriteria) {
-    // Only the best matches are returned, which are on the first page
-    final int bestMatchesPage = 0;
     final SearchHits<Concept> hits =
         query.fetchConcepts(
             operations,
             terminologies,
-            PageRequest.of(bestMatchesPage, searchCriteria.getPageSize()),
+            EVSPageable.fromRecord(searchCriteria.getFromRecord(), searchCriteria.getPageSize()),
             new IncludeParam(searchCriteria.getInclude()));
 
     final ConceptResultList results = new ConceptResultList();
     results.setParameters(searchCriteria);
-    // Capped at 10,000 on purpose: this doesn't page, so it doesn't need the exact count
-    // that findConcepts runs a second query for
+    // Capped at 10,000: unlike findConcepts, this doesn't run a second query for the exact count
     results.setTotal(hits.getTotalHits());
     results.setConcepts(
         hits.stream()
