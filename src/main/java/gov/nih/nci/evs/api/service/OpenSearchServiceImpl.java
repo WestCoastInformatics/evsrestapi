@@ -1394,7 +1394,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
                 terminology, "descendantOf", descendantOf, searchCriteria.getMaxLevel()),
             false);
       } else if (searchCriteria.getMaxLevel() == null) {
-        branch.should(QueryBuilders.termsQuery("ancestors", descendantOf));
+        branch.should(QueryBuilders.termsQuery("ancestors.code", descendantOf));
       } else {
         branch.should(
             QueryBuilders.termsQuery(
@@ -1413,7 +1413,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
     // notDescendantOf: exclude descendants of every anchor, and the anchors themselves
     if (!notDescendantOf.isEmpty()) {
       if (indexed) {
-        boolQuery.mustNot(QueryBuilders.termsQuery("ancestors", notDescendantOf));
+        boolQuery.mustNot(QueryBuilders.termsQuery("ancestors.code", notDescendantOf));
       } else {
         addIdsClauses(
             boolQuery,
