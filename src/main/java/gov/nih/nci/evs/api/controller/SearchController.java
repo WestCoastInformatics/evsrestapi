@@ -333,15 +333,15 @@ public class SearchController extends BaseController {
     @Parameter(
         name = "ancestor",
         description =
-            "Concept code to restrict search results to concepts that have it as an ancestor"
-                + " (not including the code itself), e.g. 'C4872'",
+            "Concept code to restrict search results to its subtree: the code itself and the"
+                + " concepts that have it as an ancestor, e.g. 'C4872'",
         required = false,
         schema = @Schema(implementation = String.class)),
     @Parameter(
         name = "descendant",
         description =
-            "Concept code to restrict search results to concepts that have it as a descendant"
-                + " (not including the code itself), e.g. 'C4872'",
+            "Concept code to restrict search results to the code itself and the concepts that"
+                + " have it as a descendant, e.g. 'C4872'",
         required = false,
         schema = @Schema(implementation = String.class)),
     @Parameter(
@@ -961,15 +961,15 @@ public class SearchController extends BaseController {
     @Parameter(
         name = "ancestor",
         description =
-            "Concept code to restrict search results to concepts that have it as an ancestor"
-                + " (not including the code itself), e.g. 'C4872'",
+            "Concept code to restrict search results to its subtree: the code itself and the"
+                + " concepts that have it as an ancestor, e.g. 'C4872'",
         required = false,
         schema = @Schema(implementation = String.class)),
     @Parameter(
         name = "descendant",
         description =
-            "Concept code to restrict search results to concepts that have it as a descendant"
-                + " (not including the code itself), e.g. 'C4872'",
+            "Concept code to restrict search results to the code itself and the concepts that"
+                + " have it as a descendant, e.g. 'C4872'",
         required = false,
         schema = @Schema(implementation = String.class)),
     @Parameter(
@@ -1393,15 +1393,15 @@ public class SearchController extends BaseController {
     @Parameter(
         name = "ancestor",
         description =
-            "Concept code to restrict search results to concepts that have it as an ancestor"
-                + " (not including the code itself), e.g. 'C4872'",
+            "Concept code to restrict search results to its subtree: the code itself and the"
+                + " concepts that have it as an ancestor, e.g. 'C4872'",
         required = false,
         schema = @Schema(implementation = String.class)),
     @Parameter(
         name = "descendant",
         description =
-            "Concept code to restrict search results to concepts that have it as a descendant"
-                + " (not including the code itself), e.g. 'C4872'",
+            "Concept code to restrict search results to the code itself and the concepts that"
+                + " have it as a descendant, e.g. 'C4872'",
         required = false,
         schema = @Schema(implementation = String.class)),
     @Parameter(

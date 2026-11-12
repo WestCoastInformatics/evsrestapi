@@ -5776,47 +5776,53 @@ public class SearchControllerTests {
   }
 
   /**
-   * Test that the ancestor parameter returns the concepts below a code, and that each result lists
-   * the code among its ancestors. MA:0000003 (organ system) has 3,030 descendants.
+   * Test that the ancestor parameter returns a code's subtree, and that each result other than the
+   * code lists it among its ancestors. MA:0000003 (organ system) has 3,030 descendants, so its
+   * subtree has 3,031 concepts.
    *
    * @throws Exception the exception
    */
   @Test
   public void testSearchAncestorMa() throws Exception {
+    final String code = "MA:0000003";
     final ConceptResultList list =
-        searchMa(Map.of("ancestor", "MA:0000003", "include", "ancestors", "pageSize", "100"));
+        searchMa(Map.of("ancestor", code, "include", "ancestors", "pageSize", "100"));
 
-    assertThat(list.getTotal()).isEqualTo(3030);
+    assertThat(list.getTotal()).isEqualTo(3031);
     assertThat(list.getConcepts()).hasSize(100);
-    for (final Concept concept : list.getConcepts()) {
-      assertThat(concept.getCode()).isNotEqualTo("MA:0000003");
-      assertThat(concept.getAncestors()).extracting(Concept::getCode).contains("MA:0000003");
-    }
+    list.getConcepts().stream()
+        .filter(concept -> !code.equals(concept.getCode()))
+        .forEach(
+            concept ->
+                assertThat(concept.getAncestors()).extracting(Concept::getCode).contains(code));
   }
 
   /**
-   * Test that the descendant parameter returns the concepts above a code. MA:0002450 (body fluid or
-   * substance) has two parents, MA:0003000 and MA:0002405, and the root MA:0000001 above both.
+   * Test that the descendant parameter returns a code and the concepts above it. MA:0002450 (body
+   * fluid or substance) has two parents, MA:0003000 and MA:0002405, and the root MA:0000001 above
+   * both.
    *
    * @throws Exception the exception
    */
   @Test
   public void testSearchDescendantMa() throws Exception {
-    final ConceptResultList list =
-        searchMa(Map.of("descendant", "MA:0002450", "include", "descendants"));
+    final String code = "MA:0002450";
+    final ConceptResultList list = searchMa(Map.of("descendant", code, "include", "descendants"));
 
-    assertThat(list.getTotal()).isEqualTo(3);
+    assertThat(list.getTotal()).isEqualTo(4);
     assertThat(list.getConcepts())
         .extracting(Concept::getCode)
-        .containsExactlyInAnyOrder("MA:0000001", "MA:0002405", "MA:0003000");
-    for (final Concept concept : list.getConcepts()) {
-      assertThat(concept.getDescendants()).extracting(Concept::getCode).contains("MA:0002450");
-    }
+        .containsExactlyInAnyOrder(code, "MA:0000001", "MA:0002405", "MA:0003000");
+    list.getConcepts().stream()
+        .filter(concept -> !code.equals(concept.getCode()))
+        .forEach(
+            concept ->
+                assertThat(concept.getDescendants()).extracting(Concept::getCode).contains(code));
   }
 
   /**
-   * Test that ancestor narrows a term search to the matches below a code, without changing their
-   * order. Brain (MA:0000168) has cortex regions below it.
+   * Test that ancestor narrows a term search to the matches in a code's subtree, without changing
+   * their order. Brain (MA:0000168) has cortex regions below it.
    *
    * @throws Exception the exception
    */
@@ -5836,9 +5842,13 @@ public class SearchControllerTests {
                 "1000"));
 
     assertThat(inBrain.getTotal()).isGreaterThan(0).isLessThan(all.getTotal());
-    for (final Concept concept : inBrain.getConcepts()) {
-      assertThat(concept.getAncestors()).extracting(Concept::getCode).contains("MA:0000168");
-    }
+    inBrain.getConcepts().stream()
+        .filter(concept -> !"MA:0000168".equals(concept.getCode()))
+        .forEach(
+            concept ->
+                assertThat(concept.getAncestors())
+                    .extracting(Concept::getCode)
+                    .contains("MA:0000168"));
     final Set<String> inBrainCodes =
         inBrain.getConcepts().stream().map(Concept::getCode).collect(Collectors.toSet());
     assertThat(inBrain.getConcepts())
@@ -5851,29 +5861,38 @@ public class SearchControllerTests {
   }
 
   /**
-   * Test that ancestor and descendant together return the concepts between two codes: below organ
-   * system (MA:0000003) and above medial entorhinal cortex (MA:0000922).
+   * Test that ancestor and descendant together return the concepts between two codes, including
+   * both: organ system (MA:0000003) down to medial entorhinal cortex (MA:0000922).
    *
    * @throws Exception the exception
    */
   @Test
   public void testSearchAncestorAndDescendantMa() throws Exception {
+    final String top = "MA:0000003";
+    final String bottom = "MA:0000922";
     final ConceptResultList list =
         searchMa(
             Map.of(
                 "ancestor",
-                "MA:0000003",
+                top,
                 "descendant",
-                "MA:0000922",
+                bottom,
                 "include",
-                "ancestors,descendants"));
+                "ancestors,descendants",
+                "pageSize",
+                "100"));
 
-    assertThat(list.getTotal()).isGreaterThan(0);
-    assertThat(list.getConcepts()).extracting(Concept::getCode).contains("MA:0000168");
-    for (final Concept concept : list.getConcepts()) {
-      assertThat(concept.getAncestors()).extracting(Concept::getCode).contains("MA:0000003");
-      assertThat(concept.getDescendants()).extracting(Concept::getCode).contains("MA:0000922");
-    }
+    assertThat(list.getConcepts()).extracting(Concept::getCode).contains(top, "MA:0000168", bottom);
+    list.getConcepts().stream()
+        .filter(concept -> !top.equals(concept.getCode()))
+        .forEach(
+            concept ->
+                assertThat(concept.getAncestors()).extracting(Concept::getCode).contains(top));
+    list.getConcepts().stream()
+        .filter(concept -> !bottom.equals(concept.getCode()))
+        .forEach(
+            concept ->
+                assertThat(concept.getDescendants()).extracting(Concept::getCode).contains(bottom));
   }
 
   /**

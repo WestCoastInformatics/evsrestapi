@@ -1386,14 +1386,14 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       checkHierarchyCodesExist(terminology, "descendant", List.of(descendant));
     }
 
-    // ancestor: concepts that have the code among their ancestors
+    // ancestor: the code itself and the concepts that have it among their ancestors (its subtree)
     if (ancestor != null) {
-      boolQuery.filter(QueryBuilders.termQuery("ancestors.code", ancestor));
+      boolQuery.filter(codeOrRelated("ancestors.code", ancestor));
     }
 
-    // descendant: concepts that have the code among their descendants
+    // descendant: the code itself and the concepts that have it among their descendants
     if (descendant != null) {
-      boolQuery.filter(QueryBuilders.termQuery("descendants.code", descendant));
+      boolQuery.filter(codeOrRelated("descendants.code", descendant));
     }
 
     // Indexes loaded before the ancestor fields existed use the query-time fallback
@@ -1462,6 +1462,20 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       // An empty ids query matches nothing, e.g. ancestors of a root without self
       boolQuery.filter(QueryBuilders.idsQuery().addIds(ancestors.toArray(new String[0])));
     }
+  }
+
+  /**
+   * Returns a query matching the code itself or any concept whose hierarchy field contains it.
+   *
+   * @param field the hierarchy field, e.g. ancestors.code
+   * @param code the code
+   * @return the query
+   */
+  private BoolQueryBuilder codeOrRelated(final String field, final String code) {
+    return QueryBuilders.boolQuery()
+        .minimumShouldMatch(1)
+        .should(QueryBuilders.termQuery(field, code))
+        .should(QueryBuilders.idsQuery().addIds(code));
   }
 
   /**

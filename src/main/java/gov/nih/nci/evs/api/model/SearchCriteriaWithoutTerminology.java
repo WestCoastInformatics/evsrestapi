@@ -85,10 +85,10 @@ public class SearchCriteriaWithoutTerminology extends BaseModel {
   /** The code whose ancestors results are restricted to. */
   private String ancestorOf;
 
-  /** The code results must have as an ancestor. */
+  /** The code whose subtree (the code and its descendants) results must be in. */
   private String ancestor;
 
-  /** The code results must have as a descendant. */
+  /** The code whose ancestors, or the code itself, results must be. */
   private String descendant;
 
   /** The maximum depth below descendantOf codes. */
@@ -643,14 +643,14 @@ public class SearchCriteriaWithoutTerminology extends BaseModel {
   }
 
   /**
-   * Returns the code results must have as an ancestor.
+   * Returns the code whose subtree results must be in (the code itself is included).
    *
    * @return the ancestor code
    */
   @Schema(
       description =
-          "Concept code; results are restricted to concepts that have it as an ancestor, e.g."
-              + " 'C4872'")
+          "Concept code; results are restricted to its subtree: the code itself and the concepts"
+              + " that have it as an ancestor, e.g. 'C4872'")
   public String getAncestor() {
     return ancestor;
   }
@@ -665,14 +665,14 @@ public class SearchCriteriaWithoutTerminology extends BaseModel {
   }
 
   /**
-   * Returns the code results must have as a descendant.
+   * Returns the code whose ancestors results must be (the code itself is included).
    *
    * @return the descendant code
    */
   @Schema(
       description =
-          "Concept code; results are restricted to concepts that have it as a descendant, e.g."
-              + " 'C4872'")
+          "Concept code; results are restricted to the code itself and the concepts that have it"
+              + " as a descendant, e.g. 'C4872'")
   public String getDescendant() {
     return descendant;
   }

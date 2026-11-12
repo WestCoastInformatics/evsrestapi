@@ -199,51 +199,53 @@ public class SearchControllerHierarchyTests {
   }
 
   /**
-   * Test that ancestor returns the concepts that have the code as an ancestor: its descendants,
-   * without the code itself. Uses MA, which is indexed with ancestors.
+   * Test that ancestor returns the code's subtree: the code itself and its descendants. Uses MA,
+   * which is indexed with ancestors.
    *
    * @throws Exception the exception
    */
   @Test
   public void testAncestor() throws Exception {
-    final Set<String> descendants = descendants("ma", MA_ANCHOR);
-    assertThat(descendants).isNotEmpty();
+    final Set<String> subtree = new HashSet<>(descendants("ma", MA_ANCHOR));
+    assertThat(subtree).isNotEmpty();
+    subtree.add(MA_ANCHOR);
 
     final SearchResult result = searchAll("ma", Map.of("ancestor", MA_ANCHOR));
-    assertThat(result.total).isEqualTo(descendants.size());
-    assertThat(new HashSet<>(result.codes)).isEqualTo(descendants);
+    assertThat(result.total).isEqualTo(subtree.size());
+    assertThat(new HashSet<>(result.codes)).isEqualTo(subtree);
   }
 
   /**
-   * Test that descendant returns the concepts that have the code as a descendant: the codes on its
-   * paths to root, without the code itself. MA:0002450 has two parents.
+   * Test that descendant returns the code itself and the codes on its paths to root. MA:0002450 has
+   * two parents.
    *
    * @throws Exception the exception
    */
   @Test
   public void testDescendant() throws Exception {
     final String code = "MA:0002450";
-    final Set<String> ancestors = pathsToRootCodes("ma", code);
-    ancestors.remove(code);
-    assertThat(ancestors).hasSizeGreaterThan(1);
+    final Set<String> ancestorsAndSelf = pathsToRootCodes("ma", code);
+    assertThat(ancestorsAndSelf).contains(code).hasSizeGreaterThan(2);
 
     final SearchResult result = searchAll("ma", Map.of("descendant", code));
-    assertThat(result.total).isEqualTo(ancestors.size());
-    assertThat(new HashSet<>(result.codes)).isEqualTo(ancestors);
+    assertThat(result.total).isEqualTo(ancestorsAndSelf.size());
+    assertThat(new HashSet<>(result.codes)).isEqualTo(ancestorsAndSelf);
   }
 
   /**
-   * Test that ancestor and descendant together return the concepts between the two codes.
+   * Test that ancestor and descendant together return the concepts between the two codes, including
+   * both codes.
    *
    * @throws Exception the exception
    */
   @Test
   public void testAncestorAndDescendant() throws Exception {
     final String code = "MA:0000922";
+    final Set<String> subtree = new HashSet<>(descendants("ma", MA_ANCHOR));
+    subtree.add(MA_ANCHOR);
     final Set<String> between = pathsToRootCodes("ma", code);
-    between.retainAll(descendants("ma", MA_ANCHOR));
-    between.remove(code);
-    assertThat(between).isNotEmpty();
+    between.retainAll(subtree);
+    assertThat(between).contains(MA_ANCHOR, code);
 
     final SearchResult result = searchAll("ma", Map.of("ancestor", MA_ANCHOR, "descendant", code));
     assertThat(new HashSet<>(result.codes)).isEqualTo(between);
