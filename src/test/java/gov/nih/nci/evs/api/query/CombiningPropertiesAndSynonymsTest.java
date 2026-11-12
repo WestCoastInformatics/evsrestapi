@@ -157,9 +157,7 @@ public class CombiningPropertiesAndSynonymsTest {
   public void testAndOfPropertiesRequiresEachProperty() {
     final EvsQuery malignantWithIcdO3Code =
         new And(
-            List.of(
-                new HasProperty(new Exact(NEOPLASTIC_STATUS), new Exact(MALIGNANT)),
-                new HasProperty(new Exact(ICD_O_3_CODE))));
+            List.of(new HasProperty(NEOPLASTIC_STATUS, MALIGNANT), new HasProperty(ICD_O_3_CODE)));
 
     assertEquals(Set.of("Lung Carcinoma"), fetchMatchingNames(malignantWithIcdO3Code));
   }
@@ -168,10 +166,7 @@ public class CombiningPropertiesAndSynonymsTest {
   @Test
   public void testOrOfSynonymsFindsSynonymFromEitherSource() {
     final EvsQuery withCdiscOrFdaSynonym =
-        new Or(
-            List.of(
-                new HasSynonym(null, new Exact(CDISC), null),
-                new HasSynonym(null, new Exact(FDA), null)));
+        new Or(List.of(new HasSynonym(null, CDISC, null), new HasSynonym(null, FDA, null)));
 
     assertEquals(
         Set.of("Melanoma", "Nevus", "Lung Carcinoma"), fetchMatchingNames(withCdiscOrFdaSynonym));
@@ -182,8 +177,7 @@ public class CombiningPropertiesAndSynonymsTest {
    */
   @Test
   public void testNotOfSynonymFindsConceptsWithoutMatchingSynonym() {
-    final EvsQuery withoutCdiscPt =
-        new Not(new HasSynonym(null, new Exact(CDISC), new Exact(PREFERRED_TERM)));
+    final EvsQuery withoutCdiscPt = new Not(new HasSynonym(null, CDISC, PREFERRED_TERM));
 
     assertEquals(Set.of("Lung Carcinoma", "Skin"), fetchMatchingNames(withoutCdiscPt));
   }
@@ -194,8 +188,8 @@ public class CombiningPropertiesAndSynonymsTest {
     final EvsQuery malignantWithCdiscPt =
         new And(
             List.of(
-                new HasSynonym(null, new Exact(CDISC), new Exact(PREFERRED_TERM)),
-                new HasProperty(new Exact(NEOPLASTIC_STATUS), new Exact(MALIGNANT))));
+                new HasSynonym(null, CDISC, PREFERRED_TERM),
+                new HasProperty(NEOPLASTIC_STATUS, MALIGNANT)));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(malignantWithCdiscPt));
   }
@@ -211,10 +205,7 @@ public class CombiningPropertiesAndSynonymsTest {
   @Test
   public void testAndOfSynonymsMayMatchDifferentSynonyms() {
     final EvsQuery withCdiscSynonymAndSySynonym =
-        new And(
-            List.of(
-                new HasSynonym(null, new Exact(CDISC), null),
-                new HasSynonym(null, null, new Exact(SYNONYM))));
+        new And(List.of(new HasSynonym(null, CDISC, null), new HasSynonym(null, null, SYNONYM)));
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(withCdiscSynonymAndSySynonym));
   }
@@ -222,7 +213,7 @@ public class CombiningPropertiesAndSynonymsTest {
   /** One synonym node keeps its fields on one synonym: no concept has a CDISC SY. */
   @Test
   public void testSingleSynonymNodeKeepsFieldsOnOneSynonym() {
-    final EvsQuery withCdiscSy = new HasSynonym(null, new Exact(CDISC), new Exact(SYNONYM));
+    final EvsQuery withCdiscSy = new HasSynonym(null, CDISC, SYNONYM);
 
     assertEquals(Set.of(), fetchMatchingNames(withCdiscSy));
   }

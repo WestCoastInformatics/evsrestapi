@@ -14,7 +14,7 @@ import org.opensearch.index.query.QueryBuilders;
  * nothing, as for the concept-level {@code Or}, so an empty list of alternatives doesn't widen a
  * search to every property. See {@link QualifierCondition} for why this isn't {@code Or}.
  */
-public final class AnyQualifier implements QualifierCondition {
+public final class AnyQualifiers implements QualifierCondition {
 
   /** One of the conditions must hold. */
   private static final int MINIMUM_MATCHING_CONDITIONS = 1;
@@ -22,17 +22,17 @@ public final class AnyQualifier implements QualifierCondition {
   /** The alternative conditions. */
   private List<QualifierCondition> conditions;
 
-  /** Instantiates an empty {@link AnyQualifier}. */
-  public AnyQualifier() {
+  /** Instantiates an empty {@link AnyQualifiers}. */
+  public AnyQualifiers() {
     // n/a
   }
 
   /**
-   * Instantiates an {@link AnyQualifier}.
+   * Instantiates an {@link AnyQualifiers}.
    *
    * @param conditions the alternative conditions
    */
-  public AnyQualifier(final List<QualifierCondition> conditions) {
+  public AnyQualifiers(final List<QualifierCondition> conditions) {
     this.conditions = new ArrayList<>(Objects.requireNonNull(conditions, "conditions"));
   }
 

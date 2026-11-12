@@ -1,9 +1,7 @@
 package gov.nih.nci.evs.api.queryendpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasInverseRole;
 import org.junit.jupiter.api.Test;
 
@@ -16,9 +14,7 @@ public class HasInverseRoleEndpointTest extends AbstractQueryEndpointTest {
   /** The query for the primary anatomic site of Breast Carcinoma. */
   private static final String PRIMARY_ANATOMIC_SITE_OF_BREAST_CARCINOMA_QUERY =
       """
-      {"type": "HasInverseRole",
-       "role": {"type": "Exact", "term": "R101"},
-       "target": {"type": "Exact", "term": "C4872"}}
+      {"type": "HasInverseRole", "role": "R101", "target": "C4872"}
       """;
 
   /**
@@ -30,21 +26,6 @@ public class HasInverseRoleEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasInverseRoleReturnsConceptsTheTargetPointsTo() throws Exception {
     assertThat(fetchCodes(PRIMARY_ANATOMIC_SITE_OF_BREAST_CARCINOMA_QUERY)).containsExactly(BREAST);
-  }
-
-  /**
-   * Test HasInverseRole with a value match without a type is rejected as a bad request.
-   *
-   * @throws Exception the exception
-   */
-  @Test
-  public void testHasInverseRoleWithValueMatchWithoutTypeReturnsBadRequest() throws Exception {
-    final String valueMatchWithoutTypeQuery =
-        """
-        {"type": "HasInverseRole", "role": {"term": "R101"}}
-        """;
-
-    postQuery(valueMatchWithoutTypeQuery).andExpect(status().isBadRequest());
   }
 
   /**
@@ -65,7 +46,7 @@ public class HasInverseRoleEndpointTest extends AbstractQueryEndpointTest {
   @Test
   public void testHasInverseRoleSerializesToExpectedJson() throws Exception {
     final HasInverseRole primaryAnatomicSiteOfBreastCarcinoma =
-        new HasInverseRole(new Exact(PRIMARY_ANATOMIC_SITE_ROLE), new Exact(BREAST_CARCINOMA));
+        new HasInverseRole(PRIMARY_ANATOMIC_SITE_ROLE, BREAST_CARCINOMA);
 
     assertSerializesTo(
         primaryAnatomicSiteOfBreastCarcinoma, PRIMARY_ANATOMIC_SITE_OF_BREAST_CARCINOMA_QUERY);

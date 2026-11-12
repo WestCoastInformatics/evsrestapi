@@ -162,23 +162,12 @@ public class InSubsetTest {
   }
 
   /**
-   * A subset can be given by a word of its name, like any relationship target. The target's name is
-   * analyzed text, stored as lowercase words, so a match is compared against one word at a time.
-   */
-  @Test
-  public void testSubsetMatchedByWordOfName() {
-    final EvsQuery cellosaurusMembers = new InSubset(new CaseInsensitive(new Exact("Cellosaurus")));
-
-    assertEquals(Set.of("Melanoma", "Nevus"), fetchMatchingNames(cellosaurusMembers));
-  }
-
-  /**
    * Known limitation: a subset's whole multi-word name never matches exactly, because the target's
    * name is stored as separate words. Use the subset's code.
    */
   @Test
   public void testWholeMultiWordSubsetNameFindsNothing() {
-    final EvsQuery cellosaurusMembersByWholeName = new InSubset(new Exact(CELLOSAURUS_NAME));
+    final EvsQuery cellosaurusMembersByWholeName = new InSubset(CELLOSAURUS_NAME);
 
     assertEquals(Set.of(), fetchMatchingNames(cellosaurusMembersByWholeName));
   }
@@ -187,18 +176,9 @@ public class InSubsetTest {
   // Lesson 2: combinations of subsets.
   // ---------------------------------------------------------------------------------------------
 
-  /** In any of several subsets: one InSubset whose target matches any of their codes. */
+  /** In any of several subsets: an InSubset per subset, combined with Or. */
   @Test
-  public void testInAnyOfSubsets() {
-    final EvsQuery sdtmOrCellosaurusMembers = new InSubset(new OneOf(Set.of(SDTM, CELLOSAURUS)));
-
-    assertEquals(
-        Set.of("Melanoma", "Body Weight", "Nevus"), fetchMatchingNames(sdtmOrCellosaurusMembers));
-  }
-
-  /** In any of several subsets, with Or: finds the same members as one InSubset with OneOf. */
-  @Test
-  public void testInAnyOfSubsetsWithOrMatchesOneOf() {
+  public void testInAnyOfSubsetsWithOrFindsMembersOfEach() {
     final EvsQuery sdtmOrCellosaurusMembers =
         new Or(List.of(new InSubset(SDTM), new InSubset(CELLOSAURUS)));
 
@@ -259,9 +239,7 @@ public class InSubsetTest {
   @Test
   public void testRejectsMissingSubset() {
     final String missingCode = null;
-    final ValueMatch missingMatch = null;
     assertThrows(NullPointerException.class, () -> new InSubset(missingCode));
-    assertThrows(NullPointerException.class, () -> new InSubset(missingMatch));
   }
 
   /**

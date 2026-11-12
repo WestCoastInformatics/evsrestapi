@@ -37,7 +37,7 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  * <ol>
  *   <li>A small index holds the concepts in {@link #INDEXED_CONCEPTS}, mapped exactly like a real
  *       concept index, so the nested synonyms mapping is tested too.
- *   <li>The lesson builds a query, e.g. concepts with a CDISC synonym containing "melanoma".
+ *   <li>The lesson builds a query, e.g. concepts with a CDISC synonym named "Malignant Melanoma".
  *   <li>The query runs against the index, and the lesson checks which concept names came back.
  * </ol>
  *
@@ -140,11 +140,10 @@ public class HasSynonymTest {
   // Lesson 1: HasSynonym finds concepts by a synonym's name.
   // ---------------------------------------------------------------------------------------------
 
-  /** An exact name finds the concept whose synonym it is, not just its preferred name. */
+  /** A name finds the concept whose synonym it is, not just its preferred name. */
   @Test
-  public void testExactSynonymNameFindsConcept() {
-    final EvsQuery conceptsCalledMalignantMelanoma =
-        new HasSynonym(new Exact("Malignant Melanoma"));
+  public void testSynonymNameFindsConcept() {
+    final EvsQuery conceptsCalledMalignantMelanoma = new HasSynonym("Malignant Melanoma");
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(conceptsCalledMalignantMelanoma));
   }
@@ -155,29 +154,9 @@ public class HasSynonymTest {
    */
   @Test
   public void testSynonymNameIgnoresCaseAndPunctuation() {
-    final EvsQuery conceptsCalledMelanomaMalignant =
-        new HasSynonym(new Exact("melanoma malignant"));
+    final EvsQuery conceptsCalledMelanomaMalignant = new HasSynonym("melanoma malignant");
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(conceptsCalledMelanomaMalignant));
-  }
-
-  /** The name takes any value match, e.g. a prefix. */
-  @Test
-  public void testSynonymNameMatchedByStartsWith() {
-    final EvsQuery conceptsWithSynonymStartingMelanocytic =
-        new HasSynonym(new StartsWith("Melanocytic"));
-
-    assertEquals(Set.of("Nevus"), fetchMatchingNames(conceptsWithSynonymStartingMelanocytic));
-  }
-
-  /** A contains match finds the name anywhere in a synonym. */
-  @Test
-  public void testSynonymNameMatchedByContains() {
-    final EvsQuery conceptsWithSynonymContainingCarcinoma =
-        new HasSynonym(new Contains("Carcinoma"));
-
-    assertEquals(
-        Set.of("Lung Carcinoma"), fetchMatchingNames(conceptsWithSynonymContainingCarcinoma));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -187,7 +166,7 @@ public class HasSynonymTest {
   /** Without a name, every concept with a synonym from the source matches. */
   @Test
   public void testSourceWithoutNameFindsAnySynonymFromSource() {
-    final EvsQuery conceptsWithCdiscSynonym = new HasSynonym(null, new Exact(CDISC), null);
+    final EvsQuery conceptsWithCdiscSynonym = new HasSynonym(null, CDISC, null);
 
     assertEquals(
         Set.of("Melanoma", "Nevus", "Lung Carcinoma"),
@@ -197,8 +176,7 @@ public class HasSynonymTest {
   /** A sub-source picks out synonyms from part of a source. */
   @Test
   public void testSubSourceFindsSynonymsFromSubSource() {
-    final EvsQuery conceptsWithSdtmSynonym =
-        new HasSynonym(null, new Exact(CDISC), null, new Exact(SDTM));
+    final EvsQuery conceptsWithSdtmSynonym = new HasSynonym(null, CDISC, null, SDTM);
 
     assertEquals(Set.of("Lung Carcinoma"), fetchMatchingNames(conceptsWithSdtmSynonym));
   }
@@ -213,7 +191,7 @@ public class HasSynonymTest {
    */
   @Test
   public void testSourceAndTermTypeMatchOnSameSynonymEntry() {
-    final EvsQuery conceptsWithCdiscSy = new HasSynonym(null, new Exact(CDISC), new Exact(SYNONYM));
+    final EvsQuery conceptsWithCdiscSy = new HasSynonym(null, CDISC, SYNONYM);
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(conceptsWithCdiscSy));
   }
@@ -225,7 +203,7 @@ public class HasSynonymTest {
   @Test
   public void testNameAndTermTypeMatchOnSameSynonymEntry() {
     final EvsQuery conceptsWithMalignantMelanomaPt =
-        new HasSynonym(new Exact("Malignant Melanoma"), null, new Exact(PREFERRED_TERM));
+        new HasSynonym("Malignant Melanoma", null, PREFERRED_TERM);
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithMalignantMelanomaPt));
   }
@@ -237,8 +215,7 @@ public class HasSynonymTest {
   @Test
   public void testNameSourceAndTermTypeMatchOnSameSynonymEntry() {
     final EvsQuery conceptsWithCdiscPtMelanomaMalignant =
-        new HasSynonym(
-            new Exact("Melanoma Malignant"), new Exact(CDISC), new Exact(PREFERRED_TERM));
+        new HasSynonym("Melanoma Malignant", CDISC, PREFERRED_TERM);
 
     assertEquals(Set.of("Melanoma"), fetchMatchingNames(conceptsWithCdiscPtMelanomaMalignant));
   }
@@ -255,8 +232,7 @@ public class HasSynonymTest {
   /** Unlike the name, the source is compared as given: "cdisc" isn't "CDISC". */
   @Test
   public void testSourceIsComparedAsGiven() {
-    final EvsQuery conceptsWithLowercaseCdiscSynonym =
-        new HasSynonym(null, new Exact("cdisc"), null);
+    final EvsQuery conceptsWithLowercaseCdiscSynonym = new HasSynonym(null, "cdisc", null);
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithLowercaseCdiscSynonym));
   }
@@ -264,8 +240,8 @@ public class HasSynonymTest {
   /** A name is required when it's the only condition. */
   @Test
   public void testRejectsMissingName() {
-    final ValueMatch missingMatch = null;
-    assertThrows(NullPointerException.class, () -> new HasSynonym(missingMatch));
+    final String missingName = null;
+    assertThrows(NullPointerException.class, () -> new HasSynonym(missingName));
   }
 
   /**

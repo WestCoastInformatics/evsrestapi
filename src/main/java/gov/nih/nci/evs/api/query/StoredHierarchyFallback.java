@@ -23,7 +23,7 @@ import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
  * nodes match the codes it returns.
  *
  * <p>TODO: Remove this class once every terminology is reindexed with ancestor fields. The indexed
- * path in {@link DescendantOf} then covers everything.
+ * path in {@link HasAncestor} then covers everything.
  */
 final class StoredHierarchyFallback {
 

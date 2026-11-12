@@ -1,12 +1,8 @@
 package gov.nih.nci.evs.api.queryendpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import gov.nih.nci.evs.api.query.Exact;
 import gov.nih.nci.evs.api.query.HasInverseAssociation;
-import gov.nih.nci.evs.api.query.OneOf;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -18,9 +14,7 @@ public class HasInverseAssociationEndpointTest extends AbstractQueryEndpointTest
   /** The query for the subsets Breast Carcinoma is in. */
   private static final String SUBSETS_OF_BREAST_CARCINOMA_QUERY =
       """
-      {"type": "HasInverseAssociation",
-       "association": {"type": "OneOf", "terms": ["A8"]},
-       "target": {"type": "Exact", "term": "C4872"}}
+      {"type": "HasInverseAssociation", "association": "A8", "target": "C4872"}
       """;
 
   /**
@@ -36,22 +30,6 @@ public class HasInverseAssociationEndpointTest extends AbstractQueryEndpointTest
             "C102905", "C103042", "C116977", "C118168", "C118464", "C126659", "C138188", "C138190",
             "C156952", "C156966", "C157711", "C158035", "C158520", "C165258", "C177537", "C189762",
             "C54450", "C90259");
-  }
-
-  /**
-   * Test HasInverseAssociation with terms not in a list is rejected as a bad request.
-   *
-   * @throws Exception the exception
-   */
-  @Test
-  public void testHasInverseAssociationWithTermsNotInListReturnsBadRequest() throws Exception {
-    final String termsNotInListQuery =
-        """
-        {"type": "HasInverseAssociation",
-         "association": {"type": "OneOf", "terms": "A8"}}
-        """;
-
-    postQuery(termsNotInListQuery).andExpect(status().isBadRequest());
   }
 
   /**
@@ -72,8 +50,7 @@ public class HasInverseAssociationEndpointTest extends AbstractQueryEndpointTest
   @Test
   public void testHasInverseAssociationSerializesToExpectedJson() throws Exception {
     final HasInverseAssociation subsetsOfBreastCarcinoma =
-        new HasInverseAssociation(
-            new OneOf(Set.of(IN_SUBSET_ASSOCIATION)), new Exact(BREAST_CARCINOMA));
+        new HasInverseAssociation(IN_SUBSET_ASSOCIATION, BREAST_CARCINOMA);
 
     assertSerializesTo(subsetsOfBreastCarcinoma, SUBSETS_OF_BREAST_CARCINOMA_QUERY);
   }

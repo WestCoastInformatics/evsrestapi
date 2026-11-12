@@ -3,6 +3,7 @@ package gov.nih.nci.evs.api.query;
 import gov.nih.nci.evs.api.model.Terminology;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -18,11 +19,10 @@ import org.opensearch.index.query.QueryBuilders;
  * HasAssociation} searches {@code associations}, and {@link HasInverseAssociation} searches {@code
  * inverseAssociations}.
  *
- * <p>The type and the target are each a {@link ValueMatch} on the entry's name or code, either one
- * matching: {@code new HasRole(new StartsWith("Disease_Has_Primary"), new Exact("C12470"))}. Wrap a
- * match in {@link CaseInsensitive} to ignore case. Both are compared against values stored on the
- * entry itself, so no other search runs. The target name is analyzed text, so a match compares its
- * individual lowercased words, not the whole name.
+ * <p>The type and the target are each a name or code, equal to the entry's name or code: {@code new
+ * HasRole("Disease_Has_Primary_Anatomic_Site", "C12470")}. Both are compared against values stored
+ * on the entry itself, so no other search runs. The target name is analyzed text, so a name
+ * compares against its individual lowercased words, not the whole name.
  *
  * <p>The type and target must match on the same entry. A concept with "primary site: Lung" and
  * "associated site: Skin" does not match "primary site: Skin".
@@ -48,15 +48,14 @@ public abstract class HasRelationship extends EvsQuery {
   private static final String ENTRY_FIELD_SEPARATOR = ".";
 
   /**
-   * How the relationship's type name or code must match. The type is the kind of relationship the
-   * entry expresses, e.g. "Disease_Has_Primary_Anatomic_Site" (code "R101"). A concept has many
-   * entries, each pairing a type with a target concept, and the type says how the concept relates
-   * to that target.
+   * The relationship's type name or code. The type is the kind of relationship the entry expresses,
+   * e.g. "Disease_Has_Primary_Anatomic_Site" (code "R101"). A concept has many entries, each
+   * pairing a type with a target concept, and the type says how the concept relates to that target.
    */
-  private ValueMatch relationshipType;
+  private String relationshipType;
 
-  /** How the name or code of the concept the relationship points to must match, or null for any. */
-  private ValueMatch target;
+  /** The name or code of the concept the relationship points to, or null for any. */
+  private String target;
 
   /** Instantiates an empty {@link HasRelationship}. */
   protected HasRelationship() {
@@ -67,9 +66,9 @@ public abstract class HasRelationship extends EvsQuery {
    * Instantiates a {@link HasRelationship} that matches a relationship of the given type, pointing
    * to any concept.
    *
-   * @param relationshipType how the relationship's type name or code must match
+   * @param relationshipType the relationship's type name or code
    */
-  protected HasRelationship(final ValueMatch relationshipType) {
+  protected HasRelationship(final String relationshipType) {
     this.relationshipType = Objects.requireNonNull(relationshipType, "relationshipType");
     this.target = null;
   }
@@ -78,10 +77,10 @@ public abstract class HasRelationship extends EvsQuery {
    * Instantiates a {@link HasRelationship} that matches a relationship of the given type pointing
    * to the target.
    *
-   * @param relationshipType how the relationship's type name or code must match
-   * @param target how the target's name or code must match
+   * @param relationshipType the relationship's type name or code
+   * @param target the target's name or code
    */
-  protected HasRelationship(final ValueMatch relationshipType, final ValueMatch target) {
+  protected HasRelationship(final String relationshipType, final String target) {
     this.relationshipType = Objects.requireNonNull(relationshipType, "relationshipType");
     this.target = Objects.requireNonNull(target, "target");
   }
@@ -97,22 +96,22 @@ public abstract class HasRelationship extends EvsQuery {
   protected abstract String getRelationshipListFieldName();
 
   /**
-   * Returns how the relationship's type name or code must match. Protected, so it isn't a JSON
-   * property: each subclass exposes it under its own name, e.g. {@code role}, since {@code type} is
-   * the JSON property naming the node.
+   * Returns the relationship's type name or code. Protected, so it isn't a JSON property: each
+   * subclass exposes it under its own name, e.g. {@code role}, since {@code type} is the JSON
+   * property naming the node.
    *
-   * @return the type name or code match
+   * @return the type name or code
    */
-  protected ValueMatch getRelationshipType() {
+  protected String getRelationshipType() {
     return relationshipType;
   }
 
   /**
-   * Sets how the relationship's type name or code must match.
+   * Sets the relationship's type name or code.
    *
-   * @param relationshipType the type name or code match
+   * @param relationshipType the type name or code
    */
-  protected void setRelationshipType(final ValueMatch relationshipType) {
+  protected void setRelationshipType(final String relationshipType) {
     this.relationshipType = relationshipType;
   }
 
@@ -126,20 +125,20 @@ public abstract class HasRelationship extends EvsQuery {
   }
 
   /**
-   * Returns how the target's name or code must match.
+   * Returns the target's name or code.
    *
-   * @return the target name or code match, or null for any target
+   * @return the target name or code, or null for any target
    */
-  public ValueMatch getTarget() {
+  public String getTarget() {
     return target;
   }
 
   /**
-   * Sets how the target's name or code must match.
+   * Sets the target's name or code.
    *
-   * @param target the target name or code match, or null for any target
+   * @param target the target name or code, or null for any target
    */
-  public void setTarget(final ValueMatch target) {
+  public void setTarget(final String target) {
     this.target = target;
   }
 
@@ -171,11 +170,11 @@ public abstract class HasRelationship extends EvsQuery {
   }
 
   /**
-   * Returns the condition matching an entry whose name field or code field matches.
+   * Returns the condition matching an entry whose name field or code field equals the name or code.
    *
    * @param nameEntryField the entry field holding the name
    * @param codeEntryField the entry field holding the code
-   * @param nameOrCodeMatch how the name or code must match
+   * @param nameOrCode the name or code
    * @param operations the OpenSearch operations, for building the field matches
    * @param terminologies the terminologies being searched
    * @return the condition
@@ -183,11 +182,13 @@ public abstract class HasRelationship extends EvsQuery {
   private QueryBuilder getEntryNameOrCodeQuery(
       final String nameEntryField,
       final String codeEntryField,
-      final ValueMatch nameOrCodeMatch,
+      final String nameOrCode,
       final OpenSearchOperations operations,
       final List<Terminology> terminologies) {
     return new NameOrCodeMatch(
-            getEntryFieldName(nameEntryField), getEntryFieldName(codeEntryField), nameOrCodeMatch)
+            getEntryFieldName(nameEntryField),
+            getEntryFieldName(codeEntryField),
+            Set.of(nameOrCode))
         .fetchOpenSearchQuery(operations, terminologies);
   }
 

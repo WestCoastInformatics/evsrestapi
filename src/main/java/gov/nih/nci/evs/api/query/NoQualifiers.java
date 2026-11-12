@@ -13,22 +13,22 @@ import org.opensearch.index.query.QueryBuilders;
  * still matches, through the other one. The concept-level {@code Not} would instead exclude every
  * gene with any IDA annotation. See {@link QualifierCondition}.
  */
-public final class NoQualifier implements QualifierCondition {
+public final class NoQualifiers implements QualifierCondition {
 
   /** The condition the entry must not meet. */
   private QualifierCondition condition;
 
-  /** Instantiates an empty {@link NoQualifier}. */
-  public NoQualifier() {
+  /** Instantiates an empty {@link NoQualifiers}. */
+  public NoQualifiers() {
     // n/a
   }
 
   /**
-   * Instantiates a {@link NoQualifier}.
+   * Instantiates a {@link NoQualifiers}.
    *
    * @param condition the condition the entry must not meet
    */
-  public NoQualifier(final QualifierCondition condition) {
+  public NoQualifiers(final QualifierCondition condition) {
     this.condition = Objects.requireNonNull(condition, "condition");
   }
 

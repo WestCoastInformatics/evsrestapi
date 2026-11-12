@@ -41,7 +41,8 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
  *   <li>The query runs against the index, and the lesson checks which concept names came back.
  * </ol>
  *
- * <p>A role target is a value match, compared against the role's target name or code.
+ * <p>A role type is the role's exact name or code, and a role target is the target's exact name or
+ * code.
  *
  * <p>The role names and codes are made up for the tutorial. They look like NCIt's but don't need to
  * match it.
@@ -89,9 +90,6 @@ public class HasRoleTest {
 
   /** Target concept: Liver. No indexed concept points to it. */
   private static final String LIVER = "C12392";
-
-  /** A code prefix shared by {@link #SKIN} and {@link #LUNG}, but not {@link #LIVER}. */
-  private static final String SKIN_AND_LUNG_CODE_PREFIX = "C124";
 
   /**
    * The concepts in the index. "Lung Carcinoma" has both sites, but Skin only through the
@@ -183,7 +181,7 @@ public class HasRoleTest {
   /** Without a target, every concept with a primary site is found, whatever it points to. */
   @Test
   public void testRoleTypeWithoutTargetFindsAnyTarget() {
-    final EvsQuery diseasesWithAnyPrimarySite = new HasRole(new Exact(PRIMARY_SITE));
+    final EvsQuery diseasesWithAnyPrimarySite = new HasRole(PRIMARY_SITE);
 
     assertEquals(
         Set.of(
@@ -210,12 +208,12 @@ public class HasRoleTest {
   /** Part of a role name is not a role name. */
   @Test
   public void testPartialRoleNameFindsNothing() {
-    final EvsQuery conceptsWithRoleNamedAnatomicSite = new HasRole(new Exact("Anatomic_Site"));
+    final EvsQuery conceptsWithRoleNamedAnatomicSite = new HasRole("Anatomic_Site");
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsWithRoleNamedAnatomicSite));
   }
 
-  /** Role types are case sensitive by default. */
+  /** Role types are case sensitive. */
   @Test
   public void testRoleTypeIsCaseSensitive() {
     final EvsQuery diseasesWithLowercasePrimarySiteSkin =
@@ -224,112 +222,20 @@ public class HasRoleTest {
     assertEquals(Set.of(), fetchMatchingNames(diseasesWithLowercasePrimarySiteSkin));
   }
 
-  /** With its match wrapped in CaseInsensitive, the role type matches whatever its case. */
-  @Test
-  public void testCaseInsensitiveRoleTypeMatchesAnyCase() {
-    final ValueMatch roleType = new CaseInsensitive(new Exact(PRIMARY_SITE.toLowerCase()));
-    final EvsQuery diseasesWithAnyCasePrimarySiteSkin = getHasRole(roleType, SKIN);
-
-    assertEquals(
-        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
-        fetchMatchingNames(diseasesWithAnyCasePrimarySiteSkin));
-  }
-
-  /** CaseInsensitive also works on a role code. */
-  @Test
-  public void testCaseInsensitiveRoleCode() {
-    final ValueMatch roleType = new CaseInsensitive(new Exact(PRIMARY_SITE_CODE.toLowerCase()));
-    final EvsQuery diseasesWithAnyCasePrimarySiteCodeSkin = getHasRole(roleType, SKIN);
-
-    assertEquals(
-        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
-        fetchMatchingNames(diseasesWithAnyCasePrimarySiteCodeSkin));
-  }
-
-  /**
-   * A role type takes any value match, not just an exact name. "Anatomic_Site" is in both the
-   * primary and the associated site role names, so "Lung Carcinoma" matches through its associated
-   * site Skin.
-   */
-  @Test
-  public void testRoleTypeMatchedByContains() {
-    final ValueMatch roleType = new Contains("Anatomic_Site");
-    final EvsQuery diseasesWithAnyAnatomicSiteSkin = getHasRole(roleType, SKIN);
-
-    assertEquals(
-        Set.of("Cutaneous Melanoma", "Lung Carcinoma", "Basal Cell Carcinoma of Skin"),
-        fetchMatchingNames(diseasesWithAnyAnatomicSiteSkin));
-  }
-
-  /**
-   * A target given as a match is compared against the role's target name, with no search for the
-   * target first. "skinnn" is two edits from Skin. "Lung Carcinoma" points to Skin only through its
-   * associated site, so it doesn't match a primary site.
-   */
-  @Test
-  public void testTargetMatchedByFuzzyName() {
-    final ValueMatch roleType = new Exact(PRIMARY_SITE);
-    final EvsQuery diseasesWithPrimarySiteNamedLikeSkinnn =
-        new HasRole(roleType, new Fuzzy("skinnn"));
-
-    assertEquals(
-        Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
-        fetchMatchingNames(diseasesWithPrimarySiteNamedLikeSkinnn));
-  }
-
-  /** A target given as a match is also compared against the role's target code. */
+  /** A target is compared against the role's target code. */
   @Test
   public void testTargetMatchedByCode() {
-    final ValueMatch roleType = new Exact(PRIMARY_SITE);
-    final EvsQuery diseasesWithPrimarySiteCodeSkin = new HasRole(roleType, new Exact(SKIN));
+    final EvsQuery diseasesWithPrimarySiteCodeSkin = new HasRole(PRIMARY_SITE, SKIN);
 
     assertEquals(
         Set.of("Cutaneous Melanoma", "Basal Cell Carcinoma of Skin"),
         fetchMatchingNames(diseasesWithPrimarySiteCodeSkin));
   }
 
-  /**
-   * A target match can match several targets. Every code starting with {@link
-   * #SKIN_AND_LUNG_CODE_PREFIX} is Skin's or Lung's, so every concept whose primary site is either
-   * one is found.
-   */
-  @Test
-  public void testTargetMatchedByCodePrefixFindsAnyOfThem() {
-    final ValueMatch roleType = new Exact(PRIMARY_SITE);
-    final EvsQuery diseasesWithPrimarySiteSkinOrLung =
-        new HasRole(roleType, new StartsWith(SKIN_AND_LUNG_CODE_PREFIX));
-
-    assertEquals(
-        Set.of(
-            "Cutaneous Melanoma",
-            "Lung Carcinoma",
-            "Basal Cell Carcinoma of Skin",
-            "Lung Adenocarcinoma"),
-        fetchMatchingNames(diseasesWithPrimarySiteSkinOrLung));
-  }
-
-  /**
-   * The type and the target can each be matched in any fashion: any role with "site" in its name,
-   * whatever the case, pointing to a target with "skin" in its name. Both must hold on the same
-   * role, so "Lung Carcinoma" matches through its associated site Skin, not its primary site Lung.
-   */
-  @Test
-  public void testTypeAndTargetMatchedByCaseInsensitiveContains() {
-    final EvsQuery conceptsWithSiteRoleTargetingSkin =
-        new HasRole(
-            new CaseInsensitive(new Contains("site")), new CaseInsensitive(new Contains("skin")));
-
-    assertEquals(
-        Set.of("Cutaneous Melanoma", "Lung Carcinoma", "Basal Cell Carcinoma of Skin"),
-        fetchMatchingNames(conceptsWithSiteRoleTargetingSkin));
-  }
-
-  /** A target given as a match that matches neither a target name nor a code finds nothing. */
+  /** A target that matches neither a role's target name nor its code finds nothing. */
   @Test
   public void testUnmatchedTargetNameOrCodeFindsNothing() {
-    final ValueMatch roleType = new Exact(PRIMARY_SITE);
-    final EvsQuery diseasesWithPrimarySiteNamedExactlyLiver =
-        new HasRole(roleType, new Exact("Liver"));
+    final EvsQuery diseasesWithPrimarySiteNamedExactlyLiver = new HasRole(PRIMARY_SITE, "Liver");
 
     assertEquals(Set.of(), fetchMatchingNames(diseasesWithPrimarySiteNamedExactlyLiver));
   }
@@ -355,10 +261,9 @@ public class HasRoleTest {
   /** A role type and a target are required. */
   @Test
   public void testRejectsMissingValues() {
-    final ValueMatch missingMatch = null;
-    assertThrows(NullPointerException.class, () -> new HasRole(missingMatch));
-    assertThrows(
-        NullPointerException.class, () -> new HasRole(new Exact(PRIMARY_SITE), missingMatch));
+    final String missingValue = null;
+    assertThrows(NullPointerException.class, () -> new HasRole(missingValue));
+    assertThrows(NullPointerException.class, () -> new HasRole(PRIMARY_SITE, missingValue));
   }
 
   /**
@@ -369,18 +274,7 @@ public class HasRoleTest {
    * @return the query
    */
   private HasRole getHasRole(final String roleNameOrCode, final String targetCode) {
-    return getHasRole(new Exact(roleNameOrCode), targetCode);
-  }
-
-  /**
-   * Builds a {@link HasRole} whose target is one concept, given by its exact code.
-   *
-   * @param roleType the role's type
-   * @param targetCode the code of the concept the role must point to
-   * @return the query
-   */
-  private HasRole getHasRole(final ValueMatch roleType, final String targetCode) {
-    return new HasRole(roleType, new Exact(targetCode));
+    return new HasRole(roleNameOrCode, targetCode);
   }
 
   /**
