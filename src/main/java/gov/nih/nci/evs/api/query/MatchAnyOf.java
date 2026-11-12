@@ -12,13 +12,13 @@ import org.opensearch.index.query.QueryBuilders;
 
 /**
  * Matches documents whose field equals any of a set of values (case sensitive, whole value), e.g.
- * concepts whose {@code ancestors} include any of several codes. The many-value form of {@link
- * Exact}: one OpenSearch {@code terms} query instead of a {@code should} clause per value, which
- * would hit OpenSearch's clause limit for large sets.
+ * concepts whose {@code ancestors} include any of several codes. One OpenSearch {@code terms} query
+ * instead of a {@code should} clause per value, which would hit OpenSearch's clause limit for large
+ * sets.
  *
  * <p>OpenSearch accepts at most {@value #MAX_VALUES} values in one {@code terms} query by default,
  * so the constructor rejects larger sets. Callers that build the set from other concepts (see
- * {@link HierarchyQuery#fetchTargetCodes}) check the size first to report a clearer error.
+ * {@link HasHierarchyRelative#fetchTargetCodes}) check the size first to report a clearer error.
  */
 class MatchAnyOf extends EvsQuery {
 

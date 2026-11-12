@@ -30,13 +30,27 @@ public interface OpenSearchService {
    *
    * @param query the query, which decides what matches and how matches are ranked
    * @param terminologies the terminologies to search
-   * @param searchCriteria the search criteria supplying the page size and included fields, echoed
-   *     back as the result parameters
-   * @return the first page of matching concepts, best match first. The total counts matches only up
-   *     to OpenSearch's default limit of 10,000, then reports 10,000. Unlike {@link #findConcepts},
-   *     it doesn't run a second query for the exact count, since it doesn't page.
+   * @param searchCriteria the search criteria supplying the first record, page size, and included
+   *     fields, echoed back as the result parameters
+   * @return the requested page of matching concepts, best match first. The total counts matches
+   *     only up to OpenSearch's default limit of 10,000, then reports 10,000. Unlike {@link
+   *     #findQueryConceptsWithExactTotal}, it doesn't run a second query for the exact count.
    */
   public ConceptResultList findQueryConcepts(
+      EvsQuery query, List<Terminology> terminologies, SearchCriteria searchCriteria);
+
+  /**
+   * Runs a query tree like {@link #findQueryConcepts}, but reports the exact total, as {@link
+   * #findConcepts} does: when the total reaches OpenSearch's default limit of 10,000, it runs a
+   * second query to count every match.
+   *
+   * @param query the query, which decides what matches and how matches are ranked
+   * @param terminologies the terminologies to search
+   * @param searchCriteria the search criteria supplying the first record, page size, and included
+   *     fields, echoed back as the result parameters
+   * @return the requested page of matching concepts, best match first, with the exact total
+   */
+  public ConceptResultList findQueryConceptsWithExactTotal(
       EvsQuery query, List<Terminology> terminologies, SearchCriteria searchCriteria);
 
   /**

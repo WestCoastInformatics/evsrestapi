@@ -25,8 +25,9 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * Base class for the per-node tests of the query endpoint ({@code POST /concept/query}). Each
- * subclass tests one query node with three kinds of test:
+ * Base class for the per-node tests of the query endpoint ({@code POST
+ * /concept/{terminology}/search} with a JSON body). Each subclass tests one query node with three
+ * kinds of test:
  *
  * <ol>
  *   <li><b>Integration test</b>: posts a query tree as the literal JSON a client would write, using
@@ -52,8 +53,8 @@ public abstract class AbstractQueryEndpointTest {
   /** The logger. */
   private static final Logger log = LoggerFactory.getLogger(AbstractQueryEndpointTest.class);
 
-  /** The query endpoint url. */
-  protected static final String QUERY_URL = "/api/v1/concept/query";
+  /** The query endpoint url, with the terminology as a path variable. */
+  protected static final String QUERY_URL = "/api/v1/concept/{terminology}/search";
 
   /** The terminology every test searches. */
   protected static final String TERMINOLOGY = "ncit";
@@ -187,10 +188,9 @@ public abstract class AbstractQueryEndpointTest {
   protected ResultActions postQuery(
       final String queryJson, final String pageSize, final String include) throws Exception {
     log.info(
-        "Testing url - " + QUERY_URL + "?terminology=" + TERMINOLOGY + ", body = " + queryJson);
+        "Testing url - " + QUERY_URL + " (terminology=" + TERMINOLOGY + "), body = " + queryJson);
     return mvc.perform(
-        post(QUERY_URL)
-            .param("terminology", TERMINOLOGY)
+        post(QUERY_URL, TERMINOLOGY)
             .param("pageSize", pageSize)
             .param("include", include)
             .contentType(MediaType.APPLICATION_JSON)

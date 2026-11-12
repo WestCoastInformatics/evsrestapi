@@ -23,9 +23,9 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 
 /**
- * Base type for nodes that match concepts related through the hierarchy to the target concepts:
- * {@link DescendantOf} below them, {@link AncestorOf} above them. The targets are the concepts
- * whose name or code matches {@code target}, a {@link ValueMatch}, so these don't nest other
+ * Base type for nodes that match concepts with a hierarchy relative among the target concepts:
+ * {@link HasAncestor} (concepts below a target), {@link HasDescendant} (concepts above a target).
+ * The targets are the concepts whose name or code is {@code target}, so these don't nest other
  * queries.
  *
  * <p>Some cases can't be answered from the concept's own fields yet, and look up the target codes
@@ -39,7 +39,7 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
  * <p>An optional {@code maxLevel} limits how many levels away relatives may be, by shortest
  * distance: 1 means direct children (or parents).
  */
-public abstract class HierarchyQuery extends EvsQuery {
+public abstract class HasHierarchyRelative extends EvsQuery {
 
   /** Field holding a document's identifier, which is the concept code. */
   private static final String ID_FIELD = "_id";
@@ -78,24 +78,24 @@ public abstract class HierarchyQuery extends EvsQuery {
    */
   private static final int FIRST_PAGE = 0;
 
-  /** How the target concepts' name or code must match. */
-  private ValueMatch target;
+  /** The target concepts' name or code. */
+  private String target;
 
   /** The maximum distance from the targets, or null for any distance. */
   private Integer maxLevel;
 
-  /** Instantiates an empty {@link HierarchyQuery}. */
-  protected HierarchyQuery() {
+  /** Instantiates an empty {@link HasHierarchyRelative}. */
+  protected HasHierarchyRelative() {
     // n/a
   }
 
   /**
-   * Instantiates a {@link HierarchyQuery}.
+   * Instantiates a {@link HasHierarchyRelative}.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concepts' name or code
    * @param maxLevel the maximum distance from the targets, at least 1, or null for any distance
    */
-  protected HierarchyQuery(final ValueMatch target, final Integer maxLevel) {
+  protected HasHierarchyRelative(final String target, final Integer maxLevel) {
     this.target = Objects.requireNonNull(target, "target");
 
     final boolean hasInvalidMaxLevel = maxLevel != null && maxLevel < MIN_MAX_LEVEL;
@@ -108,20 +108,20 @@ public abstract class HierarchyQuery extends EvsQuery {
   }
 
   /**
-   * Returns how the target concepts' name or code must match.
+   * Returns the target concepts' name or code.
    *
-   * @return the target name or code match
+   * @return the target name or code
    */
-  public ValueMatch getTarget() {
+  public String getTarget() {
     return target;
   }
 
   /**
-   * Sets how the target concepts' name or code must match.
+   * Sets the target concepts' name or code.
    *
-   * @param target the target name or code match
+   * @param target the target name or code
    */
-  public void setTarget(final ValueMatch target) {
+  public void setTarget(final String target) {
     this.target = target;
   }
 
@@ -180,7 +180,7 @@ public abstract class HierarchyQuery extends EvsQuery {
   }
 
   /**
-   * Returns the condition matching the targets themselves, for the "or self" subclasses: concepts
+   * Returns the condition matching the targets themselves, for the "or is" subclasses: concepts
    * whose own name or code matches.
    *
    * @param operations the OpenSearch operations
@@ -189,7 +189,7 @@ public abstract class HierarchyQuery extends EvsQuery {
    */
   protected final QueryBuilder getTargetsQuery(
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
-    return new NameOrCodeMatch(NAME_FIELD, CODE_FIELD, target)
+    return new NameOrCodeMatch(NAME_FIELD, CODE_FIELD, Set.of(target))
         .fetchOpenSearchQuery(operations, terminologies);
   }
 
@@ -288,7 +288,7 @@ public abstract class HierarchyQuery extends EvsQuery {
    */
   private static QueryBuilder getInIndexQuery(
       final OpenSearchOperations operations, final Terminology terminology) {
-    return new FieldMatch(INDEX_FIELD, new Exact(terminology.getIndexName()))
+    return new MatchAnyOf(INDEX_FIELD, Set.of(terminology.getIndexName()))
         .fetchOpenSearchQuery(operations, List.of(terminology));
   }
 

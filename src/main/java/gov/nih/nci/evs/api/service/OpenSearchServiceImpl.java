@@ -43,7 +43,6 @@ import org.opensearch.search.sort.SortOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -90,6 +89,9 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   /** Number of concepts per children lookup in the hierarchy search fallback. */
   private static final int CHILDREN_BATCH_SIZE = 1000;
 
+  /** OpenSearch's default limit on the hits a search counts, at which its total stops. */
+  private static final long COUNTED_HIT_LIMIT = 10_000L;
+
   /** Terminology versions for which hierarchy fallback use was already logged. */
   private final Set<String> hierarchyFallbackNoted = ConcurrentHashMap.newKeySet();
 
@@ -103,25 +105,38 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       final EvsQuery query,
       final List<Terminology> terminologies,
       final SearchCriteria searchCriteria) {
-    // Only the best matches are returned, which are on the first page
-    final int bestMatchesPage = 0;
     final SearchHits<Concept> hits =
         query.fetchConcepts(
             operations,
             terminologies,
-            PageRequest.of(bestMatchesPage, searchCriteria.getPageSize()),
+            EVSPageable.fromRecord(searchCriteria.getFromRecord(), searchCriteria.getPageSize()),
             new IncludeParam(searchCriteria.getInclude()));
 
     final ConceptResultList results = new ConceptResultList();
     results.setParameters(searchCriteria);
-    // Capped at 10,000 on purpose: this doesn't page, so it doesn't need the exact count
-    // that findConcepts runs a second query for
+    // Capped at 10,000: findQueryConceptsWithExactTotal runs a second query for the exact count
     results.setTotal(hits.getTotalHits());
     results.setConcepts(
         hits.stream()
             .peek(OpenSearchServiceImpl::addHighlightsToConcept)
             .map(SearchHit::getContent)
             .collect(Collectors.toList()));
+    return results;
+  }
+
+  /* see superclass */
+  @Override
+  public ConceptResultList findQueryConceptsWithExactTotal(
+      final EvsQuery query,
+      final List<Terminology> terminologies,
+      final SearchCriteria searchCriteria) {
+    final ConceptResultList results = findQueryConcepts(query, terminologies, searchCriteria);
+
+    final boolean hasTotalAtCountedHitLimit = results.getTotal() >= COUNTED_HIT_LIMIT;
+    if (hasTotalAtCountedHitLimit) {
+      results.setTotal(query.fetchConceptCount(operations, terminologies));
+    }
+
     return results;
   }
 
@@ -136,18 +151,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   @Override
   public ConceptResultList findConcepts(
       List<Terminology> terminologies, SearchCriteria searchCriteria) throws Exception {
-    int page = searchCriteria.getFromRecord() / searchCriteria.getPageSize();
-    // PageRequest.of(page, searchCriteria.getPageSize());
-
-    // handle fromRecord offset from pageSize (e.g. fromRecord=6, pageSize=10)
-    final int fromOffset = searchCriteria.getFromRecord() % searchCriteria.getPageSize();
-    final int esFromRecord = searchCriteria.getFromRecord() - fromOffset;
-    final int esPageSize =
-        fromOffset == 0 ? searchCriteria.getPageSize() : (searchCriteria.getPageSize() * 2);
-    final int fromIndex = searchCriteria.getFromRecord() % searchCriteria.getPageSize();
-    final int toIndex = fromIndex + searchCriteria.getPageSize();
-
-    final Pageable pageable = new EVSPageable(page, esPageSize, esFromRecord);
+    final Pageable pageable =
+        EVSPageable.fromRecord(searchCriteria.getFromRecord(), searchCriteria.getPageSize());
 
     // Escape the term in case it has special characters
     final String term = escape(searchCriteria.getTerm());
@@ -248,21 +253,11 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     result.setParameters(searchCriteria);
 
-    if (fromOffset == 0) {
-      result.setConcepts(
-          hits.stream()
-              .peek(OpenSearchServiceImpl::addHighlightsToConcept)
-              .map(SearchHit::getContent)
-              .collect(Collectors.toList()));
-    } else {
-      final List<Concept> results =
-          hits.stream().map(SearchHit::getContent).collect(Collectors.toList());
-      if (fromIndex >= results.size()) {
-        result.setConcepts(new ArrayList<>());
-      } else {
-        result.setConcepts(results.subList(fromIndex, Math.min(toIndex, results.size())));
-      }
-    }
+    result.setConcepts(
+        hits.stream()
+            .peek(OpenSearchServiceImpl::addHighlightsToConcept)
+            .map(SearchHit::getContent)
+            .collect(Collectors.toList()));
     return result;
   }
 
@@ -304,18 +299,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    */
   @Override
   public MappingResultList findConceptMappings(String query, SearchCriteria searchCriteria) {
-    int page = searchCriteria.getFromRecord() / searchCriteria.getPageSize();
-    // PageRequest.of(page, searchCriteria.getPageSize());
-
-    // handle fromRecord offset from pageSize (e.g. fromRecord=6, pageSize=10)
-    final int fromOffset = searchCriteria.getFromRecord() % searchCriteria.getPageSize();
-    final int esFromRecord = searchCriteria.getFromRecord() - fromOffset;
-    final int esPageSize =
-        fromOffset == 0 ? searchCriteria.getPageSize() : (searchCriteria.getPageSize() * 2);
-    final int fromIndex = searchCriteria.getFromRecord() % searchCriteria.getPageSize();
-    final int toIndex = fromIndex + searchCriteria.getPageSize();
-
-    final Pageable pageable = new EVSPageable(page, esPageSize, esFromRecord);
+    final Pageable pageable =
+        EVSPageable.fromRecord(searchCriteria.getFromRecord(), searchCriteria.getPageSize());
 
     // build search query from string query
     final NativeSearchQueryBuilder searchQuery =
@@ -383,17 +368,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
 
     result.setParameters(searchCriteria);
 
-    if (fromOffset == 0) {
-      result.setMaps(hits.stream().map(SearchHit::getContent).collect(Collectors.toList()));
-    } else {
-      final List<Mapping> results =
-          hits.stream().map(SearchHit::getContent).collect(Collectors.toList());
-      if (fromIndex >= results.size()) {
-        result.setMaps(new ArrayList<>());
-      } else {
-        result.setMaps(results.subList(fromIndex, Math.min(toIndex, results.size())));
-      }
-    }
+    result.setMaps(hits.stream().map(SearchHit::getContent).collect(Collectors.toList()));
     return result;
   }
 
@@ -484,7 +459,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @return the contains query
    * @throws Exception the exception
    */
-  private BoolQueryBuilder getContainsQuery(
+  public static BoolQueryBuilder getContainsQuery(
       final SearchCriteria searchCriteria, final String term, boolean fuzzyFlag, boolean andFlag)
       throws Exception {
     return getContainsQuery(searchCriteria, term, fuzzyFlag, andFlag, true);
@@ -501,7 +476,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @return the contains query
    * @throws Exception the exception
    */
-  private BoolQueryBuilder getContainsQuery(
+  private static BoolQueryBuilder getContainsQuery(
       final SearchCriteria searchCriteria,
       final String term,
       boolean fuzzyFlag,
@@ -737,7 +712,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param andFlag the and flag
    * @throws Exception the exception
    */
-  private void addOptionalSearchPhraseQuery(
+  private static void addOptionalSearchPhraseQuery(
       final BoolQueryBuilder termQuery,
       final SearchCriteria searchCriteria,
       final String normTerm,
@@ -760,7 +735,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param term the normalized search term
    * @return the term without optional search phrases
    */
-  private String removeOptionalSearchPhrases(final String term) {
+  private static String removeOptionalSearchPhrases(final String term) {
     if (StringUtils.isBlank(term)) {
       return term;
     }
@@ -780,7 +755,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param fuzzyFlag the fuzzy flag
    * @return the code and name query, or null when the term is not eligible
    */
-  private QueryBuilder getCodeAndNameQuery(
+  private static QueryBuilder getCodeAndNameQuery(
       final String term, final String type, final boolean fuzzyFlag) {
     if (!"contains".equals(type) || StringUtils.isBlank(term) || !term.contains(" ")) {
       return null;
@@ -813,7 +788,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param type the search type
    * @param fuzzyFlag the fuzzy flag
    */
-  private void addCodeAndNameQuery(
+  private static void addCodeAndNameQuery(
       final BoolQueryBuilder parentQuery,
       final String[] tokens,
       final int codeIndex,
@@ -853,7 +828,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param fuzzyFlag the fuzzy flag
    * @return the name/synonym query, or null when no normalized name term exists
    */
-  private QueryBuilder getNameOnlyContainsQuery(
+  private static QueryBuilder getNameOnlyContainsQuery(
       final String term, final String type, final boolean fuzzyFlag) {
     final String normTerm = ConceptUtils.normalize(term);
     if (StringUtils.isBlank(normTerm)) {
@@ -938,7 +913,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param boost the boost
    * @return the code query
    */
-  private BoolQueryBuilder getCodeQuery(final String codeList, final float boost) {
+  private static BoolQueryBuilder getCodeQuery(final String codeList, final float boost) {
     return QueryBuilders.boolQuery()
         // concept code
         .should(QueryBuilders.queryStringQuery(codeList).field("code").boost(boost))
@@ -960,7 +935,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param boost the boost
    * @return the exact code query
    */
-  private BoolQueryBuilder getExactCodeQuery(final String code, final float boost) {
+  private static BoolQueryBuilder getExactCodeQuery(final String code, final float boost) {
     return QueryBuilders.boolQuery()
         .should(QueryBuilders.matchPhraseQuery("code", code).boost(boost))
         .should(
@@ -981,7 +956,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @return the match query
    * @throws Exception the exception
    */
-  private BoolQueryBuilder getMatchQuery(final String term, final boolean startsWithFlag)
+  public static BoolQueryBuilder getMatchQuery(final String term, final boolean startsWithFlag)
       throws Exception {
 
     // Normalized term with escaped spaces for exact matching
@@ -1042,7 +1017,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param boost the boost
    * @return the nested original code query
    */
-  private NestedQueryBuilder getOriginalCodeQuery(
+  private static NestedQueryBuilder getOriginalCodeQuery(
       final String codeList, final boolean analyzeWildcard, final float boost) {
     return QueryBuilders.nestedQuery(
             "properties",
@@ -1063,7 +1038,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param boost the boost
    * @return the nested original code query
    */
-  private NestedQueryBuilder getOriginalCodeExactQuery(final String code, final float boost) {
+  private static NestedQueryBuilder getOriginalCodeExactQuery(
+      final String code, final float boost) {
     return QueryBuilders.nestedQuery(
             "properties",
             QueryBuilders.boolQuery()
@@ -1121,7 +1097,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param type the type of search
    * @return the updated term
    */
-  private String updateTermForType(String term, String type) {
+  private static String updateTermForType(String term, String type) {
     if (StringUtils.isBlank(term) || StringUtils.isBlank(type)) {
       return term;
     }
@@ -1153,7 +1129,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
    * @param modifier the modifier
    * @return the modified term or phrase
    */
-  private String updateTokens(String term, Character modifier) {
+  private static String updateTokens(String term, Character modifier) {
     String[] tokens = term.split("\\s+");
     StringBuilder builder = new StringBuilder();
 

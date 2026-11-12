@@ -5,16 +5,14 @@ import gov.nih.nci.evs.api.model.TerminologyMetadata;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import org.opensearch.data.core.OpenSearchOperations;
 import org.opensearch.index.query.QueryBuilder;
 
 /**
  * Matches concepts strictly below any target concept, in the same terminology version. A target is
- * a concept whose name or code matches the {@link ValueMatch}. For example, everything below
- * Melanoma ({@code new DescendantOf("C3224")}), or everything below any concept named "...
- * Carcinoma".
+ * a concept whose name or code is the given one. For example, everything below Melanoma ({@code new
+ * HasAncestor("C3224")}).
  *
  * <p>An optional {@code maxLevel} limits how far below: 1 means direct children. Depth is the
  * shortest distance, so a concept that is a direct child of X on one path and deeper on another
@@ -24,11 +22,15 @@ import org.opensearch.index.query.QueryBuilder;
  * Terminologies indexed with ancestor fields then match with one query on {@code ancestors.code}
  * (or {@code ancestorDepths} for a depth limit). Older indexes fall back to reading the stored
  * hierarchy (see {@link StoredHierarchyFallback}).
+ * <p>The {@code ancestors} field only holds codes, so the target codes are looked up first (see
+ * {@link HasHierarchyRelative#fetchTargetCodes}). Terminologies indexed with ancestor fields then
+ * match with one query on {@code ancestors} (or {@code ancestorDepths} for a depth limit). Older
+ * indexes fall back to reading the stored hierarchy (see {@link StoredHierarchyFallback}).
  *
- * @see DescendantOrSelfOf
- * @see AncestorOf
+ * @see HasAncestorOrIs
+ * @see HasDescendant
  */
-public class DescendantOf extends HierarchyQuery {
+public class HasAncestor extends HasHierarchyRelative {
 
   /** Field holding the code of each of a concept's ancestors. */
   static final String ANCESTORS_FIELD = "ancestors.code";
@@ -42,49 +44,29 @@ public class DescendantOf extends HierarchyQuery {
   /** The first depth below a target: its direct children. */
   private static final int FIRST_DEPTH = 1;
 
-  /** Instantiates an empty {@link DescendantOf}. */
-  public DescendantOf() {
+  /** Instantiates an empty {@link HasAncestor}. */
+  public HasAncestor() {
     // n/a
   }
 
   /**
-   * Instantiates a {@link DescendantOf} for everything below the target concepts.
+   * Instantiates a {@link HasAncestor} for everything below the target concepts.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concept's name or code
    */
-  public DescendantOf(final ValueMatch target) {
+  public HasAncestor(final String target) {
     super(target, ANY_LEVEL);
   }
 
   /**
-   * Instantiates a {@link DescendantOf} for concepts within {@code maxLevel} levels below the
-   * target concepts.
+   * Instantiates a {@link HasAncestor} for concepts within {@code maxLevel} levels below the target
+   * concepts.
    *
-   * @param target how the target concepts' name or code must match
+   * @param target the target concept's name or code
    * @param maxLevel the maximum depth below the targets, at least 1
    */
-  public DescendantOf(final ValueMatch target, final int maxLevel) {
+  public HasAncestor(final String target, final int maxLevel) {
     super(target, maxLevel);
-  }
-
-  /**
-   * Instantiates a {@link DescendantOf} for everything below one concept.
-   *
-   * @param code the target concept's code
-   */
-  public DescendantOf(final String code) {
-    this(new Exact(Objects.requireNonNull(code, "code")));
-  }
-
-  /**
-   * Instantiates a {@link DescendantOf} for concepts within {@code maxLevel} levels below one
-   * concept.
-   *
-   * @param code the target concept's code
-   * @param maxLevel the maximum depth below the target, at least 1
-   */
-  public DescendantOf(final String code, final int maxLevel) {
-    this(new Exact(Objects.requireNonNull(code, "code")), maxLevel);
   }
 
   /* see superclass */

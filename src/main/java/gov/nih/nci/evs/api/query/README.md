@@ -4,32 +4,32 @@ This package models a concept search as a tree of small query objects. Each node
 an OpenSearch `QueryBuilder`. Behavior is chosen by which classes you put in the tree (dynamic
 dispatch), not by switching on a `type` string as `OpenSearchServiceImpl.getTermQuery` does.
 
-There are two layers:
+Every node is an `EvsQuery` and says which concepts match. There are three kinds:
 
-- **Queries** (`EvsQuery`) say which concepts match. `FieldMatch` is the leaf: it matches one
-  concept field. The logical queries (`And`, `Or`, `Not`, and the `Boost` wrapper) combine
-  other queries.
-  `FieldMatch` is for building nodes, not part of the API: it's package-private, and tests may
-  only use it inside a class, method, or field marked `@DemonstratesFieldMatch` (enforced by
-  `FieldMatchUsageSourceCodeTest`). Tests showing how to use the API, like `HasRoleTest`, must
-  stick to the public nodes.
-- **Value matches** (`ValueMatch`) say how one value is compared (exactly, by prefix, within a
-  few edits, ...) without naming a field. A `FieldMatch` applies one to a concept field. A node
-  that owns its own fields applies one to those, e.g. a relationship's type to the entry's type
-  name and code.
+- **Term searches** (`TermSearch`: `Exact`, `StartsWith`, `Contains`, `Fuzzy`) search a
+  concept's name, code, and synonyms for a term, the way the legacy `GET /concept/search` does for
+  that `type`, and rank by relevance.
+- **Field nodes** (`HasProperty`, `HasSynonym`, `HasRole`, `InSubset`, `HasAncestor`, ...) match
+  names, codes, and values stored on the concept. Each value is a plain `String`, compared exactly.
+- **Logical queries** (`And`, `Or`, `Not`, and the `Boost` wrapper) combine other queries.
+
+`MatchAnyOf` (one field equal to any of a set of values) and `NameOrCodeMatch` (a name field or a
+code field equal to any of a set of names or codes) are the leaves nodes are built from. They're
+package-private, not part of the API: tests showing how to use the API, like `HasRoleTest`, stick
+to the public nodes.
 
 Because every query has the same interface, any query can be nested inside any composite:
 
 ```lisp
-(and (field "normName" (fuzzy "melanoma"))
-     (or (field "code"     (exact "C3224"))
-         (field "normName" (starts-with "blood"))))
+(and (fuzzy "melanoma")
+     (or (exact "C3224")
+         (starts-with "blood")))
 ```
 
 ## Logical operators: exploratory on this branch
 
 The plan is to build queries almost entirely from logical operator nodes (`And`, `Or`, `Not`,
-`Boost`, and similar), with raw OpenSearch `QueryBuilder`s only inside the value matches. On the
+`Boost`, and similar), with raw OpenSearch `QueryBuilder`s only inside the leaf nodes. On the
 exploratory branch `eas/explore-filters` they're merged in from `eas/logical-operators` and can be
 used to combine nodes (see [Logical queries](#logical-queries)). They're still only tested by
 `LogicalQueryTest` and the lessons that use them, so on other branches don't build on them yet.
@@ -39,8 +39,8 @@ OpenSearch (`QueryBuilders.boolQuery()`, `nestedQuery`, `constantScoreQuery`, ..
 property's type and value on one nested entry, which the concept-level logical nodes can't
 express. Expect the rest to be refactored onto the logical nodes later. To keep that mechanical:
 
-- Build leaf conditions with `FieldMatch` and a value match (`Exact`, `StartsWith`, ...) and call
-  its `fetchOpenSearchQuery`, rather than writing `termQuery`/`prefixQuery` by hand.
+- Build leaf conditions with `MatchAnyOf` (or `NameOrCodeMatch` for a name or code) and call its
+  `fetchOpenSearchQuery`, rather than writing `termQuery`/`termsQuery` by hand.
 - Keep the raw combining code (`bool`, `must`, `should`, `must_not`, `constant_score`) in small,
   clearly named helpers, so each one maps onto a single logical node.
 
@@ -59,27 +59,40 @@ classDiagram
         +getIndexCoordinates(List~Terminology~)$ IndexCoordinates
     }
 
-    class FieldMatch {
-        -String field
-        -ValueMatch match
+    class TermSearch {
+        <<abstract>>
+        -String term
+        #getTermQuery(String escapedTerm)* QueryBuilder
+        #getSorts() List~SortBuilder~
     }
+    class Exact
+    class StartsWith
+    class Contains
+    class Fuzzy
 
     class HasRelationship {
         <<abstract>>
-        -ValueMatch relationshipType
-        -ValueMatch target
-        #getRelationshipType() ValueMatch
+        -String relationshipType
+        -String target
+        #getRelationshipType() String
         #getRelationshipListFieldName()* String
     }
 
     class InSubset {
-        -ValueMatch subset
+        -String target
     }
 
     class HasProperty {
-        -ValueMatch property
-        -ValueMatch value
+        -String property
+        -String target
         -QualifierCondition qualifiers
+    }
+
+    class HasSynonym {
+        -String target
+        -String source
+        -String termType
+        -String subSource
     }
 
     class QualifierCondition {
@@ -89,15 +102,15 @@ classDiagram
     class AllQualifiers {
         -List~QualifierCondition~ conditions
     }
-    class AnyQualifier {
+    class AnyQualifiers {
         -List~QualifierCondition~ conditions
     }
-    class NoQualifier {
+    class NoQualifiers {
         -QualifierCondition condition
     }
     class PropertyQualifier {
-        -ValueMatch qualifier
-        -ValueMatch value
+        -String qualifier
+        -String target
     }
 
     class And {
@@ -114,73 +127,48 @@ classDiagram
         -float score
     }
 
-    class ValueMatch {
-        <<interface>>
-        +getQueryBuilder(String field) QueryBuilder
-    }
-
-    class SupportsIgnoringCase {
-        <<interface>>
-        +getCaseInsensitiveQueryBuilder(String field) QueryBuilder
-    }
-
-    class CaseInsensitive {
-        SupportsIgnoringCase match
-    }
-    class Exact {
-        String term
-    }
-    class Contains {
-        String term
-    }
-    class StartsWith {
-        String term
-    }
-    class Fuzzy {
-        String term
-        Fuzziness fuzziness
-    }
-    class OneOf {
-        Set~String~ terms
-    }
-    class SearchAsYouType {
-        String term
-    }
-
     class Typeahead {
-        -String incompleteTerm
+        -String term
         +getHasWordsToComplete(String)$ boolean
         +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
         +getSorts() List~SortBuilder~
     }
 
-    EvsQuery <|-- FieldMatch
-    EvsQuery <|-- HasRelationship
-    EvsQuery <|-- HasProperty
-    EvsQuery <|-- Typeahead
-    Typeahead ..> FieldMatch : builds
     class MatchAnyOf {
         -String field
         -Set~String~ values
         +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) TermsQueryBuilder
     }
+    class NameOrCodeMatch {
+        -String nameField
+        -String codeField
+        -Set~String~ namesOrCodes
+    }
 
-    class HierarchyQuery {
+    class HasHierarchyRelative {
         <<abstract>>
-        -ValueMatch target
+        -String target
         -Integer maxLevel
         #fetchTargetCodes(OpenSearchOperations, Terminology) Set~String~
         #fetchRelativesQuery(OpenSearchOperations, Terminology, Set~String~)* QueryBuilder
     }
-    class DescendantOf
-    class DescendantOrSelfOf {
+    class HasAncestor
+    class HasAncestorOrIs {
         +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
     }
-    class AncestorOf
-    class AncestorOrSelfOf {
+    class HasDescendant
+    class HasDescendantOrIs {
         +fetchOpenSearchQuery(OpenSearchOperations, List~Terminology~) QueryBuilder
     }
 
+    EvsQuery <|-- TermSearch
+    TermSearch <|-- Exact
+    TermSearch <|-- StartsWith
+    TermSearch <|-- Contains
+    TermSearch <|-- Fuzzy
+    EvsQuery <|-- HasRelationship
+    EvsQuery <|-- HasProperty
+    EvsQuery <|-- Typeahead
     EvsQuery <|-- And
     EvsQuery <|-- Or
     EvsQuery <|-- Not
@@ -191,109 +179,96 @@ classDiagram
     HasRelationship <|-- HasInverseRole
     HasRelationship <|-- HasInverseAssociation
     EvsQuery <|-- InSubset
+    InSubset ..> Or : builds
     InSubset ..> HasAssociation : builds
-    InSubset o-- ValueMatch : subsets
     And o-- EvsQuery : children
     Or o-- EvsQuery : children
     Not o-- EvsQuery : child
     Boost o-- EvsQuery : child
-    FieldMatch o-- ValueMatch : match
-    HasRelationship o-- ValueMatch : type, target
-    HasProperty o-- ValueMatch : type, value
     HasProperty o-- QualifierCondition : qualifiers
     QualifierCondition <|.. PropertyQualifier
     QualifierCondition <|.. AllQualifiers
-    QualifierCondition <|.. AnyQualifier
-    QualifierCondition <|.. NoQualifier
+    QualifierCondition <|.. AnyQualifiers
+    QualifierCondition <|.. NoQualifiers
     AllQualifiers o-- QualifierCondition : conditions
-    AnyQualifier o-- QualifierCondition : conditions
-    NoQualifier o-- QualifierCondition : condition
-    PropertyQualifier o-- ValueMatch : type, value
-
-    ValueMatch <|-- SupportsIgnoringCase
-    ValueMatch <|.. CaseInsensitive
-    ValueMatch <|.. Fuzzy
-    ValueMatch <|.. SearchAsYouType
-    ValueMatch <|.. OneOf
-    SupportsIgnoringCase <|.. Exact
-    SupportsIgnoringCase <|.. Contains
-    SupportsIgnoringCase <|.. StartsWith
-    CaseInsensitive o-- SupportsIgnoringCase : wraps
+    AnyQualifiers o-- QualifierCondition : conditions
+    NoQualifiers o-- QualifierCondition : condition
     EvsQuery <|-- MatchAnyOf
-    EvsQuery <|-- HierarchyQuery
-    HierarchyQuery <|-- DescendantOf
-    HierarchyQuery <|-- AncestorOf
-    DescendantOf <|-- DescendantOrSelfOf
-    AncestorOf <|-- AncestorOrSelfOf
-    HierarchyQuery o-- ValueMatch : target
+    EvsQuery <|-- NameOrCodeMatch
+    NameOrCodeMatch ..> MatchAnyOf : builds
+    EvsQuery <|-- HasHierarchyRelative
+    HasHierarchyRelative <|-- HasAncestor
+    HasHierarchyRelative <|-- HasDescendant
+    HasAncestor <|-- HasAncestorOrIs
+    HasDescendant <|-- HasDescendantOrIs
 ```
 
 | Class | Role |
 |---|---|
 | `EvsQuery` | Base type for every node. Its contract is `fetchOpenSearchQuery(operations, terminologies)`. Nodes don't hold the terminologies being searched: they're passed in when the tree runs (see [Why `operations` and `terminologies` are parameters](#why-operations-and-terminologies-are-parameters)). It also (experimental, see [Sorting](#sorting-experimental)) contributes sorts and builds a whole search request. Code that accepts a query should accept `EvsQuery`, so leaves and composites can be used interchangeably. |
-| `FieldMatch` | The leaf query. It pairs a concept field with a `ValueMatch` and rejects `null` for either. It only says which field; the match says how. |
-| `ValueMatch` | How one value is compared, with no field. Its contract is `getQueryBuilder(field)`. The implementations are plain values, compared by value, with no behavior beyond building their query. |
-| `SupportsIgnoringCase` | A `ValueMatch` that can also ignore case: `Exact`, `StartsWith`, and `Contains`. `Fuzzy` doesn't, because OpenSearch has no case-insensitive fuzzy query. |
-| `CaseInsensitive` | A wrapper match. It runs the wrapped match ignoring case by calling `getCaseInsensitiveQueryBuilder(field)`. The wrapped match is not changed. |
-| `HasRelationship` | Matches concepts by a relationship's type and target, each a `ValueMatch` on a name or code (see [Relationships](#relationships)). In JSON the type is `role` (`HasRole`, `HasInverseRole`) or `association` (`HasAssociation`, `HasInverseAssociation`), since `type` names the node. |
-| `InSubset` | Matches members of subsets. A subset is a concept, and membership is an association to it (NCIt's Concept_In_Subset, A8, read from the terminology's `subsetMember` metadata), so it builds a `HasAssociation`. The subsets are a `ValueMatch` on the subset's name or code: a code, or `OneOf` codes for any of several. All-of and but-not combine `InSubset`s per concept. Exploratory: drops the current search's CDISC grouper special case. |
-| `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a matching value, both on the same property entry. Searches only `properties`, not synonyms or definitions. |
-| `HasSynonym` | Matches concepts with a synonym whose name, and optionally source, term type, and sub-source, match on the same synonym entry. Searches the remodeled `synonyms` list. The name is compared to the synonym's `normName`, with the match's terms normalized the same way (`ConceptUtils.normalize`) through `ValueMatch.getWithTermsMapped`, so matching ignores case and punctuation. Combine nodes with the concept-level `And`/`Or`/`Not`; OR or NOT between fields of one synonym isn't supported yet. |
-| `QualifierCondition` | A condition on one property entry's qualifiers, checked inside `HasProperty`'s nested query on that entry. `AllQualifiers`, `AnyQualifier`, and `NoQualifier` combine conditions (`bool` `must`, `should`, `must_not`). They're separate from the concept-level `And`/`Or`/`Not`, which combine sets of concepts and so can't keep qualifiers on one entry; the Javadoc explains the choice and the generic alternative. |
-| `PropertyQualifier` | The leaf `QualifierCondition`: a qualifier a `HasProperty` property must have, a type name or code, optionally with a matching value, on one qualifier entry of that same property. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
-| `MatchAnyOf` | A leaf matching a field against a set of values with one `terms` query: the many-value form of `FieldMatch` with `Exact`. Overlaps `OneOf`; kept as is from the hierarchy branch. Rejects more than 65,536 values, OpenSearch's default limit. |
-| `HierarchyQuery` | Base type for hierarchy nodes. The targets are the concepts whose name or code matches `target`. When the concept's own fields can't answer the query yet, it looks up the target codes first (`fetchTargetCodes`), then, for each terminology version, matches the targets' relatives only in that terminology's index (see [Hierarchy queries](#hierarchy-queries)). Handles `maxLevel` (shortest distance, at least 1). Subclasses implement `fetchRelativesQuery`. |
-| `DescendantOf` | Matches concepts strictly below the targets, optionally within `maxLevel` levels. `ancestors` holds codes only, so it always looks up the target codes first. Terminologies with `ancestors`/`ancestorDepths` then match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
-| `DescendantOrSelfOf` | `DescendantOf` that also matches the targets themselves (distance 0): it ORs `DescendantOf`'s query with a match on the concept's own name or code. |
-| `AncestorOf` | The upward counterpart: matches concepts strictly above the targets, optionally within `maxLevel` levels. Without `maxLevel` it's one query on the concept's stored `descendants` names and codes. With `maxLevel` it looks up the target codes and reads their stored paths to root (`StoredPaths`). |
-| `AncestorOrSelfOf` | `AncestorOf` that also matches the targets themselves, the same way as `DescendantOrSelfOf`. |
+| `TermSearch` | Base type for the term searches. Holds `term` and searches a concept's name, code (including the original code property), and synonyms for it, the way the legacy `GET /concept/search` does for one `type`: it escapes the term (`OpenSearchServiceImpl.escape`), asks the subclass for the legacy query (`getTermQuery`), and boosts active concepts above inactive ones. Overrides `getSorts()` to rank by score. In JSON: `{"type": "Contains", "term": "melanoma"}`. |
+| `Exact`, `StartsWith`, `Contains`, `Fuzzy` | The term searches, one per legacy search `type` (`match`, `startsWith`, `contains`, `fuzzy`). See [Term searches](#term-searches). |
+| `HasRelationship` | Matches concepts by a relationship's type and target, each a name or code compared exactly to the entry's name and code (see [Relationships](#relationships)). In JSON the type is `role` (`HasRole`, `HasInverseRole`) or `association` (`HasAssociation`, `HasInverseAssociation`), since `type` names the node. |
+| `InSubset` | Matches members of a subset, given by its code or name. A subset is a concept, and membership is an association to it (NCIt's Concept_In_Subset, A8, read from the terminology's `subsetMember` metadata), so it builds an `Or` of one `HasAssociation` per membership association type. Any-of, all-of, and but-not combine `InSubset`s with `Or`, `And`, and `Not`. Exploratory: drops the current search's CDISC grouper special case. |
+| `HasProperty` | Matches concepts with a property of a given type name or code, optionally with a value, both on the same property entry and compared exactly. Searches only `properties`, not synonyms or definitions. |
+| `HasSynonym` | Matches concepts with a synonym whose name, and optionally source, term type, and sub-source, match on the same synonym entry. Searches the remodeled `synonyms` list. The name is compared to the synonym's `normName`, after normalizing it the same way (`ConceptUtils.normalize`), so matching ignores case and punctuation; the other fields are compared exactly. Combine nodes with the concept-level `And`/`Or`/`Not`; OR or NOT between fields of one synonym isn't supported yet. |
+| `QualifierCondition` | A condition on one property entry's qualifiers, checked inside `HasProperty`'s nested query on that entry. `AllQualifiers`, `AnyQualifiers`, and `NoQualifiers` combine conditions (`bool` `must`, `should`, `must_not`). They're separate from the concept-level `And`/`Or`/`Not`, which combine sets of concepts and so can't keep qualifiers on one entry; the Javadoc explains the choice and the generic alternative. |
+| `PropertyQualifier` | The leaf `QualifierCondition`: a qualifier a `HasProperty` property must have, a type name or code, optionally with a value, compared exactly on one qualifier entry of that same property. Built into the property's nested query, not run as a separate search, because a separate search can only say which concepts have the qualifier, not which property it's on. Remodeled qualifiers (a synonym's source, a definition's source, map fields) aren't property qualifiers. |
+| `MatchAnyOf` | The package-private leaf nodes are built from: a field equal to any of a set of values, as one `terms` query (case sensitive, whole value). Rejects more than 65,536 values, OpenSearch's default limit. |
+| `NameOrCodeMatch` | Package-private. A name field or a code field equal to any of a set of names or codes: two `MatchAnyOf`s, either one enough. Used for a relationship's type and target, a property's or qualifier's type, and the hierarchy targets. |
+| `HasHierarchyRelative` | Base type for hierarchy nodes. The targets are the concepts whose name or code is `target`. When the concept's own fields can't answer the query yet, it looks up the target codes first (`fetchTargetCodes`), then, for each terminology version, matches the targets' relatives only in that terminology's index (see [Hierarchy queries](#hierarchy-queries)). Handles `maxLevel` (shortest distance, at least 1). Subclasses implement `fetchRelativesQuery`. |
+| `HasAncestor` | Matches concepts strictly below the targets, optionally within `maxLevel` levels. `ancestors` holds codes only, so it always looks up the target codes first. Terminologies with `ancestors`/`ancestorDepths` then match with one query on those fields; older indexes fall back to the stored hierarchy (`StoredHierarchyFallback`, to be removed after reindexing). Convenience constructors take a code. |
+| `HasAncestorOrIs` | `HasAncestor` that also matches the targets themselves (distance 0): it ORs `HasAncestor`'s query with a match on the concept's own name or code. |
+| `HasDescendant` | The upward counterpart: matches concepts strictly above the targets, optionally within `maxLevel` levels. Without `maxLevel` it's one query on the concept's stored `descendants` names and codes. With `maxLevel` it looks up the target codes and reads their stored paths to root (`StoredPaths`). |
+| `HasDescendantOrIs` | `HasDescendant` that also matches the targets themselves, the same way as `HasAncestorOrIs`. |
 | `RawBoolQueries` | The raw `bool` combining helpers (`getAllOfQuery`, `getAnyOfQuery`, `getMatchNothingQuery`) used until the logical operator nodes land; each maps onto `And`, `Or`, or `Not`. |
-| `And`, `Or`, `Not`, `Boost` | Logical queries. They hold child `EvsQuery` nodes instead of a field and a match. See [Logical queries](#logical-queries). Exploratory on this branch: merged from `eas/logical-operators`, tested only by `LogicalQueryTest` and the subset lessons. |
-| `Typeahead` | The query behind `/concept/typeahead`. Builds `FieldMatch`es: preferred names with `SearchAsYouType` (on `name.search_as_you_type`), and codes case sensitively with `Exact` (whole code) and `StartsWith` (partial code) on `code`, leaving out concepts with `active: false`, and overrides `getSorts()` to sort matches into tiers (a whole typed code, then name matches, then code-only matches) and rank general concepts with short names first within a tier. It ranks on the `descendantCount` field stored at load time, falling back to counting `descendants.leaf` on indexes loaded before that field existed. The count is the size of the stored `descendants`, so the SNOMED root (`138875005`), whose descendants the loader skips, has a count of 0 and ranks like a leaf. `Typeahead.getHasWordsToComplete(term)` says whether a term has anything to complete; the constructor rejects terms that don't. The endpoint's `total` stops at 10,000 (OpenSearch's default count limit): typeahead doesn't page, so unlike search it doesn't run a second query for the exact count. `SearchControllerTests.testTypeaheadTotalCapsAtCountedHitLimit` pins this. Highlighting is optional: the endpoint takes an `include` parameter like search (default `minimal`). With `include=minimal,highlights`, `fetchConcepts` asks OpenSearch to highlight the matched fields, and the endpoint returns OpenSearch's highlight of each suggestion's name (or of its code, if only the code matched). OpenSearch marks whole words: `lung ca` gives `<em>Lung</em> <em>Carcinoma</em>`. Typeahead overrides `getHighlightFields()` to highlight the main `name` field with a `match_bool_prefix` highlight query, because highlighting the `search_as_you_type` subfield it matched never marks the partial last word (and `*` doesn't reach subfields at all). `TypeaheadTest` lesson 10, `SearchControllerTests.testTypeaheadNameMatchHighlightsTypedWords`, `...testTypeaheadCodeMatchHighlightsCode`, `...testTypeaheadEndpointDefaultIncludeReturnsNoHighlights`, and `...testTypeaheadEndpointHighlightsIncludeReturnsHighlights` pin this. |
+| `And`, `Or`, `Not`, `Boost` | Logical queries. They hold child `EvsQuery` nodes instead of names, codes, and values. See [Logical queries](#logical-queries). Exploratory on this branch: merged from `eas/logical-operators`, tested only by `LogicalQueryTest` and the subset lessons. |
+| `Typeahead` | The query behind `/concept/typeahead`. Builds its OpenSearch queries directly: preferred names with a `bool_prefix` `multi_match` over `name.search_as_you_type` and its `._2gram` / `._3gram` subfields (every typed word, in any order, only the last one partial, ignoring case), and codes case sensitively with `term` (whole code) and `prefix` (partial code) on `code`, leaving out concepts with `active: false`, and overrides `getSorts()` to sort matches into tiers (a whole typed code, then name matches, then code-only matches) and rank general concepts with short names first within a tier. It ranks on the `descendantCount` field stored at load time, falling back to counting `descendants.leaf` on indexes loaded before that field existed. The count is the size of the stored `descendants`, so the SNOMED root (`138875005`), whose descendants the loader skips, has a count of 0 and ranks like a leaf. `Typeahead.getHasWordsToComplete(term)` says whether a term has anything to complete; the constructor rejects terms that don't. The endpoint's `total` stops at 10,000 (OpenSearch's default count limit): typeahead doesn't page, so unlike search it doesn't run a second query for the exact count. `SearchControllerTests.testTypeaheadTotalCapsAtCountedHitLimit` pins this. Highlighting is optional: the endpoint takes an `include` parameter like search (default `minimal`). With `include=minimal,highlights`, `fetchConcepts` asks OpenSearch to highlight the matched fields, and the endpoint returns OpenSearch's highlight of each suggestion's name (or of its code, if only the code matched). OpenSearch marks whole words: `lung ca` gives `<em>Lung</em> <em>Carcinoma</em>`. Typeahead overrides `getHighlightFields()` to highlight the main `name` field with a `match_bool_prefix` highlight query, because highlighting the `search_as_you_type` subfield it matched never marks the partial last word (and `*` doesn't reach subfields at all). `TypeaheadTest` lesson 10, `SearchControllerTests.testTypeaheadNameMatchHighlightsTypedWords`, `...testTypeaheadCodeMatchHighlightsCode`, `...testTypeaheadEndpointDefaultIncludeReturnsNoHighlights`, and `...testTypeaheadEndpointHighlightsIncludeReturnsHighlights` pin this. |
 
-## Value matches
+## Term searches
 
-Apart from `SearchAsYouType`, the value matches are **case sensitive** and compare against the
-**whole indexed value**. To ignore case, wrap one in `CaseInsensitive` (see below).
-`SearchAsYouType` works on individual words and always ignores case.
+A term search is a whole concept-level search, not a comparison on one field. Each mirrors the
+legacy `GET /concept/search` with the matching `type`, using the same `OpenSearchServiceImpl`
+query, so results and their order agree with the legacy endpoint:
 
-| Match | Matches when the value… | OpenSearch query |
-|---|---|---|
-| `Exact` | equals the term exactly | `term` |
-| `Contains` | includes the term anywhere | `wildcard` on `*term*`, with `*`, `?`, and `\` in the term escaped |
-| `StartsWith` | begins with the term | `prefix` |
-| `Fuzzy` | is within a small edit distance of the term (`Fuzziness.AUTO` by default, or pass one) | `fuzzy` |
-| `OneOf` | equals any one of a set of terms exactly, e.g. the codes a relationship target query found. At most 65,536 terms by default | `terms` |
-| `SearchAsYouType` | contains every typed word in any order, with only the last word allowed to be partial. Ignores case. Needs a field mapped as `search_as_you_type` | `multi_match` of type `bool_prefix` over the field and its `._2gram` / `._3gram` subfields |
+| Node | Legacy `type` | Finds concepts whose name, code, or synonym… | Built by |
+|---|---|---|---|
+| `Exact` | `match` | is the term (normalized names, uppercased code) | `getMatchQuery(term, false)` |
+| `StartsWith` | `startsWith` | starts with the term | `getMatchQuery(term, true)` |
+| `Contains` | `contains` | contains the term's words | `getContainsQuery(criteria, term, false, false)` |
+| `Fuzzy` | `fuzzy` | contains the term's words, allowing a typo per word | `getContainsQuery(criteria, term, true, false)` |
+
+`TermSearchTest` runs each against the test index.
+
+There's no case-insensitive, prefix, fuzzy, or contains match on a single field. The field nodes
+compare their names, codes, and values exactly; to search by part of a name, use a term search and
+combine it with the field nodes:
+
+```java
+final EvsQuery query =
+    new And(List.of(new Contains("melanoma"), new HasRole("R101", "C12470")));
+final SearchHits<Concept> hits = query.fetchConcepts(operations, terminologies, pageable, include);
+```
 
 ### Choosing a field
 
-Whole-value matching only works on `Keyword` fields. On an analyzed `Text` field such as `name`,
-OpenSearch stores lowercased tokens, so these matches compare individual words instead of the full
-value.
+Exact matching (`MatchAnyOf`, a `terms` query) compares whole values only on `Keyword` fields. On
+an analyzed `Text` field such as `name` or a relationship's `relatedName`, OpenSearch stores
+lowercased tokens, so a value is compared to individual words instead of the full value.
 
 Today **no field stores concept or synonym names in their original case**:
 
 - `name` and `synonyms.name` are `Text`, so they're tokenized and lowercased.
 - `normName` and `synonyms.normName` are `Keyword`, but `ConceptUtils.normalize` lowercases them
-  and strips punctuation first.
+  and strips punctuation first, so a value compared to them must be normalized the same way (as
+  `HasSynonym` does).
 
-So against current indexes, `Exact`, `Contains`, and the others are effectively case insensitive
-on `normName`, and the term should be normalized the same way. True case-sensitive name matching
-needs a keyword subfield (e.g. `name.keyword` via `@MultiField`, as `Mapping.source` does) and a
-reindex.
+True case-sensitive name matching needs a keyword subfield (e.g. `name.keyword` via
+`@MultiField`, as `Mapping.source` does) and a reindex.
 
 Fields under `synonyms`, `definitions`, and `properties` are nested. Queries on them must be
 wrapped in a `nestedQuery`, which is a natural job for a future `In` composite. Like
-`HasRelationship`, it would own the list's field paths and take a `ValueMatch` for each part of
-an entry.
-
-### Usage
-
-```java
-final EvsQuery query = new FieldMatch("normName", new StartsWith("melan"));
-boolQuery.must(query.fetchOpenSearchQuery(operations, terminologies));
-```
+`HasRelationship`, it would own the list's field paths and take a value for each part of an entry.
 
 ## Logical queries
 
@@ -305,24 +280,6 @@ boolQuery.must(query.fetchOpenSearchQuery(operations, terminologies));
 | `Boost` | the child matches. Every match gets the same fixed score, however well it matched, so boosted alternatives inside an `Or` rank in tiers. | `constant_score` with `boost` |
 
 `LogicalQueryTest` runs each against a test index.
-
-## Ignoring case
-
-`CaseInsensitive` wraps a value match that implements `SupportsIgnoringCase`:
-
-```java
-// Finds "Melanoma", "melanoma", and "Malignant Melanoma"
-final EvsQuery query =
-    new FieldMatch("name", new CaseInsensitive(new Contains("MELANOMA")));
-```
-
-Case is a property of how a value is compared, so it goes on the match, not on a query. That
-puts it on exactly one comparison: a relationship's type can ignore case while its target doesn't.
-
-The constructor only accepts matches that implement `SupportsIgnoringCase`, so
-`new CaseInsensitive(new Fuzzy(...))` doesn't compile. To let a new match be wrapped, implement
-`SupportsIgnoringCase` and return the same OpenSearch query with case ignored, usually by calling
-`.caseInsensitive(true)` on the builder.
 
 ## Sorting (experimental)
 
@@ -377,32 +334,32 @@ either. It's abstract: each subclass says which list it searches by overriding
 association: same type, with that other concept as the related concept. So
 `HasInverseAssociation` is the same search on a different list, and its target is the
 association's source. "The subsets Cutaneous Melanoma is in" is
-`HasInverseAssociation(Exact("Concept_In_Subset"), Exact("C01"))`. A subset
+`new HasInverseAssociation("Concept_In_Subset", "C01")`. A subset
 concept holds one inverse entry per member (about 32,000 for the CDISC Terminology), past
 OpenSearch's default of 10,000 nested entries per document, so indexes are created with a higher
 `index.mapping.nested_objects.limit`.
 
-**The type and the target are value matches.** Each `ValueMatch` is applied to both the entry's
-name and its code, so the caller picks how it's matched without naming the entry's fields:
-`new HasRole(new StartsWith("Disease_Has"))`. There's no default: an exact type is
-`new HasRole(new Exact("R101"))`. The target name is analyzed text, so a match compares its words.
-Both are stored on the entry itself, so no other search runs.
+**The type and the target are names or codes.** Each is compared exactly to both the entry's
+name and its code, so the caller doesn't name the entry's fields:
+`new HasRole("Disease_Has_Primary_Anatomic_Site", "C12470")` or `new HasRole("R101")`. The target
+name is analyzed text, so a name compares against its lowercased words, not the whole name. Both
+are stored on the entry itself, so no other search runs.
 
 **Targets aren't queries.** Only the logical queries (`And`, `Or`, `Not`, `Boost`) hold other
 queries. "Primary site is Skin or anything below Skin" would need the codes below Skin first,
 because a role entry only stores its target's code and name; that's left to the caller, who can run
-one query and pass its codes back as `OneOf`.
+one query and pass its codes back as an `Or` of one node per code.
 
 ## Hierarchy queries
 
-The hierarchy nodes take a `ValueMatch` on the target concepts' name or code, not an inner query.
-Some cases can't be answered from the concept's own fields yet, so `HierarchyQuery.fetchTargetCodes`
+The hierarchy nodes take the target concept's name or code, not an inner query.
+Some cases can't be answered from the concept's own fields yet, so `HasHierarchyRelative.fetchTargetCodes`
 looks the target codes up first, one terminology at a time:
 
 | Node | Without `maxLevel` | With `maxLevel` |
 |---|---|---|
-| `DescendantOf` | looks up target codes, then `ancestors` (or `StoredHierarchyFallback` on older indexes) | looks up target codes, then `ancestorDepths` tokens |
-| `AncestorOf` | one query on `descendants.name` / `descendants.code` | looks up target codes, then `StoredPaths` |
+| `HasAncestor` | looks up target codes, then `ancestors` (or `StoredHierarchyFallback` on older indexes) | looks up target codes, then `ancestorDepths` tokens |
+| `HasDescendant` | one query on `descendants.name` / `descendants.code` | looks up target codes, then `StoredPaths` |
 
 `ancestors` holds codes only, so a name match needs the lookup. `descendants` entries hold names
 and codes, but they're mapped as `object`, so an entry's level isn't tied to its code, and the level
@@ -421,11 +378,11 @@ entries.
 A static lookup hides which nodes search and makes tests change global state; injecting
 `operations` at construction means every tree containing a search needs it just to be built.
 Taking it in `fetchOpenSearchQuery` keeps trees plain data, and lets unit tests pass a mock (see
-`HierarchyQueryTargetCodesTest`).
+`HasHierarchyRelativeTargetCodesTest`).
 
 The terminologies are passed the same way, as their own parameter. Most nodes only hand them to
 their children; the nodes that read them are `fetchConcepts` (which searches their indexes),
-`HierarchyQuery` (which looks up targets and matches each terminology's relatives in that
+`HasHierarchyRelative` (which looks up targets and matches each terminology's relatives in that
 terminology's index), and `InSubset` (which reads each terminology's
 `subsetMember` metadata). So the same tree can run against any terminologies, and a node can run a
 child against different ones.
@@ -442,102 +399,42 @@ inverse lists roughly double that growth.
 
 ## Extending
 
-### Adding a value match
+### Adding a term search
 
-Add a class implementing `ValueMatch` (or `SupportsIgnoringCase`, if it can ignore case), and
-build the OpenSearch query from the field it's given and its own fields. Like the model classes, it
-has a no-arg constructor, getters and setters, and is compared by value. For example, a
-regular-expression match:
+To mirror another legacy search `type`, extend `TermSearch` and return the legacy query from
+`getTermQuery(escapedTerm)`; `TermSearch` already escapes the term, boosts active concepts, and
+ranks by score. Give it a no-arg constructor and a `(term)` constructor, like `Exact`, and register
+it in `EvsQuery`'s `@JsonSubTypes` so it can be sent as JSON. For example, `StartsWith`:
 
 ```java
-package gov.nih.nci.evs.api.query;
-
-import java.util.Objects;
-import java.util.function.UnaryOperator;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
-
 /**
- * Matches values against a regular expression (case sensitive).
+ * Finds concepts whose name, synonym, or code starts with the term, like the legacy search type
+ * {@code startsWith}.
  */
-public class Regex implements ValueMatch {
+public class StartsWith extends TermSearch {
 
-  /** The regular expression the value must match. */
-  private String term;
-
-  /** Instantiates an empty {@link Regex}. */
-  public Regex() {
+  /** Instantiates an empty {@link StartsWith}. */
+  public StartsWith() {
     // n/a
   }
 
   /**
-   * Instantiates a {@link Regex}.
+   * Instantiates a {@link StartsWith}.
    *
-   * @param term the regular expression the value must match
+   * @param term the term to search for
    */
-  public Regex(final String term) {
-    this.term = Objects.requireNonNull(term, "term");
-  }
-
-  /**
-   * Returns the regular expression the value must match.
-   *
-   * @return the term
-   */
-  public String getTerm() {
-    return term;
-  }
-
-  /**
-   * Sets the regular expression the value must match.
-   *
-   * @param term the regular expression the value must match
-   */
-  public void setTerm(final String term) {
-    this.term = term;
+  public StartsWith(final String term) {
+    super(term);
   }
 
   /* see superclass */
   @Override
-  public QueryBuilder getQueryBuilder(final String field) {
-    return QueryBuilders.regexpQuery(field, term);
-  }
-
-  /* see superclass */
-  @Override
-  public Regex getWithTermsMapped(final UnaryOperator<String> termMapper) {
-    return new Regex(termMapper.apply(term));
-  }
-
-  /* see superclass */
-  @Override
-  public boolean equals(final Object obj) {
-    if (this == obj) {
-      return true;
-    }
-
-    final boolean isSameClass = obj != null && getClass() == obj.getClass();
-    if (!isSameClass) {
-      return false;
-    }
-
-    final Regex other = (Regex) obj;
-    return Objects.equals(term, other.term);
-  }
-
-  /* see superclass */
-  @Override
-  public int hashCode() {
-    return Objects.hash(term);
+  protected QueryBuilder getTermQuery(final String escapedTerm) {
+    final boolean isPrefix = true;
+    return OpenSearchServiceImpl.getMatchQuery(escapedTerm, isPrefix);
   }
 }
 ```
-
-`getWithTermsMapped` lets a node compare against a field indexed in a transformed form: `HasSynonym`
-normalizes every match's terms the way synonym names were normalized when they were loaded.
-
-It then works everywhere a value match does: `new FieldMatch("code", new
-Regex("C12[0-9]+"))`, or a relationship's type.
 
 ### Adding a composite query
 
@@ -593,23 +490,20 @@ Composites nest without any extra code:
 final EvsQuery query =
     new And(
         List.of(
-            new FieldMatch("normName", new Fuzzy("melanoma")),
-            new Or(
-                List.of(
-                    new FieldMatch("code", new Exact("C3224")),
-                    new FieldMatch("normName", new StartsWith("blood"))))));
+            new Fuzzy("melanoma"),
+            new Or(List.of(new Exact("C3224"), new StartsWith("blood")))));
 ```
 
 ### Checklist for a new query
 
 1. Name it after what it matches, and document that behavior in the class Javadoc.
-2. Build an OpenSearch query in `fetchOpenSearchQuery(operations, terminologies)` (a query) or
-   `getQueryBuilder(field)` (a value match). Don't run a search there: only the hierarchy nodes
-   do, until the reindex (see [Hierarchy queries](#hierarchy-queries)). A new node holds value
-   matches, not other queries, unless it's a logical query.
+2. Build an OpenSearch query in `fetchOpenSearchQuery(operations, terminologies)` (or
+   `getTermQuery(escapedTerm)` for a term search). Don't run a search there: only the hierarchy
+   nodes do, until the reindex (see [Hierarchy queries](#hierarchy-queries)). A new node holds
+   names, codes, and values, not other queries, unless it's a logical query.
 3. Escape any characters in the term that are syntax for the OpenSearch query you use (see
-   `Contains.escapeWildcards`).
-4. If a value match's OpenSearch query supports ignoring case, implement `SupportsIgnoringCase`.
-5. Add a lesson to `ValueMatchTest` (or a similar test) that runs the query against the test index
-   and asserts which values it finds. Test behavior, not the built `QueryBuilder`.
-6. Run `./gradlew spotlessApply`.
+   `OpenSearchServiceImpl.escape`, which `TermSearch` applies).
+4. Add a lesson to the node's test (e.g. `TermSearchTest`, `HasRoleTest`) that runs the query
+   against the test index and asserts which concepts it finds. Test behavior, not the built
+   `QueryBuilder`.
+5. Run `./gradlew spotlessApply`.

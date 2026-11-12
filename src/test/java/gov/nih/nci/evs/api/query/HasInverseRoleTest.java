@@ -115,9 +115,6 @@ public class HasInverseRoleTest {
   /** Role source: Lung Adenocarcinoma, whose primary site is Lung. */
   private static final String LUNG_ADENOCARCINOMA = "C07";
 
-  /** A code prefix shared by every disease and complication, but no anatomic structure. */
-  private static final String DISEASE_CODE_PREFIX = "C0";
-
   /** Site: Skin, part of Body Surface. */
   private static final String SKIN = "C12470";
 
@@ -250,7 +247,7 @@ public class HasInverseRoleTest {
    */
   @Test
   public void testRoleTypeWithoutSourceFindsAnyConceptPointedTo() {
-    final EvsQuery primarySitesOfAnyDisease = new HasInverseRole(new Exact(PRIMARY_SITE));
+    final EvsQuery primarySitesOfAnyDisease = new HasInverseRole(PRIMARY_SITE);
 
     assertEquals(Set.of("Skin", "Lung"), fetchMatchingNames(primarySitesOfAnyDisease));
   }
@@ -262,13 +259,13 @@ public class HasInverseRoleTest {
    */
   @Test
   public void testInverseRoleFindsOtherEndOfRole() {
-    final EvsQuery diseasesWithComplications = new HasInverseRole(new Exact(COMPLICATION_OF));
+    final EvsQuery diseasesWithComplications = new HasInverseRole(COMPLICATION_OF);
 
     assertEquals(Set.of("Cutaneous Melanoma"), fetchMatchingNames(diseasesWithComplications));
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Lesson 3: the role type and a source match work as in HasRole.
+  // Lesson 3: the role type and the source work as in HasRole.
   // ---------------------------------------------------------------------------------------------
 
   /** The role's code finds the same concepts as its name. */
@@ -283,13 +280,12 @@ public class HasInverseRoleTest {
   /** Part of a role name is not a role name. */
   @Test
   public void testPartialRoleNameFindsNothing() {
-    final EvsQuery conceptsPointedToByRoleNamedAnatomicSite =
-        new HasInverseRole(new Exact("Anatomic_Site"));
+    final EvsQuery conceptsPointedToByRoleNamedAnatomicSite = new HasInverseRole("Anatomic_Site");
 
     assertEquals(Set.of(), fetchMatchingNames(conceptsPointedToByRoleNamedAnatomicSite));
   }
 
-  /** Role types are case sensitive by default. */
+  /** Role types are case sensitive. */
   @Test
   public void testRoleTypeIsCaseSensitive() {
     final EvsQuery lowercasePrimarySitesOfCutaneousMelanoma =
@@ -298,95 +294,22 @@ public class HasInverseRoleTest {
     assertEquals(Set.of(), fetchMatchingNames(lowercasePrimarySitesOfCutaneousMelanoma));
   }
 
-  /** With its match wrapped in CaseInsensitive, the role type matches whatever its case. */
-  @Test
-  public void testCaseInsensitiveRoleTypeMatchesAnyCase() {
-    final ValueMatch roleType = new CaseInsensitive(new Exact(PRIMARY_SITE.toLowerCase()));
-    final EvsQuery anyCasePrimarySitesOfCutaneousMelanoma =
-        getHasInverseRole(roleType, CUTANEOUS_MELANOMA);
-
-    assertEquals(Set.of("Skin"), fetchMatchingNames(anyCasePrimarySitesOfCutaneousMelanoma));
-  }
-
-  /** CaseInsensitive also works on a role code. */
-  @Test
-  public void testCaseInsensitiveRoleCode() {
-    final ValueMatch roleType = new CaseInsensitive(new Exact(PRIMARY_SITE_CODE.toLowerCase()));
-    final EvsQuery anyCasePrimarySiteCodeOfCutaneousMelanoma =
-        getHasInverseRole(roleType, CUTANEOUS_MELANOMA);
-
-    assertEquals(Set.of("Skin"), fetchMatchingNames(anyCasePrimarySiteCodeOfCutaneousMelanoma));
-  }
-
-  /**
-   * A role type takes any value match, not just an exact name. "Anatomic_Site" is in both the
-   * primary and the associated site role names, so both of Lung Carcinoma's sites are found: Lung
-   * (primary) and Skin (associated).
-   */
-  @Test
-  public void testRoleTypeMatchedByContains() {
-    final ValueMatch roleType = new Contains("Anatomic_Site");
-    final EvsQuery anyAnatomicSiteOfLungCarcinoma = getHasInverseRole(roleType, LUNG_CARCINOMA);
-
-    assertEquals(Set.of("Lung", "Skin"), fetchMatchingNames(anyAnatomicSiteOfLungCarcinoma));
-  }
-
-  /** A source given as a match is compared against the source's code. */
+  /** A source is compared against the source's code. */
   @Test
   public void testSourceMatchedByCode() {
     final EvsQuery primarySitesOfLungAdenocarcinoma =
-        new HasInverseRole(new Exact(PRIMARY_SITE), new Exact(LUNG_ADENOCARCINOMA));
+        new HasInverseRole(PRIMARY_SITE, LUNG_ADENOCARCINOMA);
 
     assertEquals(Set.of("Lung"), fetchMatchingNames(primarySitesOfLungAdenocarcinoma));
   }
 
-  /**
-   * A source match can match several sources. Every role whose type contains "Anatomic", site or
-   * part of, is found if its source's code starts with {@link #DISEASE_CODE_PREFIX}. Skin and Lung
-   * are sites of diseases. Body Surface is pointed to only by Skin, whose code doesn't start with
-   * the prefix, so it doesn't match.
-   */
-  @Test
-  public void testSourceMatchedByCodePrefixFindsAnyOfThem() {
-    final EvsQuery anatomicConceptsPointedToByDiseases =
-        new HasInverseRole(new Contains("Anatomic"), new StartsWith(DISEASE_CODE_PREFIX));
-
-    assertEquals(Set.of("Skin", "Lung"), fetchMatchingNames(anatomicConceptsPointedToByDiseases));
-  }
-
-  /** A source given as a match that matches neither a source name nor a code finds nothing. */
+  /** A source that matches neither a source name nor a code finds nothing. */
   @Test
   public void testUnmatchedSourceNameOrCodeFindsNothing() {
     final EvsQuery primarySitesOfDiseaseNamedExactlyLiver =
-        new HasInverseRole(new Exact(PRIMARY_SITE), new Exact("Liver"));
+        new HasInverseRole(PRIMARY_SITE, "Liver");
 
     assertEquals(Set.of(), fetchMatchingNames(primarySitesOfDiseaseNamedExactlyLiver));
-  }
-
-  /**
-   * A source given as a match is compared against the source's name, with no search for the source
-   * first. "melanomma" is one edit from the word "melanoma" in "Cutaneous Melanoma".
-   */
-  @Test
-  public void testSourceMatchedByFuzzyName() {
-    final EvsQuery primarySitesOfDiseaseNamedLikeMelanomma =
-        new HasInverseRole(new Exact(PRIMARY_SITE), new Fuzzy("melanomma"));
-
-    assertEquals(Set.of("Skin"), fetchMatchingNames(primarySitesOfDiseaseNamedLikeMelanomma));
-  }
-
-  /**
-   * The type and the source can each be matched in any fashion: any role with "site" in its name,
-   * whatever the case, from a source with "lung" in its name. Lung is the primary site of both lung
-   * diseases. Skin is Lung Carcinoma's associated site.
-   */
-  @Test
-  public void testTypeAndSourceMatchedByCaseInsensitiveContains() {
-    final EvsQuery sitesOfDiseasesNamedLung =
-        new HasInverseRole(
-            new CaseInsensitive(new Contains("site")), new CaseInsensitive(new Contains("lung")));
-
-    assertEquals(Set.of("Lung", "Skin"), fetchMatchingNames(sitesOfDiseasesNamedLung));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -400,8 +323,8 @@ public class HasInverseRoleTest {
    */
   @Test
   public void testCombinesWithHasRole() {
-    final EvsQuery isAPrimarySite = new HasInverseRole(new Exact(PRIMARY_SITE));
-    final EvsQuery isPartOfBodySurface = new HasRole(new Exact(PART_OF), new Exact(BODY_SURFACE));
+    final EvsQuery isAPrimarySite = new HasInverseRole(PRIMARY_SITE);
+    final EvsQuery isPartOfBodySurface = new HasRole(PART_OF, BODY_SURFACE);
     final QueryBuilder primarySitesOnBodySurface =
         QueryBuilders.boolQuery()
             .must(isAPrimarySite.fetchOpenSearchQuery(operations, terminologies))
@@ -424,18 +347,7 @@ public class HasInverseRoleTest {
    * @return the query
    */
   private HasInverseRole getHasInverseRole(final String roleNameOrCode, final String sourceCode) {
-    return getHasInverseRole(new Exact(roleNameOrCode), sourceCode);
-  }
-
-  /**
-   * Builds a {@link HasInverseRole} whose source is one concept, given by its exact code.
-   *
-   * @param roleType the role's type
-   * @param sourceCode the code of the concept holding the role
-   * @return the query
-   */
-  private HasInverseRole getHasInverseRole(final ValueMatch roleType, final String sourceCode) {
-    return new HasInverseRole(roleType, new Exact(sourceCode));
+    return new HasInverseRole(roleNameOrCode, sourceCode);
   }
 
   /**

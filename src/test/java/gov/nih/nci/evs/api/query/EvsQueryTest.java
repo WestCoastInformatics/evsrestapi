@@ -25,7 +25,6 @@ import org.springframework.data.elasticsearch.core.query.Query;
  * version. No OpenSearch or Spring: the check runs when a node is run, before it searches, so a
  * mocked {@link OpenSearchOperations} is enough.
  */
-@DemonstratesFieldMatch
 public class EvsQueryTest {
 
   /** Terminology of the made-up terminologies. */
@@ -53,7 +52,7 @@ public class EvsQueryTest {
     when(noHits.getSearchHits()).thenReturn(List.of());
     when(operations.search(any(Query.class), eq(Concept.class), any(IndexCoordinates.class)))
         .thenReturn(noHits);
-    final EvsQuery conceptsWithSkinCode = new FieldMatch("code", new Exact("C12470"));
+    final EvsQuery conceptsWithSkinCode = new Exact("C12470");
 
     assertDoesNotThrow(
         () ->
@@ -89,7 +88,7 @@ public class EvsQueryTest {
   private static void assertMatchFailsNaming(
       final Terminology terminology, final String missingFieldName) {
     final OpenSearchOperations operations = mock(OpenSearchOperations.class);
-    final EvsQuery conceptsWithSkinCode = new FieldMatch("code", new Exact("C12470"));
+    final EvsQuery conceptsWithSkinCode = new Exact("C12470");
     final IllegalArgumentException error =
         assertThrows(
             IllegalArgumentException.class,

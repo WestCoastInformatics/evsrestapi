@@ -6,6 +6,8 @@ import gov.nih.nci.evs.api.util.ConceptUtils;
 import java.util.List;
 import java.util.Map;
 import org.opensearch.data.core.OpenSearchOperations;
+import org.opensearch.index.query.MultiMatchQueryBuilder;
+import org.opensearch.index.query.Operator;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.script.Script;
@@ -20,8 +22,8 @@ import org.opensearch.search.sort.SortOrder;
  * Completes a partially typed term against concept preferred names and codes.
  *
  * <ul>
- *   <li>Matching is {@link SearchAsYouType} on the preferred name: every typed word must appear, in
- *       any order, with only the last word allowed to be partial. Case and punctuation are ignored.
+ *   <li>Matching is search-as-you-type on the preferred name: every typed word must appear, in any
+ *       order, with only the last word allowed to be partial. Case and punctuation are ignored.
  *   <li>A partial code matches the start of a code, case sensitively, so "C322" finds C3224 and
  *       C32240 but "c322" finds neither.
  *   <li>Retired (inactive) concepts are left out, since they can't be used.
@@ -38,6 +40,12 @@ public class Typeahead extends EvsQuery {
   /** The search_as_you_type subfield of preferred names, which typeahead matches against. */
   private static final String NAME_TYPEAHEAD_FIELD =
       "name." + ConceptMinimal.SEARCH_AS_YOU_TYPE_SUFFIX;
+
+  /** Subfield holding adjacent word pairs, created by the search_as_you_type mapping. */
+  private static final String WORD_PAIRS_SUFFIX = "._2gram";
+
+  /** Subfield holding adjacent word triples, created by the search_as_you_type mapping. */
+  private static final String WORD_TRIPLES_SUFFIX = "._3gram";
 
   /** The preferred name field, whose text highlights show what matched. */
   private static final String NAME_FIELD = "name";
@@ -133,7 +141,7 @@ public class Typeahead extends EvsQuery {
           .formatted(NORMALIZED_NAME_FIELD, DESCENDANT_COUNT_FIELD, DESCENDANT_LEAF_FIELD);
 
   /** The text typed so far, as entered. The search_as_you_type analyzer handles normalization. */
-  private String incompleteTerm;
+  private String term;
 
   /** Instantiates an empty {@link Typeahead}. */
   public Typeahead() {
@@ -143,45 +151,45 @@ public class Typeahead extends EvsQuery {
   /**
    * Instantiates a {@link Typeahead}.
    *
-   * @param incompleteTerm the text typed so far; must contain at least one word (see {@link
+   * @param term the text typed so far; must contain at least one word (see {@link
    *     #getHasWordsToComplete(String)})
    */
-  public Typeahead(final String incompleteTerm) {
-    final boolean hasWordsToComplete = getHasWordsToComplete(incompleteTerm);
+  public Typeahead(final String term) {
+    final boolean hasWordsToComplete = getHasWordsToComplete(term);
     if (!hasWordsToComplete) {
-      throw new IllegalArgumentException("Typeahead term has no words: " + incompleteTerm);
+      throw new IllegalArgumentException("Typeahead term has no words: " + term);
     }
-    this.incompleteTerm = incompleteTerm;
+    this.term = term;
   }
 
   /**
    * Indicates whether the typed text has anything to complete. Null, blank, and punctuation-only
    * text has no words.
    *
-   * @param incompleteTerm the text typed so far
+   * @param term the text typed so far
    * @return whether the text has at least one word
    */
-  public static boolean getHasWordsToComplete(final String incompleteTerm) {
-    final boolean hasText = incompleteTerm != null;
-    return hasText && !ConceptUtils.normalize(incompleteTerm).isEmpty();
+  public static boolean getHasWordsToComplete(final String term) {
+    final boolean hasText = term != null;
+    return hasText && !ConceptUtils.normalize(term).isEmpty();
   }
 
   /**
    * Returns the text typed so far.
    *
-   * @return the incomplete term
+   * @return the text typed so far
    */
-  public String getIncompleteTerm() {
-    return incompleteTerm;
+  public String getTerm() {
+    return term;
   }
 
   /**
    * Sets the text typed so far.
    *
-   * @param incompleteTerm the incomplete term
+   * @param term the text typed so far
    */
-  public void setIncompleteTerm(final String incompleteTerm) {
-    this.incompleteTerm = incompleteTerm;
+  public void setTerm(final String term) {
+    this.term = term;
   }
 
   /**
@@ -201,22 +209,24 @@ public class Typeahead extends EvsQuery {
       final OpenSearchOperations operations, final List<Terminology> terminologies) {
     final int eitherFieldMatches = 1;
     // Codes aren't normalized, so only surrounding whitespace is dropped before comparing
-    final String typedCode = incompleteTerm.trim();
+    final String typedCode = term.trim();
+    // The recommended way to query a search_as_you_type field: a bool_prefix multi_match over the
+    // root field and its generated subfields
     final QueryBuilder nameQuery =
-        new FieldMatch(NAME_TYPEAHEAD_FIELD, new SearchAsYouType(incompleteTerm))
-            .fetchOpenSearchQuery(operations, terminologies);
+        QueryBuilders.multiMatchQuery(
+                term,
+                NAME_TYPEAHEAD_FIELD,
+                NAME_TYPEAHEAD_FIELD + WORD_PAIRS_SUFFIX,
+                NAME_TYPEAHEAD_FIELD + WORD_TRIPLES_SUFFIX)
+            .type(MultiMatchQueryBuilder.Type.BOOL_PREFIX)
+            // Require every typed word; the default would match on any one word
+            .operator(Operator.AND);
     // Codes are always case sensitive, so they're completed with a prefix on the code keyword,
     // not a search_as_you_type field, which lowercases what it compares
-    final QueryBuilder partialCodeQuery =
-        new FieldMatch(CODE_FIELD, new StartsWith(typedCode))
-            .fetchOpenSearchQuery(operations, terminologies);
-    final QueryBuilder wholeCodeQuery =
-        new FieldMatch(CODE_FIELD, new Exact(typedCode))
-            .fetchOpenSearchQuery(operations, terminologies);
+    final QueryBuilder partialCodeQuery = QueryBuilders.prefixQuery(CODE_FIELD, typedCode);
+    final QueryBuilder wholeCodeQuery = QueryBuilders.termQuery(CODE_FIELD, typedCode);
     final String inactiveFlag = Boolean.toString(false);
-    final QueryBuilder inactiveQuery =
-        new FieldMatch(ACTIVE_FIELD, new Exact(inactiveFlag))
-            .fetchOpenSearchQuery(operations, terminologies);
+    final QueryBuilder inactiveQuery = QueryBuilders.termQuery(ACTIVE_FIELD, inactiveFlag);
 
     // Confirm that the ordering has not been messed up
     assert WHOLE_CODE_SCORE > NAME_MATCH_SCORE && NAME_MATCH_SCORE > CODE_MATCH_SCORE;
@@ -244,8 +254,7 @@ public class Typeahead extends EvsQuery {
    */
   @Override
   protected List<HighlightBuilder.Field> getHighlightFields() {
-    final QueryBuilder typedWordsQuery =
-        QueryBuilders.matchBoolPrefixQuery(NAME_FIELD, incompleteTerm);
+    final QueryBuilder typedWordsQuery = QueryBuilders.matchBoolPrefixQuery(NAME_FIELD, term);
     return List.of(
         new HighlightBuilder.Field(NAME_FIELD).highlightQuery(typedWordsQuery),
         new HighlightBuilder.Field(CODE_FIELD));
@@ -275,7 +284,7 @@ public class Typeahead extends EvsQuery {
    */
   private Script getRankingScript() {
     // Normalized like NORMALIZED_NAME_FIELD so the starts-with comparison lines up
-    final String normalizedIncompleteTerm = ConceptUtils.normalize(incompleteTerm);
+    final String normalizedIncompleteTerm = ConceptUtils.normalize(term);
     return new Script(
         ScriptType.INLINE,
         Script.DEFAULT_SCRIPT_LANG,
