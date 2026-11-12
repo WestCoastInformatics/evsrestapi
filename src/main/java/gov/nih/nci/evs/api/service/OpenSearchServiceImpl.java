@@ -1329,8 +1329,8 @@ public class OpenSearchServiceImpl implements OpenSearchService {
   }
 
   /**
-   * Applies hierarchy constraints (descendantOf, notDescendantOf, ancestorOf) as filter clauses, so
-   * they do not affect scoring and can be cached.
+   * Applies hierarchy constraints (descendantOf, notDescendantOf, ancestorOf, ancestor, descendant)
+   * as filter clauses, so they do not affect scoring and can be cached.
    *
    * @param boolQuery the bool query
    * @param terminology the terminology
@@ -1347,11 +1347,29 @@ public class OpenSearchServiceImpl implements OpenSearchService {
     final List<String> descendantOf = searchCriteria.getDescendantOf();
     final List<String> notDescendantOf = searchCriteria.getNotDescendantOf();
     final String ancestorOf = searchCriteria.getAncestorOf();
+    final String ancestor = searchCriteria.getAncestor();
+    final String descendant = searchCriteria.getDescendant();
 
     checkHierarchyCodesExist(terminology, "descendantOf", descendantOf);
     checkHierarchyCodesExist(terminology, "notDescendantOf", notDescendantOf);
     if (ancestorOf != null) {
       checkHierarchyCodesExist(terminology, "ancestorOf", List.of(ancestorOf));
+    }
+    if (ancestor != null) {
+      checkHierarchyCodesExist(terminology, "ancestor", List.of(ancestor));
+    }
+    if (descendant != null) {
+      checkHierarchyCodesExist(terminology, "descendant", List.of(descendant));
+    }
+
+    // ancestor: the code itself and the concepts that have it among their ancestors (its subtree)
+    if (ancestor != null) {
+      boolQuery.filter(codeOrRelated("ancestors.code", ancestor));
+    }
+
+    // descendant: the code itself and the concepts that have it among their descendants
+    if (descendant != null) {
+      boolQuery.filter(codeOrRelated("descendants.code", descendant));
     }
 
     // Indexes loaded before the ancestor fields existed use the query-time fallback
@@ -1370,7 +1388,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
                 terminology, "descendantOf", descendantOf, searchCriteria.getMaxLevel()),
             false);
       } else if (searchCriteria.getMaxLevel() == null) {
-        branch.should(QueryBuilders.termsQuery("ancestors", descendantOf));
+        branch.should(QueryBuilders.termsQuery("ancestors.code", descendantOf));
       } else {
         branch.should(
             QueryBuilders.termsQuery(
@@ -1389,7 +1407,7 @@ public class OpenSearchServiceImpl implements OpenSearchService {
     // notDescendantOf: exclude descendants of every anchor, and the anchors themselves
     if (!notDescendantOf.isEmpty()) {
       if (indexed) {
-        boolQuery.mustNot(QueryBuilders.termsQuery("ancestors", notDescendantOf));
+        boolQuery.mustNot(QueryBuilders.termsQuery("ancestors.code", notDescendantOf));
       } else {
         addIdsClauses(
             boolQuery,
@@ -1420,6 +1438,20 @@ public class OpenSearchServiceImpl implements OpenSearchService {
       // An empty ids query matches nothing, e.g. ancestors of a root without self
       boolQuery.filter(QueryBuilders.idsQuery().addIds(ancestors.toArray(new String[0])));
     }
+  }
+
+  /**
+   * Returns a query matching the code itself or any concept whose hierarchy field contains it.
+   *
+   * @param field the hierarchy field, e.g. ancestors.code
+   * @param code the code
+   * @return the query
+   */
+  private BoolQueryBuilder codeOrRelated(final String field, final String code) {
+    return QueryBuilders.boolQuery()
+        .minimumShouldMatch(1)
+        .should(QueryBuilders.termQuery(field, code))
+        .should(QueryBuilders.idsQuery().addIds(code));
   }
 
   /**
